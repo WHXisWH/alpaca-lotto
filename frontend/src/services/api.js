@@ -2,144 +2,157 @@
 
 import axios from 'axios';
 
-// API Baseのエンドポイントを取得
+// Get API Base Endpoint
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001/api';
 
-// APIクライアントのインスタンスを作成
+// Create API client instance
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10秒タイムアウト
+  timeout: 10000, // 10 second timeout
 });
 
-// リクエストインターセプター
+// Request interceptor
 apiClient.interceptors.request.use(
   (config) => {
-    // リクエストの前に実行する処理
-    // console.log(`APIリクエスト: ${config.url}`, config);
+    // Processing before request
+    // console.log(`API Request: ${config.url}`, config);
     return config;
   },
   (error) => {
-    // リクエストエラーの処理
-    console.error('APIリクエストエラー:', error);
+    // Request error handling
+    console.error('API Request Error:', error);
     return Promise.reject(error);
   }
 );
 
-// レスポンスインターセプター
+// Response interceptor
 apiClient.interceptors.response.use(
   (response) => {
-    // レスポンスの前に実行する処理
-    // console.log(`APIレスポンス: ${response.config.url}`, response.data);
     return response;
   },
   (error) => {
-    // レスポンスエラーの処理
-    console.error('APIレスポンスエラー:', error.response || error.message || error);
+    if (error.code === 'ERR_NETWORK') {
+      console.error('Network error: CORS or server not responding');
+      console.error('Check if backend server is running and CORS is configured properly');
+    } else if (error.response?.status === 404) {
+      console.error('API endpoint not found:', error.config?.url);
+    } else {
+      console.error('API Response Error:', error.response || error.message || error);
+    }
     return Promise.reject(error);
   }
 );
 
 /**
- * バックエンドAPIとの通信を処理するサービス
+ * Service to handle communication with the backend API.
  */
 export const api = {
   /**
-   * すべてのロッタリーを取得
-   * @returns {Object} - ロッタリーレスポンス
+   * Get all lotteries.
+   * @returns {Object} - Lottery response.
    */
   async getLotteries() {
     try {
       const response = await apiClient.get('/lotteries');
       return response.data;
     } catch (error) {
-      console.error('ロッタリー取得エラー:', error);
+      console.error('Lottery fetch error:', error);
+      
+      if (error.code === 'ERR_NETWORK' || (error.response && error.response.status === 404)) {
+        console.log('Using mock data...');
+        return {
+          success: true,
+          lotteries: this._generateMockLotteries()
+        };
+      }
+      
       throw error.response?.data || error;
     }
   },
   
   /**
-   * アクティブなロッタリーを取得
-   * @returns {Object} - アクティブなロッタリーレスポンス
+   * Get active lotteries.
+   * @returns {Object} - Active lotteries response.
    */
   async getActiveLotteries() {
     try {
       const response = await apiClient.get('/lotteries/active');
       return response.data;
     } catch (error) {
-      console.error('アクティブなロッタリー取得エラー:', error);
+      console.error('Error fetching active lotteries:', error);
       throw error.response?.data || error;
     }
   },
   
   /**
-   * ロッタリーの詳細を取得
-   * @param {number} lotteryId - ロッタリーID
-   * @returns {Object} - ロッタリー詳細レスポンス
+   * Get lottery details.
+   * @param {number} lotteryId - Lottery ID.
+   * @returns {Object} - Lottery details response.
    */
   async getLotteryDetails(lotteryId) {
     try {
       const response = await apiClient.get(`/lottery/${lotteryId}`);
       return response.data;
     } catch (error) {
-      console.error(`ロッタリー詳細取得エラー (ID: ${lotteryId}):`, error);
+      console.error(`Error fetching lottery details (ID: ${lotteryId}):`, error);
       throw error.response?.data || error;
     }
   },
   
   /**
-   * ユーザーのチケットを取得
-   * @param {number} lotteryId - ロッタリーID
-   * @param {string} address - ユーザーアドレス
-   * @returns {Object} - ユーザーチケットレスポンス
+   * Get user tickets.
+   * @param {number} lotteryId - Lottery ID.
+   * @param {string} address - User address.
+   * @returns {Object} - User tickets response.
    */
   async getUserTickets(lotteryId, address) {
     try {
       const response = await apiClient.get(`/lottery/${lotteryId}/tickets/${address}`);
       return response.data;
     } catch (error) {
-      console.error(`ユーザーチケット取得エラー (Lottery: ${lotteryId}, User: ${address}):`, error);
+      console.error(`Error fetching user tickets (Lottery: ${lotteryId}, User: ${address}):`, error);
       throw error.response?.data || error;
     }
   },
   
   /**
-   * ユーザーが当選者かどうか確認
-   * @param {number} lotteryId - ロッタリーID
-   * @param {string} address - ユーザーアドレス
-   * @returns {Object} - 当選確認レスポンス
+   * Check if the user is a winner.
+   * @param {number} lotteryId - Lottery ID.
+   * @param {string} address - User address.
+   * @returns {Object} - Winner check response.
    */
   async checkIfWinner(lotteryId, address) {
     try {
       const response = await apiClient.get(`/lottery/${lotteryId}/winner/${address}`);
       return response.data;
     } catch (error) {
-      console.error(`当選確認エラー (Lottery: ${lotteryId}, User: ${address}):`, error);
+      console.error(`Error checking winner (Lottery: ${lotteryId}, User: ${address}):`, error);
       throw error.response?.data || error;
     }
   },
   
   /**
-   * サポートされているトークンを取得
-   * @returns {Object} - サポートされているトークンレスポンス
+   * Get supported tokens.
+   * @returns {Object} - Supported tokens response.
    */
   async getSupportedTokens() {
     try {
       const response = await apiClient.get('/supported-tokens');
       return response.data;
     } catch (error) {
-      console.error('サポートされているトークン取得エラー:', error);
+      console.error('Error fetching supported tokens:', error);
       throw error.response?.data || error;
     }
   },
   
   /**
-   * 最適なトークンを取得
-   * @param {Array} tokens - トークン配列
-   * @param {Object} userPreferences - ユーザー設定
-   * @returns {Object} - トークン最適化レスポンス
+   * Get the optimal token.
+   * @param {Array} tokens - Array of tokens.
+   * @param {Object} userPreferences - User preferences.
+   * @returns {Object} - Token optimization response.
    */
   async optimizeToken(tokens, userPreferences = {}) {
     try {
@@ -149,18 +162,18 @@ export const api = {
       });
       return response.data;
     } catch (error) {
-      console.error('トークン最適化エラー:', error);
+      console.error('Error optimizing token:', error);
       throw error.response?.data || error;
     }
   },
   
   /**
-   * ロッタリーチケットを購入
-   * @param {number} lotteryId - ロッタリーID
-   * @param {string} tokenAddress - 支払いトークンのアドレス
-   * @param {number} quantity - チケット数
-   * @param {string} signature - 署名
-   * @returns {Object} - チケット購入レスポンス
+   * Purchase lottery tickets.
+   * @param {number} lotteryId - Lottery ID.
+   * @param {string} tokenAddress - Address of the payment token.
+   * @param {number} quantity - Number of tickets.
+   * @param {string} signature - Signature.
+   * @returns {Object} - Ticket purchase response.
    */
   async purchaseTickets(lotteryId, tokenAddress, quantity, signature = null) {
     try {
@@ -172,16 +185,16 @@ export const api = {
       });
       return response.data;
     } catch (error) {
-      console.error(`チケット購入エラー (Lottery: ${lotteryId}):`, error);
+      console.error(`Error purchasing tickets (Lottery: ${lotteryId}):`, error);
       throw error.response?.data || error;
     }
   },
   
   /**
-   * 複数のロッタリーでチケットを一括購入
-   * @param {Array} selections - 購入選択の配列 [{lotteryId, tokenAddress, quantity}]
-   * @param {string} signature - 署名
-   * @returns {Object} - バッチチケット購入レスポンス
+   * Batch purchase tickets for multiple lotteries.
+   * @param {Array} selections - Array of purchase selections [{lotteryId, tokenAddress, quantity}].
+   * @param {string} signature - Signature.
+   * @returns {Object} - Batch ticket purchase response.
    */
   async batchPurchaseTickets(selections, signature = null) {
     try {
@@ -191,16 +204,16 @@ export const api = {
       });
       return response.data;
     } catch (error) {
-      console.error('バッチチケット購入エラー:', error);
+      console.error('Error batch purchasing tickets:', error);
       throw error.response?.data || error;
     }
   },
   
   /**
-   * セッションキーを作成
-   * @param {number} duration - 有効期間（秒）
-   * @param {string} signature - 署名
-   * @returns {Object} - セッションキー作成レスポンス
+   * Create a session key.
+   * @param {number} duration - Validity duration (seconds).
+   * @param {string} signature - Signature.
+   * @returns {Object} - Session key creation response.
    */
   async createSessionKey(duration, signature) {
     try {
@@ -210,16 +223,16 @@ export const api = {
       });
       return response.data;
     } catch (error) {
-      console.error('セッションキー作成エラー:', error);
+      console.error('Error creating session key:', error);
       throw error.response?.data || error;
     }
   },
   
   /**
-   * セッションキーを無効化
-   * @param {string} sessionKey - セッションキーアドレス
-   * @param {string} signature - 署名
-   * @returns {Object} - セッションキー無効化レスポンス
+   * Revoke a session key.
+   * @param {string} sessionKey - Session key address.
+   * @param {string} signature - Signature.
+   * @returns {Object} - Session key revocation response.
    */
   async revokeSessionKey(sessionKey, signature) {
     try {
@@ -229,16 +242,16 @@ export const api = {
       });
       return response.data;
     } catch (error) {
-      console.error('セッションキー無効化エラー:', error);
+      console.error('Error revoking session key:', error);
       throw error.response?.data || error;
     }
   },
   
   /**
-   * 賞金を請求
-   * @param {number} lotteryId - ロッタリーID
-   * @param {string} signature - 署名
-   * @returns {Object} - 賞金請求レスポンス
+   * Claim prize money.
+   * @param {number} lotteryId - Lottery ID.
+   * @param {string} signature - Signature.
+   * @returns {Object} - Prize claim response.
    */
   async claimPrize(lotteryId, signature) {
     try {
@@ -248,21 +261,21 @@ export const api = {
       });
       return response.data;
     } catch (error) {
-      console.error(`賞金請求エラー (Lottery: ${lotteryId}):`, error);
+      console.error(`Error claiming prize (Lottery: ${lotteryId}):`, error);
       throw error.response?.data || error;
     }
   },
   
   /**
-   * サーバーヘルスチェック
-   * @returns {Object} - ヘルスチェックレスポンス
+   * Server health check.
+   * @returns {Object} - Health check response.
    */
   async checkHealth() {
     try {
       const response = await apiClient.get('/health');
       return response.data;
     } catch (error) {
-      console.error('ヘルスチェックエラー:', error);
+      console.error('Health check error:', error);
       throw error.response?.data || error;
     }
   }

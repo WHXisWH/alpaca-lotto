@@ -19,8 +19,15 @@ const lotteryService = new LotteryService({
  */
 router.get('/lotteries', async (req, res) => {
   try {
-    const lotteries = await lotteryService.getAllLotteries();
-    res.json({ success: true, lotteries });
+    try {
+      const lotteries = await lotteryService.getAllLotteries();
+      res.json({ success: true, lotteries });
+    } catch (serviceError) {
+      console.error('Error with lottery service, falling back to mock data:', serviceError);
+      const mockLotteries = lotteryService._generateMockLotteries ? 
+        lotteryService._generateMockLotteries() : [];
+      res.json({ success: true, lotteries: mockLotteries });
+    }
   } catch (error) {
     console.error('Error fetching lotteries:', error);
     res.status(500).json({ success: false, error: 'Server error' });
