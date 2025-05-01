@@ -1,3 +1,5 @@
+// frontend/src/components/TicketPurchase.jsx
+
 import React from 'react';
 import TokenSelector from './TokenSelector';
 
@@ -25,21 +27,22 @@ const TicketPurchase = ({
   onClose,
   hasSessionKey = false
 }) => {
-  // Return null if lottery doesn't exist.
+  const [selectedToken, setSelectedToken] = React.useState(null);
+
+  // Update selected token when recommendation or tokens change
+  React.useEffect(() => {
+    if (recommendation?.recommendedToken) {
+      setSelectedToken(recommendation.recommendedToken);
+    } else if (tokens.length > 0) {
+      // Only set if no token is selected yet
+      setSelectedToken((prev) => prev ?? tokens[0]);
+    }
+  }, [recommendation, tokens]); // Removed selectedToken from dependencies to prevent infinite loops
+
+  // Return null if lottery data is missing
   if (!lottery) {
     return null;
   }
-
-  const [selectedToken, setSelectedToken] = React.useState(null);
-
-  // Update selected token if recommendation changes.
-  React.useEffect(() => {
-    if (recommendation && recommendation.recommendedToken) {
-      setSelectedToken(recommendation.recommendedToken);
-    } else if (tokens.length > 0 && !selectedToken) {
-      setSelectedToken(tokens[0]);
-    }
-  }, [recommendation, tokens, selectedToken]);
 
   // Calculate the total amount.
   const calculateTotal = () => {
