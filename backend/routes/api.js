@@ -1,5 +1,3 @@
-// backend/routes/api.js
-
 const express = require('express');
 const router = express.Router();
 const TokenOptimizer = require('../services/tokenOptimizer');
@@ -10,6 +8,58 @@ const tokenOptimizer = new TokenOptimizer();
 const lotteryService = new LotteryService({
   rpcUrl: process.env.NERO_RPC_URL,
   contractAddress: process.env.LOTTERY_CONTRACT_ADDRESS
+});
+
+/**
+ * @route   GET /api/supported-tokens
+ * @desc    Get supported tokens
+ * @access  Public
+ */
+router.get('/supported-tokens', async (req, res) => {
+  try {
+    const supportedTokens = [
+      {
+        address: '0x6b175474e89094c44da98b954eedeac495271d0f',
+        symbol: 'DAI',
+        name: 'Dai Stablecoin',
+        decimals: 18,
+        type: 1
+      },
+      {
+        address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+        symbol: 'USDC',
+        name: 'USD Coin',
+        decimals: 6,
+        type: 1
+      },
+      {
+        address: '0xdac17f958d2ee523a2206206994597c13d831ec7',
+        symbol: 'USDT',
+        name: 'Tether USD',
+        decimals: 6,
+        type: 1
+      },
+      {
+        address: '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599',
+        symbol: 'WBTC',
+        name: 'Wrapped Bitcoin',
+        decimals: 8,
+        type: 1
+      },
+      {
+        address: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
+        symbol: 'WETH',
+        name: 'Wrapped Ether',
+        decimals: 18,
+        type: 1
+      }
+    ];
+    
+    res.json({ success: true, tokens: supportedTokens });
+  } catch (error) {
+    console.error('Error fetching supported tokens:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
 });
 
 /**
