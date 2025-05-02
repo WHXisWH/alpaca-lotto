@@ -1,5 +1,3 @@
-// frontend/src/App.jsx
-
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import HomePage from './pages/HomePage';
@@ -13,13 +11,15 @@ import './styles/global.css';
 
 /**
  * Root component for the AlpacaLotto application
+ * Enhanced with development mode and error handling
  */
 const App = () => {
   const { 
     account, 
     isConnecting, 
     connectWallet, 
-    aaWalletAddress 
+    aaWalletAddress,
+    isDevelopmentMode
   } = useWallet();
   
   const {
@@ -30,6 +30,7 @@ const App = () => {
   } = useSessionKeys();
   
   const [showSessionWarning, setShowSessionWarning] = useState(false);
+  const [showDevBanner, setShowDevBanner] = useState(false);
   
   // Show warning when session key is about to expire
   useEffect(() => {
@@ -51,17 +52,44 @@ const App = () => {
     return () => clearInterval(checkInterval);
   }, [hasActiveSessionKey, isExpiringWithin]);
   
+  // Show development mode banner
+  useEffect(() => {
+    if (isDevelopmentMode) {
+      setShowDevBanner(true);
+    } else {
+      setShowDevBanner(false);
+    }
+  }, [isDevelopmentMode]);
+  
   // Close session warning
   const dismissSessionWarning = () => {
     setShowSessionWarning(false);
   };
   
+  // Close development banner
+  const dismissDevBanner = () => {
+    setShowDevBanner(false);
+  };
+  
   return (
     <Router>
       <div className="app-container">
+        {showDevBanner && (
+          <div className="dev-mode-banner">
+            <div className="banner-content">
+              <span className="banner-icon">⚙️</span>
+              <span className="banner-text">
+                Development Mode: Using mock data and simulated transactions
+              </span>
+              <button className="banner-close" onClick={dismissDevBanner}>×</button>
+            </div>
+          </div>
+        )}
+        
         <Header 
           hasSessionKey={hasActiveSessionKey} 
           onRevokeSessionKey={revokeSessionKey}
+          isDevelopmentMode={isDevelopmentMode}
         />
         
         <div className="wallet-bar">
@@ -70,6 +98,7 @@ const App = () => {
             isConnecting={isConnecting} 
             onConnect={connectWallet} 
             aaWalletAddress={aaWalletAddress}
+            isDevelopmentMode={isDevelopmentMode}
           />
           {hasActiveSessionKey && (
             <div className="session-key-indicator">

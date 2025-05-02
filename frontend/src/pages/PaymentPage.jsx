@@ -1,5 +1,3 @@
-// frontend/src/pages/PaymentPage.jsx
-
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import useWallet from '../hooks/useWallet';
@@ -8,65 +6,83 @@ import useTokens from '../hooks/useTokens';
 import useSessionKeys from '../hooks/useSessionKeys';
 
 /**
- * チケット購入の支払いを処理するページ
+ * Payment processing page
+ * Enhanced with development mode support and better error handling
  */
 const PaymentPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { lottery, token, quantity, recommendation } = location.state || {};
   
-  // カスタムフック
-  const { signer, account, connectWallet } = useWallet();
+  // Custom hooks
+  const { signer, account, connectWallet, isDevelopmentMode } = useWallet();
   const { 
     executeTicketPurchase, 
     isLoading: purchaseLoading, 
     error: purchaseError, 
-    txHash 
+    txHash,
+    isDevelopmentMode: userOpDevMode
   } = useUserOp();
   const { hasActiveSessionKey } = useSessionKeys();
   
-  // 状態
-  const [paymentType, setPaymentType] = useState(0); // デフォルトはスポンサード (タイプ 0)
+  // State
+  const [paymentType, setPaymentType] = useState(0); // Default is sponsored (Type 0)
   const [paymentToken, setPaymentToken] = useState(token);
   const [transactionStatus, setTransactionStatus] = useState('preparing'); // 'preparing', 'processing', 'success', 'error'
-  const [estimatedGas, setEstimatedGas] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [processingSteps, setProcessingSteps] = useState([
+    { id: 'preparing', label: 'Preparing transaction', status: 'pending' },
+    { id: 'submitting', label: 'Submitting to blockchain', status: 'waiting' },
+    { id: 'confirming', label: 'Confirming transaction', status: 'waiting' },
+    { id: 'finalizing', label: 'Finalizing purchase', status: 'waiting' }
+  ]);
   
-  // ロッタリーまたはトークンがない場合はホームに戻る
+  // Navigate back to home if lottery or token is missing
   useEffect(() => {
     if (!lottery || !token) {
       navigate('/');
     }
   }, [lottery, token, navigate]);
   
-  // ウォレットが接続されていなければ接続
+  // Connect wallet if not connected
   useEffect(() => {
-    if (!account) {
+    if (!account && !isDevelopmentMode) {
       connectWallet();
     }
-  }, [account, connectWallet]);
+  }, [account, connectWallet, isDevelopmentMode]);
   
-  // 支払いタイプ変更のハンドラー
+  // Payment type change handler
   const handlePaymentTypeChange = (e) => {
     setPaymentType(parseInt(e.target.value));
   };
   
-  // 支払いトークン変更のハンドラー
+  // Payment token change handler
   const handlePaymentTokenChange = (selectedToken) => {
     setPaymentToken(selectedToken);
   };
   
-  // トランザクション送信のハンドラー
+  // Helper to update processing steps
+  const updateProcessingStep = (stepId, newStatus) => {
+    setProcessingSteps(prevSteps => 
+      prevSteps.map(step => 
+        step.id === stepId ? { ...step, status: newStatus } : step
+      )
+    );
+  };
+  
+  // Transaction submission handler
   const handleSubmitTransaction = async () => {
-    if (!signer || !lottery || !token) {
-      setErrorMessage('ウォレットが接続されていないか、必要な情報が不足しています');
+    if ((!signer && !isDevelopmentMode) || !lottery || !token) {
+      setErrorMessage('Wallet not connected or missing required information');
       return;
     }
     
     setTransactionStatus('processing');
+    updateProcessingStep('preparing', 'complete');
+    updateProcessingStep('submitting', 'pending');
     
     try {
-      // チケット購入トランザクションを実行
+      // Execute ticket purchase transaction
       const hash = await executeTicketPurchase({
         signer,
         lotteryId: lottery.id,
@@ -77,108 +93,157 @@ const PaymentPage = () => {
         useSessionKey: hasActiveSessionKey
       });
       
-      // 成功したらステータスを更新
+      // Update processing status
+      updateProcessingStep('submitting', 'complete');
+      updateProcessingStep('confirming', 'pending');
+      
+      // Simulate blockchain confirmation time
+      await new Promise(resolve => setTimeout(resolve, isDevelopmentMode ? 1500 : 3000));
+      
+      updateProcessingStep('confirming', 'complete');
+      updateProcessingStep('finalizing', 'pending');
+      
+      // Short delay before showing success
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      updateProcessingStep('finalizing', 'complete');
+      
+      // Update status if hash exists
       if (hash) {
         setTransactionStatus('success');
       }
     } catch (error) {
-      console.error('トランザクションエラー:', error);
-      setErrorMessage(error.message || 'トランザクションに失敗しました');
+      console.error('Transaction error:', error);
+      
+      // Update processing steps to show error
+      const currentStep = processingSteps.find(step => step.status === 'pending');
+      if (currentStep) {
+        updateProcessingStep(currentStep.id, 'error');
+      }
+      
+      setErrorMessage(error.message || 'Transaction failed');
       setTransactionStatus('error');
     }
   };
   
-  // ホームに戻る
+  // Navigate back to home
   const handleGoBack = () => {
     navigate('/');
   };
   
-  // ガス代の推定額を計算
+  // Estimate gas cost
   const calculateEstimatedGas = () => {
-    // この実装は簡易的なもので、実際には正確なガス推定が必要
+    // Simple implementation - in a real app, would call estimateGas
     if (paymentType === 0) {
-      return '無料 (スポンサー付き)';
+      return 'Free (Sponsored)';
     } else if (paymentToken) {
-      return `約 ${(0.001).toFixed(6)} ${paymentToken.symbol}`;
+      return `~${(0.001).toFixed(6)} ${paymentToken.symbol}`;
     }
-    return '計算中...';
+    return 'Calculating...';
   };
   
-  // 合計コストを計算（チケット料金 + ガス代）
+  // Calculate total cost (ticket fee + gas)
   const calculateTotalCost = () => {
     if (!lottery || !token) return '0';
     
-    // チケット総額
+    // Ticket total
     const ticketTotal = lottery.ticketPrice * quantity;
     
-    // トークンでの支払い額を計算
+    // Calculate payment amount in tokens
     const tokenPrice = token.usdPrice || 1;
     const totalTokens = ticketTotal / tokenPrice;
     
     return totalTokens.toFixed(6);
   };
   
-  // ロッタリーまたはトークンがない場合
+  // Loading state
   if (!lottery || !token) {
     return (
       <div className="loading-container">
         <div className="loading-spinner"></div>
-        <p>情報を読み込み中...</p>
+        <p>Loading payment information...</p>
       </div>
     );
   }
   
-  // トランザクション処理中
+  // Transaction processing view
   if (transactionStatus === 'processing') {
     return (
       <div className="transaction-processing">
         <div className="processing-card">
           <div className="loading-spinner"></div>
-          <h2>トランザクション処理中</h2>
-          <p>チケット購入トランザクションを処理しています。しばらくお待ちください...</p>
+          <h2>Processing Transaction</h2>
+          <p>Your ticket purchase is being processed. Please wait...</p>
+          
+          <div className="processing-steps">
+            {processingSteps.map(step => (
+              <div key={step.id} className="processing-step">
+                <span className={`step-status ${step.status}`}>
+                  {step.status === 'complete' && '✓'}
+                  {step.status === 'pending' && '⟳'}
+                  {step.status === 'waiting' && '○'}
+                  {step.status === 'error' && '✗'}
+                </span>
+                <span className="step-description">{step.label}</span>
+              </div>
+            ))}
+          </div>
+          
           {hasActiveSessionKey ? (
-            <p className="session-note">クイックプレイが有効なため、ウォレット確認は不要です。</p>
+            <p className="session-note">Quick Play is enabled, no wallet confirmation needed.</p>
           ) : (
-            <p className="session-note">ウォレットで操作を確認してください。</p>
+            <p className="session-note">Check your wallet for confirmation requests.</p>
+          )}
+          
+          {isDevelopmentMode && (
+            <div className="dev-mode-note">
+              <p>Development Mode: Simulating blockchain transaction.</p>
+            </div>
           )}
         </div>
       </div>
     );
   }
   
-  // トランザクション成功
+  // Transaction success view
   if (transactionStatus === 'success') {
     return (
       <div className="transaction-success">
         <div className="success-card">
           <div className="success-icon">✓</div>
-          <h2>購入成功！</h2>
+          <h2>Purchase Successful!</h2>
           <p>
-            {quantity}枚のチケットを{lottery.name}に正常に購入しました。
+            You have successfully purchased {quantity} ticket{quantity !== 1 ? 's' : ''} for {lottery.name}.
           </p>
           
           <div className="transaction-details">
             <div className="detail-row">
-              <span>トランザクションハッシュ:</span>
+              <span>Transaction Hash:</span>
               <span className="tx-hash">{txHash}</span>
             </div>
+            {isDevelopmentMode && (
+              <div className="dev-mode-note">
+                <p>Development Mode: This is a simulated transaction.</p>
+              </div>
+            )}
           </div>
           
           <div className="action-buttons">
-            <a 
-              href={`https://explorer-testnet.nerochain.io/tx/${txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="explorer-link"
-            >
-              エクスプローラーで表示
-            </a>
+            {!isDevelopmentMode && (
+              <a 
+                href={`https://explorer-testnet.nerochain.io/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="explorer-link"
+              >
+                View in Explorer
+              </a>
+            )}
             
             <button 
               className="home-button"
               onClick={handleGoBack}
             >
-              ホームに戻る
+              Back to Home
             </button>
           </div>
         </div>
@@ -186,14 +251,14 @@ const PaymentPage = () => {
     );
   }
   
-  // トランザクションエラー
+  // Transaction error view
   if (transactionStatus === 'error') {
     return (
       <div className="transaction-error">
         <div className="error-card">
           <div className="error-icon">✗</div>
-          <h2>購入失敗</h2>
-          <p>チケット購入中にエラーが発生しました。</p>
+          <h2>Purchase Failed</h2>
+          <p>There was a problem with your ticket purchase.</p>
           
           <div className="error-details">
             <p className="error-message">{errorMessage || purchaseError}</p>
@@ -204,14 +269,14 @@ const PaymentPage = () => {
               className="retry-button"
               onClick={() => setTransactionStatus('preparing')}
             >
-              再試行
+              Try Again
             </button>
             
             <button 
               className="home-button"
               onClick={handleGoBack}
             >
-              ホームに戻る
+              Back to Home
             </button>
           </div>
         </div>
@@ -219,57 +284,57 @@ const PaymentPage = () => {
     );
   }
   
-  // トランザクション準備（デフォルト状態）
+  // Transaction preparation view (default state)
   return (
     <div className="payment-page">
       <div className="payment-container">
         <div className="back-navigation">
           <button className="back-button" onClick={handleGoBack}>
-            ← ロッタリーに戻る
+            ← Back to Lottery
           </button>
         </div>
         
         <div className="payment-card">
-          <h2>チケット購入の確認</h2>
+          <h2>Confirm Ticket Purchase</h2>
           
           <div className="lottery-summary">
             <h3>{lottery.name}</h3>
             <div className="ticket-price">
-              ${lottery.ticketPrice} / チケット
+              ${lottery.ticketPrice} / ticket
             </div>
           </div>
           
           <div className="purchase-summary">
             <div className="summary-row">
-              <span className="summary-label">チケット数:</span>
+              <span className="summary-label">Number of Tickets:</span>
               <span className="summary-value">{quantity}</span>
             </div>
             
             <div className="summary-row">
-              <span className="summary-label">チケット価格:</span>
+              <span className="summary-label">Ticket Price:</span>
               <span className="summary-value">${lottery.ticketPrice}</span>
             </div>
             
             <div className="summary-row">
-              <span className="summary-label">合計USD:</span>
+              <span className="summary-label">Total USD:</span>
               <span className="summary-value">
                 ${(lottery.ticketPrice * quantity).toFixed(2)}
               </span>
             </div>
             
             <div className="summary-row">
-              <span className="summary-label">支払いトークン:</span>
+              <span className="summary-label">Payment Token:</span>
               <span className="summary-value token-value">
                 <span className="token-icon">{token.symbol.charAt(0)}</span>
                 {token.symbol}
                 {recommendation && recommendation.recommendedToken.address === token.address && (
-                  <span className="ai-badge">AI推奨</span>
+                  <span className="ai-badge">AI Recommended</span>
                 )}
               </span>
             </div>
             
             <div className="summary-row total">
-              <span className="summary-label">支払い合計:</span>
+              <span className="summary-label">Total Payment:</span>
               <span className="summary-value">
                 {calculateTotalCost()} {token.symbol}
               </span>
@@ -277,7 +342,7 @@ const PaymentPage = () => {
           </div>
           
           <div className="gas-payment-section">
-            <h3>ガス支払い方法</h3>
+            <h3>Gas Payment Method</h3>
             
             <div className="payment-type-selector">
               <div className="payment-type-option">
@@ -290,8 +355,8 @@ const PaymentPage = () => {
                   onChange={handlePaymentTypeChange}
                 />
                 <label htmlFor="payment-type-0">
-                  <div className="option-title">スポンサード（無料）</div>
-                  <div className="option-description">開発者がガス代を負担します</div>
+                  <div className="option-title">Sponsored (Free)</div>
+                  <div className="option-description">Developer pays gas for you</div>
                 </label>
               </div>
               
@@ -305,8 +370,8 @@ const PaymentPage = () => {
                   onChange={handlePaymentTypeChange}
                 />
                 <label htmlFor="payment-type-1">
-                  <div className="option-title">前払い（ERC20トークン）</div>
-                  <div className="option-description">取引前にERC20トークンで支払い</div>
+                  <div className="option-title">Prepay (ERC20 Token)</div>
+                  <div className="option-description">Pay gas with ERC20 tokens upfront</div>
                 </label>
               </div>
               
@@ -320,15 +385,15 @@ const PaymentPage = () => {
                   onChange={handlePaymentTypeChange}
                 />
                 <label htmlFor="payment-type-2">
-                  <div className="option-title">後払い（ERC20トークン）</div>
-                  <div className="option-description">取引後にERC20トークンで支払い</div>
+                  <div className="option-title">Postpay (ERC20 Token)</div>
+                  <div className="option-description">Pay gas with ERC20 tokens after execution</div>
                 </label>
               </div>
             </div>
             
             {(paymentType === 1 || paymentType === 2) && (
               <div className="payment-token-selector">
-                <h4>ガス支払い用トークン</h4>
+                <h4>Token to Pay Gas</h4>
                 <div className="token-options">
                   <div 
                     className={`token-option ${paymentToken?.address === token.address ? 'selected' : ''}`}
@@ -351,7 +416,7 @@ const PaymentPage = () => {
                         <div className="token-name">{recommendation.recommendedToken.symbol}</div>
                         <div className="token-balance">{parseFloat(recommendation.recommendedToken.balance).toFixed(4)}</div>
                       </div>
-                      <div className="ai-badge">AI推奨</div>
+                      <div className="ai-badge">AI Recommended</div>
                     </div>
                   )}
                 </div>
@@ -359,7 +424,7 @@ const PaymentPage = () => {
             )}
             
             <div className="gas-estimate">
-              <span className="estimate-label">推定ガス料金:</span>
+              <span className="estimate-label">Estimated Gas Fee:</span>
               <span className="estimate-value">{calculateEstimatedGas()}</span>
             </div>
             
@@ -367,8 +432,14 @@ const PaymentPage = () => {
               <div className="session-key-notice">
                 <div className="notice-icon">🔑</div>
                 <div className="notice-text">
-                  クイックプレイが有効です - ウォレット確認は不要です！
+                  Quick Play is enabled - No wallet confirmation needed!
                 </div>
+              </div>
+            )}
+            
+            {isDevelopmentMode && (
+              <div className="dev-mode-note">
+                <p>Development Mode: Transaction will be simulated.</p>
               </div>
             )}
           </div>
@@ -378,7 +449,7 @@ const PaymentPage = () => {
               className="cancel-button"
               onClick={handleGoBack}
             >
-              キャンセル
+              Cancel
             </button>
             
             <button 
@@ -386,29 +457,28 @@ const PaymentPage = () => {
               onClick={handleSubmitTransaction}
               disabled={purchaseLoading}
             >
-              {purchaseLoading ? '処理中...' : '購入を確定'}
+              {purchaseLoading ? 'Processing...' : 'Confirm Purchase'}
             </button>
           </div>
         </div>
         
         <div className="payment-info-card">
-          <h3>アカウント抽象化について</h3>
+          <h3>About Account Abstraction</h3>
           <p>
-            NERO Chainのアカウント抽象化により、ネイティブ通貨だけでなく、任意のトークンでガス料金を支払うことができます。AIが最も費用対効果の高いオプションを分析します。
+            NERO Chain's Account Abstraction allows you to pay gas fees with any token, not just the native currency. Our AI analyzes your tokens to find the most cost-effective option.
           </p>
           
-          <h4>支払いタイプ</h4>
+          <h4>Payment Types</h4>
           <ul>
-            <li><strong>スポンサード:</strong> 開発者が負担する無料ガス</li>
-            <li><strong>前払い:</strong> 事前にERC20トークンで支払い</li>
-            <li><strong>後払い:</strong> 実行後にERC20トークンで支払い</li>
+            <li><strong>Sponsored:</strong> Free gas paid by the developer</li>
+            <li><strong>Prepay:</strong> Pay with ERC20 tokens upfront</li>
+            <li><strong>Postpay:</strong> Pay with ERC20 tokens after execution</li>
           </ul>
           
           <div className="security-note">
             <div className="note-icon">🔒</div>
             <div className="note-text">
-              <strong>セキュリティメモ:</strong> すべてのトランザクションはブロックチェーン上で実行され、
-              完全に透明性があります。AlpacaLottoはあなたの資金を保管しません。
+              <strong>Security Note:</strong> All transactions are executed on the blockchain with complete transparency. AlpacaLotto never holds your funds.
             </div>
           </div>
         </div>

@@ -1,22 +1,20 @@
-// frontend/src/hooks/useSessionKeys.js
-
 import { useState, useCallback, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { api } from '../services/api';
 import useWallet from './useWallet';
 
 /**
- * セッションキー機能のためのカスタムフック
- * クイックプレイ機能のためのセッションキーを管理します
+ * Session key management hook
+ * Enhanced with development mode support and error handling
  */
 export const useSessionKeys = () => {
-  const { account, signer } = useWallet();
+  const { account, signer, isDevelopmentMode } = useWallet();
   const [hasActiveSessionKey, setHasActiveSessionKey] = useState(false);
   const [sessionKeyDetails, setSessionKeyDetails] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // ローカルストレージからセッションキー情報をロード
+  // Load session key from storage
   const loadSessionKeyFromStorage = useCallback(() => {
     if (!account) return null;
     
@@ -26,27 +24,27 @@ export const useSessionKeys = () => {
       
       const sessionData = JSON.parse(storedData);
       
-      // 有効期限をチェック
+      // Check expiration
       if (sessionData.expiresAt && sessionData.expiresAt > Date.now() / 1000) {
         setHasActiveSessionKey(true);
         setSessionKeyDetails(sessionData);
         return sessionData;
       } else {
-        // 期限切れの場合は削除
+        // Remove expired session key
         localStorage.removeItem(`sessionKey_${account.toLowerCase()}`);
         setHasActiveSessionKey(false);
         setSessionKeyDetails(null);
         return null;
       }
     } catch (err) {
-      console.error('セッションキー読み込みエラー:', err);
+      console.error('Session key loading error:', err);
       setHasActiveSessionKey(false);
       setSessionKeyDetails(null);
       return null;
     }
   }, [account]);
   
-  // セッションキーをローカルストレージに保存
+  // Save session key to storage
   const saveSessionKeyToStorage = useCallback((sessionData) => {
     if (!account) return;
     
@@ -56,11 +54,11 @@ export const useSessionKeys = () => {
         JSON.stringify(sessionData)
       );
     } catch (err) {
-      console.error('セッションキー保存エラー:', err);
+      console.error('Session key storage error:', err);
     }
   }, [account]);
   
-  // ランダムなセッションキーの生成
+  // Generate random session key
   const generateSessionKey = useCallback(() => {
     const wallet = ethers.Wallet.createRandom();
     return {
@@ -70,42 +68,39 @@ export const useSessionKeys = () => {
   }, []);
   
   /**
-   * セッションキーを作成
-   * @param {number} duration - 有効期間（秒）
+   * Create a session key
+   * @param {number} duration - Duration in seconds
    */
   const createSessionKey = useCallback(async (duration) => {
-    if (!account || !signer) {
-      throw new Error('ウォレットが接続されていません');
+    if (!account && !isDevelopmentMode) {
+      throw new Error('Wallet not connected');
     }
     
     setIsLoading(true);
     setError(null);
     
     try {
-      // ランダムなセッションキーを生成
+      // Generate random session key
       const newSessionKey = generateSessionKey();
       
-      // 必要なデータ構造を作成
+      // Create necessary data structure
       const currentTime = Math.floor(Date.now() / 1000);
       const expiresAt = currentTime + duration;
       
-      // APIを呼び出してセッションキーを登録
-      const message = `AlpacaLotto: セッションキー ${newSessionKey.address} を ${expiresAt} まで有効化します。`;
-      const signature = await signer.signMessage(message);
-      
-      const response = await api.createSessionKey(duration, signature);
-      
-      if (response.success) {
-        // セッションキー詳細を設定
+      // In development mode, skip the signature and API call
+      if (isDevelopmentMode || !signer) {
+        console.log('Creating session key in development mode');
+        
+        // Create session data
         const sessionData = {
           key: newSessionKey,
           expiresAt: expiresAt,
           createdAt: currentTime,
-          message,
-          signature
+          message: 'Development mode session key',
+          signature: '0x0000000000000000000000000000000000000000000000000000000000000000'
         };
         
-        // ステートとストレージを更新
+        // Update state and storage
         setSessionKeyDetails(sessionData);
         setHasActiveSessionKey(true);
         saveSessionKeyToStorage(sessionData);
@@ -114,43 +109,82 @@ export const useSessionKeys = () => {
         return sessionData;
       }
       
-      throw new Error(response.error || 'セッションキー作成に失敗しました');
+      // In production, create message and sign it
+      const message = `AlpacaLotto: Activate session key ${newSessionKey.address} until ${expiresAt}.`;
+      const signature = await signer.signMessage(message);
+      
+      // Call API to register session key
+      const response = await api.createSessionKey(duration, signature);
+      
+      if (response.success) {
+        // Create session data
+        const sessionData = {
+          key: newSessionKey,
+          expiresAt: expiresAt,
+          createdAt: currentTime,
+          message,
+          signature
+        };
+        
+        // Update state and storage
+        setSessionKeyDetails(sessionData);
+        setHasActiveSessionKey(true);
+        saveSessionKeyToStorage(sessionData);
+        
+        setIsLoading(false);
+        return sessionData;
+      }
+      
+      throw new Error(response.error || 'Session key creation failed');
     } catch (err) {
-      console.error('セッションキー作成エラー:', err);
-      setError(err.message || 'セッションキー作成エラー');
+      console.error('Session key creation error:', err);
+      setError(err.message || 'Session key creation error');
       setIsLoading(false);
       throw err;
     }
-  }, [account, signer, generateSessionKey, saveSessionKeyToStorage]);
+  }, [account, signer, generateSessionKey, saveSessionKeyToStorage, isDevelopmentMode]);
   
   /**
-   * セッションキーを無効化
+   * Revoke a session key
    */
   const revokeSessionKey = useCallback(async () => {
-    if (!account || !signer) {
-      throw new Error('ウォレットが接続されていません');
+    if (!account && !isDevelopmentMode) {
+      throw new Error('Wallet not connected');
     }
     
     if (!sessionKeyDetails) {
-      throw new Error('アクティブなセッションキーがありません');
+      throw new Error('No active session key');
     }
     
     setIsLoading(true);
     setError(null);
     
     try {
-      // メッセージに署名
-      const message = `AlpacaLotto: セッションキー ${sessionKeyDetails.key.address} を無効化します。`;
+      // In development mode, skip the signature and API call
+      if (isDevelopmentMode || !signer) {
+        console.log('Revoking session key in development mode');
+        
+        // Clear state and storage
+        setSessionKeyDetails(null);
+        setHasActiveSessionKey(false);
+        localStorage.removeItem(`sessionKey_${account?.toLowerCase() || 'dev'}`);
+        
+        setIsLoading(false);
+        return true;
+      }
+      
+      // In production, sign message
+      const message = `AlpacaLotto: Revoke session key ${sessionKeyDetails.key.address}.`;
       const signature = await signer.signMessage(message);
       
-      // APIを呼び出してセッションキーを無効化
+      // Call API to revoke session key
       const response = await api.revokeSessionKey(
         sessionKeyDetails.key.address, 
         signature
       );
       
       if (response.success) {
-        // ステートとストレージをクリア
+        // Clear state and storage
         setSessionKeyDetails(null);
         setHasActiveSessionKey(false);
         localStorage.removeItem(`sessionKey_${account.toLowerCase()}`);
@@ -159,17 +193,17 @@ export const useSessionKeys = () => {
         return true;
       }
       
-      throw new Error(response.error || 'セッションキー無効化に失敗しました');
+      throw new Error(response.error || 'Session key revocation failed');
     } catch (err) {
-      console.error('セッションキー無効化エラー:', err);
-      setError(err.message || 'セッションキー無効化エラー');
+      console.error('Session key revocation error:', err);
+      setError(err.message || 'Session key revocation error');
       setIsLoading(false);
       throw err;
     }
-  }, [account, signer, sessionKeyDetails]);
+  }, [account, signer, sessionKeyDetails, isDevelopmentMode]);
   
   /**
-   * セッションキーの残り時間（秒）を取得
+   * Get session key remaining time in seconds
    */
   const getTimeRemaining = useCallback(() => {
     if (!hasActiveSessionKey || !sessionKeyDetails) {
@@ -183,22 +217,22 @@ export const useSessionKeys = () => {
   }, [hasActiveSessionKey, sessionKeyDetails]);
   
   /**
-   * セッションキーが特定の時間内に期限切れになるかどうかをチェック
-   * @param {number} withinSeconds - チェックする期間（秒）
+   * Check if session key is expiring within a certain time
+   * @param {number} withinSeconds - Time period to check
    */
   const isExpiringWithin = useCallback((withinSeconds) => {
     const remaining = getTimeRemaining();
     return remaining > 0 && remaining <= withinSeconds;
   }, [getTimeRemaining]);
   
-  // マウント時およびアカウント変更時にセッションキーをロード
+  // Load session key on mount and account change
   useEffect(() => {
-    if (account) {
+    if (account || isDevelopmentMode) {
       loadSessionKeyFromStorage();
     }
-  }, [account, loadSessionKeyFromStorage]);
+  }, [account, loadSessionKeyFromStorage, isDevelopmentMode]);
   
-  // 1分ごとにセッションキーの有効期限をチェック
+  // Check session key expiration every minute
   useEffect(() => {
     if (!hasActiveSessionKey) return;
     
@@ -206,12 +240,12 @@ export const useSessionKeys = () => {
       const remaining = getTimeRemaining();
       
       if (remaining <= 0) {
-        // 期限切れになったらステートとストレージをクリア
+        // Clear state and storage when expired
         setSessionKeyDetails(null);
         setHasActiveSessionKey(false);
-        localStorage.removeItem(`sessionKey_${account?.toLowerCase()}`);
+        localStorage.removeItem(`sessionKey_${account?.toLowerCase() || 'dev'}`);
       }
-    }, 60 * 1000); // 1分ごと
+    }, 60 * 1000); // Every minute
     
     return () => clearInterval(checkInterval);
   }, [account, hasActiveSessionKey, getTimeRemaining]);

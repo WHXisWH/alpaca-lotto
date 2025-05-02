@@ -1,8 +1,4 @@
-/* AlpacaLotto グローバルスタイルシート */
-
-/* ===== 基本スタイル ===== */
 :root {
-    /* カラーパレット */
     --primary-color: #3a6ea5;
     --primary-light: #5a8ec5;
     --primary-dark: #204e75;
@@ -24,10 +20,9 @@
     --gray-800: #343a40;
     --gray-900: #212529;
     
-    /* フォント */
+
     --font-family: 'Noto Sans JP', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
     
-    /* サイズと空間 */
     --border-radius: 8px;
     --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     --transition: all 0.3s ease;
@@ -1527,3 +1522,211 @@
     text-align: left;
     overflow-wrap: break-word;
   }
+
+  /* Development Mode Banner */
+.dev-mode-banner {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  text-align: center;
+  position: relative;
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.banner-icon {
+  font-size: 1.2rem;
+  margin-right: 0.5rem;
+}
+
+.banner-close {
+  background: none;
+  border: none;
+  color: #721c24;
+  cursor: pointer;
+  font-size: 1.2rem;
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0;
+}
+
+/* Loading indicator improvements */
+.loading-container {
+  min-height: 200px;
+}
+
+.loading-spinner {
+  margin-bottom: 1.5rem;
+}
+
+/* Better error display */
+.error-display {
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+  padding: 1rem;
+  border-radius: var(--border-radius);
+  margin-bottom: 1rem;
+  position: relative;
+}
+
+.error-display h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.error-message {
+  font-family: monospace;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+}
+
+.error-retry {
+  display: inline-block;
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--border-radius);
+  margin-top: 1rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* Development mode indicator in various components */
+.dev-mode-indicator {
+  display: inline-block;
+  background-color: #f8d7da;
+  color: #721c24;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.wallet-connect.dev-mode .wallet-info {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+/* Improved token selector */
+.token-selector {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.token-option.recommended {
+  border: 2px solid var(--success-color);
+  background-color: rgba(40, 167, 69, 0.05);
+}
+
+/* Session key notice improvements */
+.session-key-notice {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background-color: rgba(40, 167, 69, 0.1);
+  border-radius: var(--border-radius);
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(40, 167, 69, 0.2);
+}
+
+/* Improved wallet connection status */
+.wallet-connect.connected.dev-mode .wallet-info {
+  background-color: rgba(248, 215, 218, 0.5);
+  border: 1px solid #f5c6cb;
+}
+
+.wallet-connect.connected .wallet-details {
+  position: absolute;
+  z-index: 50;
+  width: 320px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--gray-300);
+}
+
+/* Transaction processing improvements */
+.transaction-processing .processing-card {
+  min-width: 320px;
+}
+
+.processing-steps {
+  margin-top: 1rem;
+  text-align: left;
+}
+
+.processing-step {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.step-status {
+  margin-right: 0.75rem;
+  font-size: 1.2rem;
+}
+
+.step-status.pending {
+  color: var(--warning-color);
+}
+
+.step-status.complete {
+  color: var(--success-color);
+}
+
+.step-status.error {
+  color: var(--danger-color);
+}
+
+.step-description {
+  flex: 1;
+}
+
+/* Mobile improvements */
+@media (max-width: 767px) {
+  .ticket-purchase-modal, 
+  .session-key-modal {
+    width: 95%;
+    max-width: 400px;
+  }
+  
+  .modal-content {
+    padding: 1rem;
+  }
+  
+  .lottery-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .payment-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .wallet-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .wallet-connect {
+    margin-bottom: 0.5rem;
+  }
+  
+  .session-key-indicator {
+    justify-content: center;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
