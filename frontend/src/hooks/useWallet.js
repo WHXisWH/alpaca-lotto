@@ -183,6 +183,9 @@ export const useWallet = () => {
    * @returns {Array} - Array of token objects with balances and metadata
    */
   const getTokens = useCallback(async (tokenAddresses) => {
+    console.log('[Debug] getTokens called at:', new Date().toLocaleTimeString());
+    console.log('[Debug] Account:', account);
+    console.log('[Debug] Provider:', provider ? 'Provider exists' : null);
     if (isDevelopmentMode || (!provider && !account)) {
       console.log('Using mock tokens in development mode');
       return MOCK_TOKENS;
