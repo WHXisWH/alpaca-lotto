@@ -19,7 +19,8 @@ const App = () => {
     isConnecting, 
     connectWallet, 
     aaWalletAddress,
-    isDevelopmentMode
+    isDevelopmentMode,
+    connectionError
   } = useWallet();
   
   const {
@@ -31,6 +32,8 @@ const App = () => {
   
   const [showSessionWarning, setShowSessionWarning] = useState(false);
   const [showDevBanner, setShowDevBanner] = useState(false);
+  const [showErrorBanner, setShowErrorBanner] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   
   // Show warning when session key is about to expire
   useEffect(() => {
@@ -61,6 +64,16 @@ const App = () => {
     }
   }, [isDevelopmentMode]);
   
+  // Show error banner if connection error
+  useEffect(() => {
+    if (connectionError) {
+      setErrorMessage(connectionError);
+      setShowErrorBanner(true);
+    } else {
+      setShowErrorBanner(false);
+    }
+  }, [connectionError]);
+  
   // Close session warning
   const dismissSessionWarning = () => {
     setShowSessionWarning(false);
@@ -69,6 +82,22 @@ const App = () => {
   // Close development banner
   const dismissDevBanner = () => {
     setShowDevBanner(false);
+  };
+  
+  // Close error banner
+  const dismissErrorBanner = () => {
+    setShowErrorBanner(false);
+  };
+  
+  // Handle wallet connect with error handling
+  const handleConnectWallet = async () => {
+    try {
+      await connectWallet();
+    } catch (err) {
+      console.error("Failed to connect wallet:", err);
+      setErrorMessage(err.message || "Failed to connect wallet");
+      setShowErrorBanner(true);
+    }
   };
   
   return (
@@ -86,6 +115,18 @@ const App = () => {
           </div>
         )}
         
+        {showErrorBanner && (
+          <div className="error-banner">
+            <div className="banner-content">
+              <span className="banner-icon">⚠️</span>
+              <span className="banner-text">
+                {errorMessage || "There was an error connecting to your wallet"}
+              </span>
+              <button className="banner-close" onClick={dismissErrorBanner}>×</button>
+            </div>
+          </div>
+        )}
+        
         <Header 
           hasSessionKey={hasActiveSessionKey} 
           onRevokeSessionKey={revokeSessionKey}
@@ -96,7 +137,7 @@ const App = () => {
           <WalletConnect 
             account={account} 
             isConnecting={isConnecting} 
-            onConnect={connectWallet} 
+            onConnect={handleConnectWallet} 
             aaWalletAddress={aaWalletAddress}
             isDevelopmentMode={isDevelopmentMode}
           />

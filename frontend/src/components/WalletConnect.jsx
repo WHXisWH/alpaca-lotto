@@ -7,12 +7,14 @@ import React, { useState } from 'react';
  * @param {boolean} props.isConnecting - Flag for connection in progress.
  * @param {Function} props.onConnect - Connection handler.
  * @param {string} props.aaWalletAddress - AA wallet address.
+ * @param {boolean} props.isDevelopmentMode - Development mode flag.
  */
 const WalletConnect = ({ 
   account, 
   isConnecting = false, 
   onConnect, 
-  aaWalletAddress 
+  aaWalletAddress,
+  isDevelopmentMode = false
 }) => {
   const [showDetails, setShowDetails] = useState(false);
 
@@ -23,9 +25,15 @@ const WalletConnect = ({
   };
 
   // Click handler for the connect button.
-  const handleConnect = () => {
+  const handleConnect = async () => {
     if (onConnect) {
-      onConnect();
+      try {
+        // Call the connect function with error handling
+        await onConnect();
+      } catch (err) {
+        console.error('Connection error in component:', err);
+        // The error will be handled in the hook
+      }
     }
   };
 
@@ -39,18 +47,24 @@ const WalletConnect = ({
         >
           {isConnecting ? 'Connecting...' : 'Connect Wallet'}
         </button>
+        {isDevelopmentMode && (
+          <span className="dev-mode-indicator">Development Mode</span>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="wallet-connect connected">
+    <div className={`wallet-connect connected ${isDevelopmentMode ? 'dev-mode' : ''}`}>
       <div 
         className="wallet-info"
         onClick={() => setShowDetails(!showDetails)}
       >
         <div className="wallet-icon"></div>
         <span className="wallet-address">{formatAddress(account)}</span>
+        {isDevelopmentMode && (
+          <span className="dev-mode-indicator">Dev</span>
+        )}
         <span className="dropdown-arrow">{showDetails ? '▲' : '▼'}</span>
       </div>
 

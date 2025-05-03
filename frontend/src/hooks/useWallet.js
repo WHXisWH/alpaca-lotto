@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 
-// ERC20トークン操作用のABI
+// ABI for ERC20 token operations
 const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
   'function decimals() view returns (uint8)',
@@ -56,8 +56,8 @@ const MOCK_TOKENS = [
 ];
 
 /**
- * ウォレット接続と管理のためのカスタムフック
- * 改良版: エラー処理と開発モードのサポート強化
+ * Custom hook for wallet connection and management
+ * Improved version: Enhanced error handling and development mode support
  */
 export const useWallet = () => {
   const [provider, setProvider] = useState(null);
@@ -70,7 +70,34 @@ export const useWallet = () => {
   const [isDevelopmentMode, setIsDevelopmentMode] = useState(false);
   
   /**
-   * MetaMaskウォレットに接続
+   * Check if MetaMask is installed and available
+   */
+  const isMetaMaskAvailable = useCallback(() => {
+    return window.ethereum && window.ethereum.isMetaMask;
+  }, []);
+  
+  /**
+   * Safely request accounts from MetaMask
+   */
+  const requestAccounts = useCallback(async () => {
+    if (!isMetaMaskAvailable()) {
+      throw new Error('MetaMask is not installed');
+    }
+    
+    try {
+      // Use a more reliable way to request accounts
+      return await window.ethereum.request({ 
+        method: 'eth_requestAccounts',
+        params: []
+      });
+    } catch (error) {
+      console.error('Error requesting accounts:', error);
+      throw error;
+    }
+  }, [isMetaMaskAvailable]);
+  
+  /**
+   * MetaMask wallet connection
    */
   const connectWallet = useCallback(async () => {
     setIsConnecting(true);
@@ -78,8 +105,7 @@ export const useWallet = () => {
     
     try {
       // Check for MetaMask
-      if (!window.ethereum) {
-        // Activate development mode if MetaMask is not available
+      if (!isMetaMaskAvailable()) {
         console.log('MetaMask not detected - activating development mode');
         setIsDevelopmentMode(true);
         setAccount('0x1234567890123456789012345678901234567890'); // Mock account
@@ -92,15 +118,18 @@ export const useWallet = () => {
       }
       
       try {
+        // Add a delay to ensure MetaMask has initialized properly
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         // Request account access
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const accounts = await requestAccounts();
         
         // Get the first account
         const account = accounts[0];
         setAccount(account);
         
         // Create ethers provider and signer
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
         setProvider(provider);
         
         const signer = provider.getSigner();
@@ -135,10 +164,10 @@ export const useWallet = () => {
         signer: null
       };
     }
-  }, []);
+  }, [isMetaMaskAvailable, requestAccounts]);
   
   /**
-   * ウォレットを切断
+   * Disconnect wallet
    */
   const disconnectWallet = useCallback(() => {
     setAccount(null);
@@ -149,9 +178,9 @@ export const useWallet = () => {
   }, []);
   
   /**
-   * ウォレット内のトークンを取得
-   * @param {Array} tokenAddresses - 確認するトークンアドレスの配列
-   * @returns {Array} - トークンオブジェクトの配列（残高とメタデータ付き）
+   * Get tokens in the wallet
+   * @param {Array} tokenAddresses - Array of token addresses to check
+   * @returns {Array} - Array of token objects with balances and metadata
    */
   const getTokens = useCallback(async (tokenAddresses) => {
     if (isDevelopmentMode || (!provider && !account)) {
@@ -227,13 +256,13 @@ export const useWallet = () => {
       return;
     }
     
-    if (!window.ethereum) {
+    if (!isMetaMaskAvailable()) {
       throw new Error('MetaMask not installed');
     }
     
     try {
       // NERO Chain details
-      const neroChainId = '0x555503'; // NERO Testnet Chain ID in hex
+      const neroChainId = '0x54c263'; // NERO Testnet Chain ID in hex (5555003 in decimal)
       
       // Switch to NERO Chain
       await window.ethereum.request({
@@ -254,7 +283,7 @@ export const useWallet = () => {
         throw err;
       }
     }
-  }, [isDevelopmentMode]);
+  }, [isDevelopmentMode, isMetaMaskAvailable]);
   
   /**
    * Add NERO Chain to MetaMask
@@ -266,14 +295,14 @@ export const useWallet = () => {
       return;
     }
     
-    if (!window.ethereum) {
+    if (!isMetaMaskAvailable()) {
       throw new Error('MetaMask not installed');
     }
     
     try {
       // NERO Chain details
       const neroChainParams = {
-        chainId: '0x555503', // NERO Testnet Chain ID in hex
+        chainId: '0x54c263', // NERO Testnet Chain ID in hex (5555003)
         chainName: 'NERO Chain Testnet',
         nativeCurrency: {
           name: 'NERO',
@@ -298,12 +327,23 @@ export const useWallet = () => {
       console.error('Error adding NERO Chain:', err);
       throw err;
     }
-  }, [isDevelopmentMode]);
+  }, [isDevelopmentMode, isMetaMaskAvailable]);
+  
+  // Auto-enable development mode if MetaMask is not available
+  useEffect(() => {
+    if (!isMetaMaskAvailable()) {
+      setIsDevelopmentMode(true);
+    }
+  }, [isMetaMaskAvailable]);
   
   // Set up event listeners for account and chain changes
   useEffect(() => {
     if (isDevelopmentMode) {
       return; // No event listeners needed in development mode
+    }
+    
+    if (!isMetaMaskAvailable()) {
+      return; // No MetaMask available
     }
     
     const handleAccountsChanged = (accounts) => {
@@ -337,7 +377,7 @@ export const useWallet = () => {
         window.ethereum.removeListener('chainChanged', handleChainChanged);
       }
     };
-  }, [account, disconnectWallet, isDevelopmentMode]);
+  }, [account, disconnectWallet, isDevelopmentMode, isMetaMaskAvailable]);
   
   return {
     provider,
