@@ -5,9 +5,9 @@ import {
   useDisconnect, 
   useBalance,
   useChainId,
-  useSwitchChain,
-  readContract
+  useSwitchChain
 } from 'wagmi';
+import { readContract } from 'viem/actions';
 import { mainnet } from 'wagmi/chains';
 import { formatUnits } from 'viem';
 
