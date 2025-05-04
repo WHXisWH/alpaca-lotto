@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Get API Base Endpoint
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
 // Create API client instance
 const apiClient = axios.create({

@@ -11,7 +11,7 @@ const queryClient = new QueryClient();
  * AppWrapper provides the WagmiProvider and QueryClientProvider
  * to make wagmi hooks available throughout the app
  */
-const AppWrapper = () => {
+const AppWrapper: React.FC = () => {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>

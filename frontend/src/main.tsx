@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './styles/global.css';
-import AppWrapper from './AppWrapper'; // Using our new wrapper
+import AppWrapper from './AppWrapper';
 
 // Error boundary to catch and display rendering errors
 class ErrorBoundary extends React.Component {
@@ -63,8 +63,7 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 // Create root and render app with error boundary
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
+ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
       <AppWrapper />

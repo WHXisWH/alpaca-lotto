@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 
+interface WalletConnectProps {
+  isDevelopmentMode?: boolean;
+  aaWalletAddress?: string | null;
+}
+
 /**
  * Wallet connection component using wagmi hooks.
- * @param {Object} props
- * @param {boolean} props.isDevelopmentMode - Development mode flag.
- * @param {string} props.aaWalletAddress - AA wallet address.
  */
-const WalletConnect = ({ isDevelopmentMode = false, aaWalletAddress }) => {
+const WalletConnect: React.FC<WalletConnectProps> = ({ isDevelopmentMode = false, aaWalletAddress }) => {
   const [showDetails, setShowDetails] = useState(false);
   
   // Use wagmi hooks
@@ -16,7 +18,7 @@ const WalletConnect = ({ isDevelopmentMode = false, aaWalletAddress }) => {
   const { disconnect } = useDisconnect();
 
   // Format wallet address for display (abbreviated).
-  const formatAddress = (address) => {
+  const formatAddress = (address?: string | null): string => {
     if (!address) return '';
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };

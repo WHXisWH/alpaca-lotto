@@ -13,10 +13,10 @@ const neroTestnet = {
   },
   rpcUrls: {
     default: {
-      http: [process.env.REACT_APP_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io'],
+      http: [import.meta.env.VITE_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io'],
     },
     public: {
-      http: [process.env.REACT_APP_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io'],
+      http: [import.meta.env.VITE_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io'],
     },
   },
   blockExplorers: {
@@ -29,7 +29,7 @@ const neroTestnet = {
 }
 
 // WalletConnect projectId - should be stored in env variable in production
-const projectId = process.env.REACT_APP_WALLET_CONNECT_PROJECT_ID || 'YOUR_PROJECT_ID'
+const projectId = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID || 'YOUR_PROJECT_ID'
 
 // Create the config
 export const config = createConfig({

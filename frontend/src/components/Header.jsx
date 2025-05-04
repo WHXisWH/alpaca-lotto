@@ -1,20 +1,21 @@
-// frontend/src/components/Header.jsx
-
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
+interface HeaderProps {
+  hasSessionKey: boolean;
+  onRevokeSessionKey: () => void;
+  isDevelopmentMode?: boolean;
+}
+
 /**
  * Header component for the application
- * @param {Object} props
- * @param {boolean} props.hasSessionKey - Whether session key is active
- * @param {Function} props.onRevokeSessionKey - Handler for revoking session key
  */
-const Header = ({ hasSessionKey, onRevokeSessionKey }) => {
+const Header: React.FC<HeaderProps> = ({ hasSessionKey, onRevokeSessionKey, isDevelopmentMode }) => {
   const location = useLocation();
   const [showMenu, setShowMenu] = useState(false);
   
   // Check if current path is active
-  const isActive = (path) => {
+  const isActive = (path: string): boolean => {
     return location.pathname === path;
   };
   

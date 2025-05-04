@@ -1,44 +1,103 @@
 import { useState, useCallback } from 'react';
 import { useAccount, useConnect, useDisconnect, useWalletClient } from 'wagmi';
 
-// Simulated constants instead of environment variables for development
+// Constants from environment variables
 const CONSTANTS = {
-  NERO_RPC_URL: process.env.REACT_APP_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io',
-  BUNDLER_URL: process.env.REACT_APP_BUNDLER_URL || 'https://bundler-testnet.nerochain.io',
-  PAYMASTER_URL: process.env.REACT_APP_PAYMASTER_URL || 'https://paymaster-testnet.nerochain.io',
-  PAYMASTER_API_KEY: process.env.REACT_APP_PAYMASTER_API_KEY || 'demo-api-key',
-  ENTRYPOINT_ADDRESS: process.env.REACT_APP_ENTRYPOINT_ADDRESS || '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
-  ACCOUNT_FACTORY_ADDRESS: process.env.REACT_APP_ACCOUNT_FACTORY_ADDRESS || '0x9406Cc6185a346906296840746125a0E44976454',
-  LOTTERY_CONTRACT_ADDRESS: process.env.REACT_APP_LOTTERY_CONTRACT_ADDRESS || '0x1234567890123456789012345678901234567890'
+  NERO_RPC_URL: import.meta.env.VITE_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io',
+  BUNDLER_URL: import.meta.env.VITE_BUNDLER_URL || 'https://bundler-testnet.nerochain.io',
+  PAYMASTER_URL: import.meta.env.VITE_PAYMASTER_URL || 'https://paymaster-testnet.nerochain.io',
+  PAYMASTER_API_KEY: import.meta.env.VITE_PAYMASTER_API_KEY || 'demo-api-key',
+  ENTRYPOINT_ADDRESS: import.meta.env.VITE_ENTRYPOINT_ADDRESS || '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
+  ACCOUNT_FACTORY_ADDRESS: import.meta.env.VITE_ACCOUNT_FACTORY_ADDRESS || '0x9406Cc6185a346906296840746125a0E44976454',
+  LOTTERY_CONTRACT_ADDRESS: import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS || '0x1234567890123456789012345678901234567890'
 };
+
+// Transaction type definitions
+interface Call {
+  to: string;
+  data: string;
+}
+
+interface TransferParams {
+  tokenAddress: string;
+  recipientAddress: string;
+  amount: string;
+  decimals: number;
+  paymentType: number;
+  paymentToken?: string;
+}
+
+interface BatchParams {
+  calls: Call[];
+  paymentType: number;
+  paymentToken?: string;
+}
+
+interface TicketPurchaseParams {
+  lotteryId: number;
+  tokenAddress: string;
+  quantity: number;
+  paymentType?: number;
+  paymentToken?: string;
+  useSessionKey?: boolean;
+}
+
+interface BatchPurchaseParams {
+  selections: {
+    lotteryId: number;
+    tokenAddress: string;
+    quantity: number;
+  }[];
+  paymentType?: number;
+  paymentToken?: string;
+}
+
+interface UseUserOpReturn {
+  isLoading: boolean;
+  error: string | null;
+  txHash: string | null;
+  aaWalletAddress: string | null;
+  isDevelopmentMode: boolean;
+  initClient: () => Promise<{
+    client: any;
+    builder: any;
+    aaAddress: string;
+  }>;
+  isWalletDeployed: (address: string) => Promise<boolean>;
+  executeTransfer: (params: TransferParams) => Promise<string>;
+  executeBatch: (params: BatchParams) => Promise<string>;
+  getPaymasterData: (builder: any, params: { type: number; token?: string }) => Promise<any>;
+  executeTicketPurchase: (params: TicketPurchaseParams) => Promise<string>;
+  executeBatchPurchase: (params: BatchPurchaseParams) => Promise<string>;
+}
 
 /**
  * NERO ChainのAccount Abstractionを使用してUserOperationを管理するためのカスタムフック
  * Updated to use wagmi hooks
  */
-export const useUserOp = () => {
+export const useUserOp = (): UseUserOpReturn => {
   // Use wagmi hooks
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
   
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [aaWalletAddress, setAaWalletAddress] = useState(null);
-  const [txHash, setTxHash] = useState(null);
-  const [isDevelopmentMode, setIsDevelopmentMode] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [aaWalletAddress, setAaWalletAddress] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [isDevelopmentMode, setIsDevelopmentMode] = useState<boolean>(false);
   
   /**
    * Generate a random transaction hash for development mode
    * @returns {string} - Random transaction hash
    */
-  const _generateMockTxHash = () => {
+  const _generateMockTxHash = (): string => {
     return '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
   };
   
   /**
    * Check if we should use development mode
    */
-  const checkDevelopmentMode = useCallback(() => {
+  const checkDevelopmentMode = useCallback((): boolean => {
     const noWallet = !isConnected && typeof window !== 'undefined' && (!window.ethereum || !window.ethereum.isMetaMask);
     if (noWallet) {
       setIsDevelopmentMode(true);
@@ -75,7 +134,7 @@ export const useUserOp = () => {
         console.log('Initializing AA client with walletClient');
         
         // Generate consistent AA wallet address from account
-        const aaAddress = "0x" + address.slice(2, 12) + "Ab" + address.slice(14);
+        const aaAddress = "0x" + address!.slice(2, 12) + "Ab" + address!.slice(14);
         setAaWalletAddress(aaAddress);
         
         // Return mock client and builder since we can't actually import userop in this context
@@ -98,7 +157,7 @@ export const useUserOp = () => {
           aaAddress: mockAddress
         };
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('AA client initialization error:', err);
       setError(err.message || 'AA client initialization error');
       throw err;
@@ -110,7 +169,7 @@ export const useUserOp = () => {
    * @param {string} address - AA wallet address to check
    * @returns {boolean} - Whether wallet is deployed
    */
-  const isWalletDeployed = useCallback(async (address) => {
+  const isWalletDeployed = useCallback(async (address: string): Promise<boolean> => {
     if (isDevelopmentMode) {
       return Math.random() > 0.5; // Random result in development mode
     }
@@ -137,7 +196,7 @@ export const useUserOp = () => {
     decimals,
     paymentType,
     paymentToken
-  }) => {
+  }: TransferParams): Promise<string> => {
     setIsLoading(true);
     setError(null);
     setTxHash(null);
@@ -168,7 +227,7 @@ export const useUserOp = () => {
       setTxHash(mockTxHash);
       setIsLoading(false);
       return mockTxHash;
-    } catch (err) {
+    } catch (err: any) {
       console.error("UserOperation submission error:", err);
       setError(err.message || 'UserOperation submission error');
       setIsLoading(false);
@@ -185,7 +244,7 @@ export const useUserOp = () => {
     calls,
     paymentType,
     paymentToken
-  }) => {
+  }: BatchParams): Promise<string> => {
     setIsLoading(true);
     setError(null);
     setTxHash(null);
@@ -216,7 +275,7 @@ export const useUserOp = () => {
       setTxHash(mockTxHash);
       setIsLoading(false);
       return mockTxHash;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Batch UserOperation error:", err);
       setError(err.message || 'Batch UserOperation error');
       setIsLoading(false);
@@ -231,9 +290,9 @@ export const useUserOp = () => {
    * @returns {Object} - Updated builder
    */
   const getPaymasterData = useCallback(async (
-    builder,
-    { type, token }
-  ) => {
+    builder: any,
+    { type, token }: { type: number; token?: string }
+  ): Promise<any> => {
     try {
       // In development mode, just return the builder
       if (isDevelopmentMode) {
@@ -262,7 +321,7 @@ export const useUserOp = () => {
     paymentType = 0,
     paymentToken = null,
     useSessionKey = false
-  }) => {
+  }: TicketPurchaseParams): Promise<string> => {
     setIsLoading(true);
     setError(null);
     setTxHash(null);
@@ -298,7 +357,7 @@ export const useUserOp = () => {
       setTxHash(mockTxHash);
       setIsLoading(false);
       return mockTxHash;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Ticket purchase UserOperation error:", err);
       setError(err.message || 'Ticket purchase UserOperation error');
       setIsLoading(false);
@@ -315,7 +374,7 @@ export const useUserOp = () => {
     selections,
     paymentType = 0,
     paymentToken = null
-  }) => {
+  }: BatchPurchaseParams): Promise<string> => {
     setIsLoading(true);
     setError(null);
     setTxHash(null);
@@ -347,7 +406,7 @@ export const useUserOp = () => {
       setTxHash(mockTxHash);
       setIsLoading(false);
       return mockTxHash;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Batch ticket purchase error:", err);
       setError(err.message || 'Batch ticket purchase error');
       setIsLoading(false);
@@ -355,7 +414,7 @@ export const useUserOp = () => {
     }
   }, [initClient, isDevelopmentMode, walletClient]);
   
-  // Run development mode check on initialization
+  // Check development mode on initialization
   useCallback(() => {
     checkDevelopmentMode();
   }, [checkDevelopmentMode]);

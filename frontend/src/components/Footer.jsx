@@ -3,7 +3,7 @@ import React from 'react';
 /**
  * Footer component for the application
  */
-const Footer = () => {
+const Footer: React.FC = () => {
   const currentYear = new Date().getFullYear();
   
   return (

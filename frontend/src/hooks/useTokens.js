@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import { api } from '../services/api';
-import useWagmiWallet from './useWagmiWallet'; // Using wagmi wallet hook
+import useWagmiWallet from './useWagmiWallet';
 
 // Common token addresses (for test/demo)
 const COMMON_TOKENS = [
@@ -20,32 +20,50 @@ const COMMON_TOKENS = [
   '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9', // AAVE
 ];
 
-/**
- * @typedef {Object} Token
- * @property {string} address - Token address
- * @property {string} symbol - Token symbol
- * @property {string} name - Token name
- * @property {number} decimals - Token decimals
- * @property {string} balance - Token balance (as string)
- * @property {string} rawBalance - Raw token balance (as string)
- * @property {number} [usdBalance] - Token balance in USD
- * @property {number} [score] - Token score
- * @property {boolean} [recommended] - Whether it is the recommended token
- * @property {string[]} [reasons] - Reasons for recommendation
- */
+export interface Token {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  balance: string;
+  rawBalance: string;
+  usdBalance?: number;
+  usdPrice?: number;
+  score?: number;
+  volatility?: number;
+  slippage?: number;
+  recommended?: boolean;
+  reasons?: string[];
+}
 
-/**
- * @typedef {Object} Recommendation
- * @property {Token} recommendedToken - Recommended token
- * @property {Token[]} allScores - All tokens with their scores
- * @property {number} supportedCount - Number of supported tokens
- */
+export interface Recommendation {
+  recommendedToken: Token;
+  allScores: Token[];
+  factors: {
+    balanceWeight: number;
+    volatilityWeight: number;
+    slippageWeight: number;
+  };
+}
+
+interface UseTokensReturn {
+  tokens: Token[];
+  isLoading: boolean;
+  error: string | null;
+  supportedTokens: string[];
+  recommendation: Recommendation | null;
+  getTokens: () => Promise<Token[]>;
+  getSupportedTokens: () => Promise<string[]>;
+  getRecommendation: (targetTokens?: Token[] | null, ticketPrice?: number | null) => Promise<Recommendation | null>;
+  isTokenSupported: (tokenAddress: string) => boolean;
+  getSupportedTokensOnly: () => Token[];
+}
 
 /**
  * Custom hook for managing and recommending tokens
  * Updated to use wagmi
  */
-export const useTokens = () => {
+export const useTokens = (): UseTokensReturn => {
   // Using wagmi hooks
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -54,19 +72,19 @@ export const useTokens = () => {
   const { aaWalletAddress, isDevelopmentMode, getTokens: fetchWalletTokens } = useWagmiWallet();
   
   // State
-  const [tokens, setTokens] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [supportedTokens, setSupportedTokens] = useState([]);
-  const [recommendation, setRecommendation] = useState(null);
+  const [tokens, setTokens] = useState<Token[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [supportedTokens, setSupportedTokens] = useState<string[]>([]);
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   
   /**
    * Retrieve tokens from wallet
    */
-  const getTokens = useCallback(async () => {
+  const getTokens = useCallback(async (): Promise<Token[]> => {
     if (!address && !aaWalletAddress && !isDevelopmentMode) {
       setError('Wallet is not connected');
-      return;
+      return [];
     }
     
     setIsLoading(true);
@@ -80,22 +98,23 @@ export const useTokens = () => {
       
       setIsLoading(false);
       return walletTokens;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Token fetch error:', err);
       setError(err.message || 'Failed to fetch tokens');
       setIsLoading(false);
+      return [];
     }
   }, [address, aaWalletAddress, isDevelopmentMode, fetchWalletTokens]);
   
   /**
    * Get tokens supported by the Paymaster
    */
-  const getSupportedTokens = useCallback(async () => {
+  const getSupportedTokens = useCallback(async (): Promise<string[]> => {
     try {
       const response = await api.getSupportedTokens();
       
       if (response.success && response.tokens) {
-        const addresses = response.tokens.map((token) => 
+        const addresses = response.tokens.map((token: any) => 
           token.address.toLowerCase()
         );
         
@@ -115,7 +134,7 @@ export const useTokens = () => {
    * @param {Array} targetTokens - Tokens to analyze (defaults to current tokens)
    * @param {number} [ticketPrice] - Ticket price in USD (affects recommendation logic)
    */
-  const getRecommendation = useCallback(async (targetTokens = null, ticketPrice = null) => {
+  const getRecommendation = useCallback(async (targetTokens: Token[] | null = null, ticketPrice: number | null = null): Promise<Recommendation | null> => {
     const tokensToUse = targetTokens || tokens;
     
     if (tokensToUse.length === 0) {
@@ -127,7 +146,7 @@ export const useTokens = () => {
     setError(null);
     
     try {
-      const userPreferences = {};
+      const userPreferences: Record<string, any> = {};
       if (ticketPrice) {
         if (ticketPrice >= 50) {
           userPreferences.weights = {
@@ -153,7 +172,7 @@ export const useTokens = () => {
           }
           
           const scoreInfo = response.allScores.find(
-            (t) => t.address.toLowerCase() === token.address.toLowerCase()
+            (t: Token) => t.address.toLowerCase() === token.address.toLowerCase()
           );
           
           if (scoreInfo) {
@@ -174,7 +193,7 @@ export const useTokens = () => {
       
       setIsLoading(false);
       return null;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Token recommendation fetch error:', err);
       setError(err.message || 'Failed to fetch token recommendation');
       setIsLoading(false);
@@ -187,7 +206,7 @@ export const useTokens = () => {
    * @param {string} tokenAddress - Token address to check
    * @returns {boolean} - Whether the token is supported
    */
-  const isTokenSupported = useCallback((tokenAddress) => {
+  const isTokenSupported = useCallback((tokenAddress: string): boolean => {
     if (!tokenAddress || supportedTokens.length === 0) {
       return false;
     }
@@ -199,7 +218,7 @@ export const useTokens = () => {
    * Filter only supported tokens
    * @returns {Array} - Array of supported tokens
    */
-  const getSupportedTokensOnly = useCallback(() => {
+  const getSupportedTokensOnly = useCallback((): Token[] => {
     return tokens.filter(token => 
       isTokenSupported(token.address)
     );

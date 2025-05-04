@@ -5,7 +5,7 @@ import PaymentPage from './pages/PaymentPage';
 import Header from './components/Header';
 import WalletConnect from './components/WalletConnect';
 import Footer from './components/Footer';
-import useWagmiWallet from './hooks/useWagmiWallet'; // Using the new hook
+import useWagmiWallet from './hooks/useWagmiWallet'; 
 import useSessionKeys from './hooks/useSessionKeys';
 import './styles/global.css';
 
@@ -13,7 +13,7 @@ import './styles/global.css';
  * Root component for the AlpacaLotto application
  * Enhanced with development mode and error handling
  */
-const App = () => {
+const App: React.FC = () => {
   const { 
     account, 
     isConnecting, 
@@ -21,7 +21,7 @@ const App = () => {
     aaWalletAddress,
     isDevelopmentMode,
     connectionError
-  } = useWagmiWallet(); // Using wagmi wallet hook instead of useWallet
+  } = useWagmiWallet(); 
   
   const {
     hasActiveSessionKey,
@@ -30,10 +30,10 @@ const App = () => {
     isExpiringWithin
   } = useSessionKeys();
   
-  const [showSessionWarning, setShowSessionWarning] = useState(false);
-  const [showDevBanner, setShowDevBanner] = useState(false);
-  const [showErrorBanner, setShowErrorBanner] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [showSessionWarning, setShowSessionWarning] = useState<boolean>(false);
+  const [showDevBanner, setShowDevBanner] = useState<boolean>(false);
+  const [showErrorBanner, setShowErrorBanner] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
   
   // Show warning when session key is about to expire
   useEffect(() => {
@@ -93,7 +93,7 @@ const App = () => {
   const handleConnectWallet = async () => {
     try {
       await connectWallet();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to connect wallet:", err);
       setErrorMessage(err.message || "Failed to connect wallet");
       setShowErrorBanner(true);

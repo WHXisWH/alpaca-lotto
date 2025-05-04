@@ -3,27 +3,51 @@ import { useAccount, useSignMessage, useWalletClient } from 'wagmi';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { api } from '../services/api';
 
+interface SessionKey {
+  address: string;
+  privateKey: string;
+}
+
+interface SessionKeyDetails {
+  key: SessionKey;
+  expiresAt: number;
+  createdAt: number;
+  message: string;
+  signature: string;
+}
+
+interface UseSessionKeysReturn {
+  hasActiveSessionKey: boolean;
+  sessionKeyDetails: SessionKeyDetails | null;
+  isLoading: boolean;
+  error: string | null;
+  createSessionKey: (duration: number) => Promise<SessionKeyDetails>;
+  revokeSessionKey: () => Promise<boolean>;
+  getTimeRemaining: () => number;
+  isExpiringWithin: (withinSeconds: number) => boolean;
+}
+
 /**
  * Session key management hook
  * Enhanced with wagmi hooks and development mode support
  */
-export const useSessionKeys = () => {
+export const useSessionKeys = (): UseSessionKeysReturn => {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
   const { signMessageAsync } = useSignMessage();
   
-  const [hasActiveSessionKey, setHasActiveSessionKey] = useState(false);
-  const [sessionKeyDetails, setSessionKeyDetails] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [hasActiveSessionKey, setHasActiveSessionKey] = useState<boolean>(false);
+  const [sessionKeyDetails, setSessionKeyDetails] = useState<SessionKeyDetails | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Check for development mode
-  const isDevelopmentMode = useCallback(() => {
+  const isDevelopmentMode = useCallback((): boolean => {
     return !isConnected && typeof window !== 'undefined' && (!window.ethereum || !window.ethereum.isMetaMask);
   }, [isConnected]);
   
   // Load session key from storage
-  const loadSessionKeyFromStorage = useCallback(() => {
+  const loadSessionKeyFromStorage = useCallback((): SessionKeyDetails | null => {
     if (!address && !isDevelopmentMode()) return null;
     
     try {
@@ -31,7 +55,7 @@ export const useSessionKeys = () => {
       const storedData = localStorage.getItem(storageKey);
       if (!storedData) return null;
       
-      const sessionData = JSON.parse(storedData);
+      const sessionData = JSON.parse(storedData) as SessionKeyDetails;
       
       // Check expiration
       if (sessionData.expiresAt && sessionData.expiresAt > Date.now() / 1000) {
@@ -54,7 +78,7 @@ export const useSessionKeys = () => {
   }, [address, isDevelopmentMode]);
   
   // Save session key to storage
-  const saveSessionKeyToStorage = useCallback((sessionData) => {
+  const saveSessionKeyToStorage = useCallback((sessionData: SessionKeyDetails): void => {
     if (!address && !isDevelopmentMode()) return;
     
     try {
@@ -66,7 +90,7 @@ export const useSessionKeys = () => {
   }, [address, isDevelopmentMode]);
   
   // Generate random session key using viem
-  const generateSessionKey = useCallback(() => {
+  const generateSessionKey = useCallback((): SessionKey => {
     // Generate a random private key
     const privateKey = generatePrivateKey();
     
@@ -83,7 +107,7 @@ export const useSessionKeys = () => {
    * Create a session key
    * @param {number} duration - Duration in seconds
    */
-  const createSessionKey = useCallback(async (duration) => {
+  const createSessionKey = useCallback(async (duration: number): Promise<SessionKeyDetails> => {
     if (!isConnected && !isDevelopmentMode()) {
       throw new Error('Wallet not connected');
     }
@@ -104,7 +128,7 @@ export const useSessionKeys = () => {
         console.log('Creating session key in development mode');
         
         // Create session data
-        const sessionData = {
+        const sessionData: SessionKeyDetails = {
           key: newSessionKey,
           expiresAt: expiresAt,
           createdAt: currentTime,
@@ -132,7 +156,7 @@ export const useSessionKeys = () => {
       
       if (response.success) {
         // Create session data
-        const sessionData = {
+        const sessionData: SessionKeyDetails = {
           key: newSessionKey,
           expiresAt: expiresAt,
           createdAt: currentTime,
@@ -150,7 +174,7 @@ export const useSessionKeys = () => {
       }
       
       throw new Error(response.error || 'Session key creation failed');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Session key creation error:', err);
       setError(err.message || 'Session key creation error');
       setIsLoading(false);
@@ -161,7 +185,7 @@ export const useSessionKeys = () => {
   /**
    * Revoke a session key
    */
-  const revokeSessionKey = useCallback(async () => {
+  const revokeSessionKey = useCallback(async (): Promise<boolean> => {
     if (!isConnected && !isDevelopmentMode()) {
       throw new Error('Wallet not connected');
     }
@@ -210,7 +234,7 @@ export const useSessionKeys = () => {
       }
       
       throw new Error(response.error || 'Session key revocation failed');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Session key revocation error:', err);
       setError(err.message || 'Session key revocation error');
       setIsLoading(false);
@@ -221,7 +245,7 @@ export const useSessionKeys = () => {
   /**
    * Get session key remaining time in seconds
    */
-  const getTimeRemaining = useCallback(() => {
+  const getTimeRemaining = useCallback((): number => {
     if (!hasActiveSessionKey || !sessionKeyDetails) {
       return 0;
     }
@@ -236,7 +260,7 @@ export const useSessionKeys = () => {
    * Check if session key is expiring within a certain time
    * @param {number} withinSeconds - Time period to check
    */
-  const isExpiringWithin = useCallback((withinSeconds) => {
+  const isExpiringWithin = useCallback((withinSeconds: number): boolean => {
     const remaining = getTimeRemaining();
     return remaining > 0 && remaining <= withinSeconds;
   }, [getTimeRemaining]);
