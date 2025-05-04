@@ -5,7 +5,7 @@ import PaymentPage from './pages/PaymentPage';
 import Header from './components/Header';
 import WalletConnect from './components/WalletConnect';
 import Footer from './components/Footer';
-import useWallet from './hooks/useWallet';
+import useWagmiWallet from './hooks/useWagmiWallet'; // Using the new hook
 import useSessionKeys from './hooks/useSessionKeys';
 import './styles/global.css';
 
@@ -21,7 +21,7 @@ const App = () => {
     aaWalletAddress,
     isDevelopmentMode,
     connectionError
-  } = useWallet();
+  } = useWagmiWallet(); // Using wagmi wallet hook instead of useWallet
   
   const {
     hasActiveSessionKey,
@@ -135,11 +135,8 @@ const App = () => {
         
         <div className="wallet-bar">
           <WalletConnect 
-            account={account} 
-            isConnecting={isConnecting} 
-            onConnect={handleConnectWallet} 
-            aaWalletAddress={aaWalletAddress}
             isDevelopmentMode={isDevelopmentMode}
+            aaWalletAddress={aaWalletAddress}
           />
           {hasActiveSessionKey && (
             <div className="session-key-indicator">

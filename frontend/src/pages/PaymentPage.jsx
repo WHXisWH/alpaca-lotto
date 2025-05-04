@@ -1,21 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import useWallet from '../hooks/useWallet';
+import { useAccount } from 'wagmi'; // Using wagmi's useAccount hook
+import useWagmiWallet from '../hooks/useWagmiWallet'; // Using wagmi wallet hook
 import useUserOp from '../hooks/useUserOp';
 import useTokens from '../hooks/useTokens';
 import useSessionKeys from '../hooks/useSessionKeys';
 
 /**
  * Payment processing page
- * Enhanced with development mode support and better error handling
+ * Updated to use wagmi hooks
  */
 const PaymentPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { lottery, token, quantity, recommendation } = location.state || {};
   
+  // Using wagmi hooks
+  const { address, isConnected } = useAccount();
+  const { connectWallet, isDevelopmentMode } = useWagmiWallet();
+  
   // Custom hooks
-  const { signer, account, connectWallet, isDevelopmentMode } = useWallet();
   const { 
     executeTicketPurchase, 
     isLoading: purchaseLoading, 
@@ -23,6 +27,7 @@ const PaymentPage = () => {
     txHash,
     isDevelopmentMode: userOpDevMode
   } = useUserOp();
+  
   const { hasActiveSessionKey } = useSessionKeys();
   
   // State
@@ -46,10 +51,10 @@ const PaymentPage = () => {
   
   // Connect wallet if not connected
   useEffect(() => {
-    if (!account && !isDevelopmentMode) {
+    if (!isConnected && !isDevelopmentMode) {
       connectWallet();
     }
-  }, [account, connectWallet, isDevelopmentMode]);
+  }, [isConnected, connectWallet, isDevelopmentMode]);
   
   // Payment type change handler
   const handlePaymentTypeChange = (e) => {
@@ -72,7 +77,7 @@ const PaymentPage = () => {
   
   // Transaction submission handler
   const handleSubmitTransaction = async () => {
-    if ((!signer && !isDevelopmentMode) || !lottery || !token) {
+    if ((!isConnected && !isDevelopmentMode) || !lottery || !token) {
       setErrorMessage('Wallet not connected or missing required information');
       return;
     }
@@ -84,7 +89,6 @@ const PaymentPage = () => {
     try {
       // Execute ticket purchase transaction
       const hash = await executeTicketPurchase({
-        signer,
         lotteryId: lottery.id,
         tokenAddress: token.address,
         quantity,

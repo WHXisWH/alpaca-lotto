@@ -1,25 +1,34 @@
 import { useState, useCallback, useEffect } from 'react';
-import { ethers } from 'ethers';
+import { useAccount, useSignMessage, useWalletClient } from 'wagmi';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { api } from '../services/api';
-import useWallet from './useWallet';
 
 /**
  * Session key management hook
- * Enhanced with development mode support and error handling
+ * Enhanced with wagmi hooks and development mode support
  */
 export const useSessionKeys = () => {
-  const { account, signer, isDevelopmentMode } = useWallet();
+  const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
+  const { signMessageAsync } = useSignMessage();
+  
   const [hasActiveSessionKey, setHasActiveSessionKey] = useState(false);
   const [sessionKeyDetails, setSessionKeyDetails] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   
+  // Check for development mode
+  const isDevelopmentMode = useCallback(() => {
+    return !isConnected && typeof window !== 'undefined' && (!window.ethereum || !window.ethereum.isMetaMask);
+  }, [isConnected]);
+  
   // Load session key from storage
   const loadSessionKeyFromStorage = useCallback(() => {
-    if (!account) return null;
+    if (!address && !isDevelopmentMode()) return null;
     
     try {
-      const storedData = localStorage.getItem(`sessionKey_${account.toLowerCase()}`);
+      const storageKey = `sessionKey_${address?.toLowerCase() || 'dev'}`;
+      const storedData = localStorage.getItem(storageKey);
       if (!storedData) return null;
       
       const sessionData = JSON.parse(storedData);
@@ -31,7 +40,7 @@ export const useSessionKeys = () => {
         return sessionData;
       } else {
         // Remove expired session key
-        localStorage.removeItem(`sessionKey_${account.toLowerCase()}`);
+        localStorage.removeItem(storageKey);
         setHasActiveSessionKey(false);
         setSessionKeyDetails(null);
         return null;
@@ -42,28 +51,31 @@ export const useSessionKeys = () => {
       setSessionKeyDetails(null);
       return null;
     }
-  }, [account]);
+  }, [address, isDevelopmentMode]);
   
   // Save session key to storage
   const saveSessionKeyToStorage = useCallback((sessionData) => {
-    if (!account) return;
+    if (!address && !isDevelopmentMode()) return;
     
     try {
-      localStorage.setItem(
-        `sessionKey_${account.toLowerCase()}`,
-        JSON.stringify(sessionData)
-      );
+      const storageKey = `sessionKey_${address?.toLowerCase() || 'dev'}`;
+      localStorage.setItem(storageKey, JSON.stringify(sessionData));
     } catch (err) {
       console.error('Session key storage error:', err);
     }
-  }, [account]);
+  }, [address, isDevelopmentMode]);
   
-  // Generate random session key
+  // Generate random session key using viem
   const generateSessionKey = useCallback(() => {
-    const wallet = ethers.Wallet.createRandom();
+    // Generate a random private key
+    const privateKey = generatePrivateKey();
+    
+    // Convert private key to account
+    const account = privateKeyToAccount(privateKey);
+    
     return {
-      address: wallet.address,
-      privateKey: wallet.privateKey
+      address: account.address,
+      privateKey
     };
   }, []);
   
@@ -72,7 +84,7 @@ export const useSessionKeys = () => {
    * @param {number} duration - Duration in seconds
    */
   const createSessionKey = useCallback(async (duration) => {
-    if (!account && !isDevelopmentMode) {
+    if (!isConnected && !isDevelopmentMode()) {
       throw new Error('Wallet not connected');
     }
     
@@ -88,7 +100,7 @@ export const useSessionKeys = () => {
       const expiresAt = currentTime + duration;
       
       // In development mode, skip the signature and API call
-      if (isDevelopmentMode || !signer) {
+      if (isDevelopmentMode() || !walletClient) {
         console.log('Creating session key in development mode');
         
         // Create session data
@@ -109,9 +121,11 @@ export const useSessionKeys = () => {
         return sessionData;
       }
       
-      // In production, create message and sign it
+      // In production, create message and sign it using wagmi
       const message = `AlpacaLotto: Activate session key ${newSessionKey.address} until ${expiresAt}.`;
-      const signature = await signer.signMessage(message);
+      
+      // Sign the message using wagmi's useSignMessage hook
+      const signature = await signMessageAsync({ message });
       
       // Call API to register session key
       const response = await api.createSessionKey(duration, signature);
@@ -142,13 +156,13 @@ export const useSessionKeys = () => {
       setIsLoading(false);
       throw err;
     }
-  }, [account, signer, generateSessionKey, saveSessionKeyToStorage, isDevelopmentMode]);
+  }, [isConnected, isDevelopmentMode, walletClient, generateSessionKey, signMessageAsync, saveSessionKeyToStorage]);
   
   /**
    * Revoke a session key
    */
   const revokeSessionKey = useCallback(async () => {
-    if (!account && !isDevelopmentMode) {
+    if (!isConnected && !isDevelopmentMode()) {
       throw new Error('Wallet not connected');
     }
     
@@ -161,21 +175,23 @@ export const useSessionKeys = () => {
     
     try {
       // In development mode, skip the signature and API call
-      if (isDevelopmentMode || !signer) {
+      if (isDevelopmentMode() || !walletClient) {
         console.log('Revoking session key in development mode');
         
         // Clear state and storage
         setSessionKeyDetails(null);
         setHasActiveSessionKey(false);
-        localStorage.removeItem(`sessionKey_${account?.toLowerCase() || 'dev'}`);
+        localStorage.removeItem(`sessionKey_${address?.toLowerCase() || 'dev'}`);
         
         setIsLoading(false);
         return true;
       }
       
-      // In production, sign message
+      // In production, sign message using wagmi
       const message = `AlpacaLotto: Revoke session key ${sessionKeyDetails.key.address}.`;
-      const signature = await signer.signMessage(message);
+      
+      // Sign the message using wagmi's useSignMessage hook
+      const signature = await signMessageAsync({ message });
       
       // Call API to revoke session key
       const response = await api.revokeSessionKey(
@@ -187,7 +203,7 @@ export const useSessionKeys = () => {
         // Clear state and storage
         setSessionKeyDetails(null);
         setHasActiveSessionKey(false);
-        localStorage.removeItem(`sessionKey_${account.toLowerCase()}`);
+        localStorage.removeItem(`sessionKey_${address?.toLowerCase()}`);
         
         setIsLoading(false);
         return true;
@@ -200,7 +216,7 @@ export const useSessionKeys = () => {
       setIsLoading(false);
       throw err;
     }
-  }, [account, signer, sessionKeyDetails, isDevelopmentMode]);
+  }, [address, isConnected, isDevelopmentMode, walletClient, sessionKeyDetails, signMessageAsync]);
   
   /**
    * Get session key remaining time in seconds
@@ -227,10 +243,10 @@ export const useSessionKeys = () => {
   
   // Load session key on mount and account change
   useEffect(() => {
-    if (account || isDevelopmentMode) {
+    if (address || isDevelopmentMode()) {
       loadSessionKeyFromStorage();
     }
-  }, [account, loadSessionKeyFromStorage, isDevelopmentMode]);
+  }, [address, loadSessionKeyFromStorage, isDevelopmentMode]);
   
   // Check session key expiration every minute
   useEffect(() => {
@@ -243,12 +259,12 @@ export const useSessionKeys = () => {
         // Clear state and storage when expired
         setSessionKeyDetails(null);
         setHasActiveSessionKey(false);
-        localStorage.removeItem(`sessionKey_${account?.toLowerCase() || 'dev'}`);
+        localStorage.removeItem(`sessionKey_${address?.toLowerCase() || 'dev'}`);
       }
     }, 60 * 1000); // Every minute
     
     return () => clearInterval(checkInterval);
-  }, [account, hasActiveSessionKey, getTimeRemaining]);
+  }, [address, hasActiveSessionKey, getTimeRemaining]);
   
   return {
     hasActiveSessionKey,

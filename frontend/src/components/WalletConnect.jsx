@@ -1,22 +1,19 @@
 import React, { useState } from 'react';
+import { useAccount, useConnect, useDisconnect } from 'wagmi';
 
 /**
- * Wallet connection component.
+ * Wallet connection component using wagmi hooks.
  * @param {Object} props
- * @param {string} props.account - The connected account.
- * @param {boolean} props.isConnecting - Flag for connection in progress.
- * @param {Function} props.onConnect - Connection handler.
- * @param {string} props.aaWalletAddress - AA wallet address.
  * @param {boolean} props.isDevelopmentMode - Development mode flag.
+ * @param {string} props.aaWalletAddress - AA wallet address.
  */
-const WalletConnect = ({ 
-  account, 
-  isConnecting = false, 
-  onConnect, 
-  aaWalletAddress,
-  isDevelopmentMode = false
-}) => {
+const WalletConnect = ({ isDevelopmentMode = false, aaWalletAddress }) => {
   const [showDetails, setShowDetails] = useState(false);
+  
+  // Use wagmi hooks
+  const { address, isConnected } = useAccount();
+  const { connect, connectors, isLoading: isConnecting, error } = useConnect();
+  const { disconnect } = useDisconnect();
 
   // Format wallet address for display (abbreviated).
   const formatAddress = (address) => {
@@ -26,18 +23,25 @@ const WalletConnect = ({
 
   // Click handler for the connect button.
   const handleConnect = async () => {
-    if (onConnect) {
-      try {
-        // Call the connect function with error handling
-        await onConnect();
-      } catch (err) {
-        console.error('Connection error in component:', err);
-        // The error will be handled in the hook
+    try {
+      // Find the appropriate connector (prefer MetaMask)
+      const connector = connectors.find(c => c.name === 'MetaMask') || connectors[0];
+      if (connector) {
+        await connect({ connector });
       }
+    } catch (err) {
+      console.error('Connection error in component:', err);
+      // Error will be handled by useConnect hook
     }
   };
 
-  if (!account) {
+  // Disconnect wallet handler
+  const handleDisconnect = () => {
+    disconnect();
+    setShowDetails(false);
+  };
+
+  if (!isConnected && !isDevelopmentMode) {
     return (
       <div className="wallet-connect">
         <button 
@@ -47,12 +51,12 @@ const WalletConnect = ({
         >
           {isConnecting ? 'Connecting...' : 'Connect Wallet'}
         </button>
-        {isDevelopmentMode && (
-          <span className="dev-mode-indicator">Development Mode</span>
-        )}
       </div>
     );
   }
+
+  // For development mode or connected wallet
+  const displayAddress = address || (isDevelopmentMode ? '0x1234567890123456789012345678901234567890' : '');
 
   return (
     <div className={`wallet-connect connected ${isDevelopmentMode ? 'dev-mode' : ''}`}>
@@ -61,7 +65,7 @@ const WalletConnect = ({
         onClick={() => setShowDetails(!showDetails)}
       >
         <div className="wallet-icon"></div>
-        <span className="wallet-address">{formatAddress(account)}</span>
+        <span className="wallet-address">{formatAddress(displayAddress)}</span>
         {isDevelopmentMode && (
           <span className="dev-mode-indicator">Dev</span>
         )}
@@ -72,7 +76,7 @@ const WalletConnect = ({
         <div className="wallet-details">
           <div className="detail-row">
             <span className="detail-label">Connected Wallet:</span>
-            <span className="detail-value" title={account}>{formatAddress(account)}</span>
+            <span className="detail-value" title={displayAddress}>{formatAddress(displayAddress)}</span>
           </div>
           {aaWalletAddress && (
             <div className="detail-row">
@@ -82,10 +86,7 @@ const WalletConnect = ({
           )}
           <button 
             className="disconnect-button"
-            onClick={() => {
-              // Option: Implement disconnect functionality.
-              setShowDetails(false);
-            }}
+            onClick={handleDisconnect}
           >
             Disconnect
           </button>

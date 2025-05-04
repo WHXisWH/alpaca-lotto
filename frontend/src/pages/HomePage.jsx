@@ -1,23 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAccount } from 'wagmi'; // Using wagmi's useAccount hook
 import ActiveLotteries from '../components/ActiveLotteries';
 import LotteryDetails from '../components/LotteryDetails';
 import TicketPurchase from '../components/TicketPurchase';
 import SessionKeyModal from '../components/SessionKeyModal';
-import useWallet from '../hooks/useWallet';
+import useWagmiWallet from '../hooks/useWagmiWallet'; // Using our new wagmi wallet hook
 import useTokens from '../hooks/useTokens';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
 
 /**
  * Home page of the application
- * Enhanced with error handling and development mode support
+ * Updated to use wagmi hooks
  */
 const HomePage = () => {
   const navigate = useNavigate();
   
-  // Using custom hooks
-  const { account, isDevelopmentMode } = useWallet();
+  // Using wagmi hooks
+  const { address, isConnected } = useAccount();
+  const { isDevelopmentMode } = useWagmiWallet();
+  
+  // Using other custom hooks
   const { 
     lotteries, 
     activeLotteries, 
@@ -60,10 +64,10 @@ const HomePage = () => {
       }
     };
     
-    if (account || isDevelopmentMode) {
+    if (isConnected || isDevelopmentMode) {
       loadLotteries();
     }
-  }, [account, fetchLotteries, isDevelopmentMode]);
+  }, [isConnected, fetchLotteries, isDevelopmentMode]);
   
   // Fetch user tickets when lottery is selected
   useEffect(() => {
@@ -77,10 +81,10 @@ const HomePage = () => {
       }
     };
     
-    if ((account || isDevelopmentMode) && selectedLottery) {
+    if ((isConnected || isDevelopmentMode) && selectedLottery) {
       loadTickets();
     }
-  }, [account, selectedLottery, fetchUserTickets, isDevelopmentMode]);
+  }, [isConnected, selectedLottery, fetchUserTickets, isDevelopmentMode]);
   
   // Select first lottery when lottery list changes
   useEffect(() => {
@@ -222,7 +226,7 @@ const HomePage = () => {
   }
   
   // Landing page when wallet is not connected
-  if (!account && !isDevelopmentMode) {
+  if (!isConnected && !isDevelopmentMode) {
     return (
       <div className="home-landing">
         <div className="landing-content">

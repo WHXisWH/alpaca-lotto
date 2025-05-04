@@ -1,14 +1,24 @@
 // frontend/src/hooks/useLotteries.js
 
 import { useState, useCallback, useEffect } from 'react';
+import { useAccount, useNetwork, useWalletClient } from 'wagmi'; // Using wagmi hooks
 import { api } from '../services/api';
-import useWallet from './useWallet';
+import useWagmiWallet from './useWagmiWallet';
 
 /**
- * ロッタリー機能とデータ管理のためのカスタムフック
+ * Custom hook for lottery functionality and data management
+ * Updated to use wagmi
  */
 export const useLotteries = () => {
-  const { account } = useWallet();
+  // Using wagmi hooks
+  const { address, isConnected } = useAccount();
+  const { chain } = useNetwork();
+  const { data: walletClient } = useWalletClient();
+  
+  // Using our custom wagmi wallet hook
+  const { isDevelopmentMode } = useWagmiWallet();
+  
+  // State
   const [lotteries, setLotteries] = useState([]);
   const [activeLotteries, setActiveLotteries] = useState([]);
   const [pastLotteries, setPastLotteries] = useState([]);
@@ -17,7 +27,7 @@ export const useLotteries = () => {
   const [error, setError] = useState(null);
   
   /**
-   * すべてのロッタリーを取得
+   * Fetch all lotteries
    */
   const fetchLotteries = useCallback(async () => {
     setIsLoading(true);
@@ -29,10 +39,10 @@ export const useLotteries = () => {
       if (response.success && response.lotteries) {
         setLotteries(response.lotteries);
         
-        // 現在時刻を取得
+        // Get current time
         const currentTime = Math.floor(Date.now() / 1000);
         
-        // アクティブと過去のロッタリーに分類
+        // Categorize active and past lotteries
         const active = response.lotteries.filter(lottery => 
           lottery.endTime > currentTime
         );
@@ -50,15 +60,15 @@ export const useLotteries = () => {
       setIsLoading(false);
       return [];
     } catch (err) {
-      console.error('ロッタリー取得エラー:', err);
-      setError(err.message || 'ロッタリー取得エラー');
+      console.error('Error fetching lotteries:', err);
+      setError(err.message || 'Error fetching lotteries');
       setIsLoading(false);
       return [];
     }
   }, []);
   
   /**
-   * アクティブなロッタリーのみを取得
+   * Fetch only active lotteries
    */
   const fetchActiveLotteries = useCallback(async () => {
     setIsLoading(true);
@@ -76,16 +86,16 @@ export const useLotteries = () => {
       setIsLoading(false);
       return [];
     } catch (err) {
-      console.error('アクティブなロッタリー取得エラー:', err);
-      setError(err.message || 'アクティブなロッタリー取得エラー');
+      console.error('Error fetching active lotteries:', err);
+      setError(err.message || 'Error fetching active lotteries');
       setIsLoading(false);
       return [];
     }
   }, []);
   
   /**
-   * 特定のロッタリーの詳細を取得
-   * @param {number} lotteryId - ロッタリーID
+   * Fetch details of a specific lottery
+   * @param {number} lotteryId - Lottery ID
    */
   const fetchLotteryDetails = useCallback(async (lotteryId) => {
     setIsLoading(true);
@@ -95,7 +105,7 @@ export const useLotteries = () => {
       const response = await api.getLotteryDetails(lotteryId);
       
       if (response.success && response.lottery) {
-        // 既存のロッタリーリストを更新
+        // Update existing lottery list
         setLotteries(prevLotteries => {
           const updatedLotteries = [...prevLotteries];
           const index = updatedLotteries.findIndex(l => l.id === lotteryId);
@@ -116,29 +126,30 @@ export const useLotteries = () => {
       setIsLoading(false);
       return null;
     } catch (err) {
-      console.error(`ロッタリー詳細取得エラー (ID: ${lotteryId}):`, err);
-      setError(err.message || 'ロッタリー詳細取得エラー');
+      console.error(`Error fetching lottery details (ID: ${lotteryId}):`, err);
+      setError(err.message || 'Error fetching lottery details');
       setIsLoading(false);
       return null;
     }
   }, []);
   
   /**
-   * ユーザーのチケットを取得
-   * @param {number} lotteryId - ロッタリーID
+   * Fetch user tickets
+   * @param {number} lotteryId - Lottery ID
    */
   const fetchUserTickets = useCallback(async (lotteryId) => {
-    if (!account) {
+    if (!address && !isDevelopmentMode) {
       return [];
     }
     
     setIsLoading(true);
     
     try {
-      const response = await api.getUserTickets(lotteryId, account);
+      const userAddr = address || (isDevelopmentMode ? '0x1234567890123456789012345678901234567890' : null);
+      const response = await api.getUserTickets(lotteryId, userAddr);
       
       if (response.success && response.tickets) {
-        // チケットデータを更新
+        // Update ticket data
         setUserTickets(prev => ({
           ...prev,
           [lotteryId]: response.tickets
@@ -151,25 +162,30 @@ export const useLotteries = () => {
       setIsLoading(false);
       return [];
     } catch (err) {
-      console.error(`ユーザーチケット取得エラー (Lottery: ${lotteryId}, User: ${account}):`, err);
+      console.error(`Error fetching user tickets (Lottery: ${lotteryId}, User: ${address}):`, err);
       setIsLoading(false);
       return [];
     }
-  }, [account]);
+  }, [address, isDevelopmentMode]);
   
   /**
-   * すべてのロッタリーのユーザーチケットを取得
+   * Fetch user tickets for all lotteries
    */
   const fetchAllUserTickets = useCallback(async () => {
-    if (!account || lotteries.length === 0) {
+    if (!address && !isDevelopmentMode) {
+      return;
+    }
+    
+    if (lotteries.length === 0) {
       return;
     }
     
     setIsLoading(true);
     
     try {
+      const userAddr = address || (isDevelopmentMode ? '0x1234567890123456789012345678901234567890' : null);
       const promises = lotteries.map(lottery => 
-        api.getUserTickets(lottery.id, account)
+        api.getUserTickets(lottery.id, userAddr)
       );
       
       const results = await Promise.all(promises);
@@ -184,22 +200,23 @@ export const useLotteries = () => {
       setUserTickets(ticketsByLottery);
       setIsLoading(false);
     } catch (err) {
-      console.error('全ユーザーチケット取得エラー:', err);
+      console.error('Error fetching all user tickets:', err);
       setIsLoading(false);
     }
-  }, [account, lotteries]);
+  }, [address, lotteries, isDevelopmentMode]);
   
   /**
-   * ユーザーがロッタリーの当選者かどうかを確認
-   * @param {number} lotteryId - ロッタリーID
+   * Check if user is a winner for a lottery
+   * @param {number} lotteryId - Lottery ID
    */
   const checkIfWinner = useCallback(async (lotteryId) => {
-    if (!account) {
+    if (!address && !isDevelopmentMode) {
       return false;
     }
     
     try {
-      const response = await api.checkIfWinner(lotteryId, account);
+      const userAddr = address || (isDevelopmentMode ? '0x1234567890123456789012345678901234567890' : null);
+      const response = await api.checkIfWinner(lotteryId, userAddr);
       
       if (response.success) {
         return response.isWinner;
@@ -207,62 +224,78 @@ export const useLotteries = () => {
       
       return false;
     } catch (err) {
-      console.error(`当選確認エラー (Lottery: ${lotteryId}, User: ${account}):`, err);
+      console.error(`Error checking winner status (Lottery: ${lotteryId}, User: ${address}):`, err);
       return false;
     }
-  }, [account]);
+  }, [address, isDevelopmentMode]);
   
   /**
-   * ロッタリーチケットを購入
-   * @param {number} lotteryId - ロッタリーID
-   * @param {string} tokenAddress - 支払いトークンのアドレス
-   * @param {number} quantity - チケット数
+   * Purchase lottery tickets
+   * @param {number} lotteryId - Lottery ID
+   * @param {string} tokenAddress - Payment token address
+   * @param {number} quantity - Number of tickets
    */
   const purchaseTickets = useCallback(async (lotteryId, tokenAddress, quantity) => {
-    if (!account) {
-      throw new Error('ウォレットが接続されていません');
+    if (!isConnected && !isDevelopmentMode) {
+      throw new Error('Wallet is not connected');
     }
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await api.purchaseTickets(lotteryId, tokenAddress, quantity);
+      // Generate a signature if we have a wallet client
+      let signature = null;
+      if (walletClient) {
+        const message = `Purchase ${quantity} tickets for lottery #${lotteryId} using token ${tokenAddress}`;
+        // In a real implementation, we would sign the message
+        // signature = await walletClient.signMessage({ message });
+      }
+      
+      const response = await api.purchaseTickets(lotteryId, tokenAddress, quantity, signature);
       
       if (response.success) {
-        // 購入後にチケットを再取得
+        // Refetch tickets after purchase
         await fetchUserTickets(lotteryId);
         
         setIsLoading(false);
         return response;
       }
       
-      throw new Error(response.error || 'チケット購入に失敗しました');
+      throw new Error(response.error || 'Failed to purchase tickets');
     } catch (err) {
-      console.error(`チケット購入エラー (Lottery: ${lotteryId}):`, err);
-      setError(err.message || 'チケット購入エラー');
+      console.error(`Error purchasing tickets (Lottery: ${lotteryId}):`, err);
+      setError(err.message || 'Error purchasing tickets');
       setIsLoading(false);
       throw err;
     }
-  }, [account, fetchUserTickets]);
+  }, [isConnected, walletClient, fetchUserTickets, isDevelopmentMode]);
   
   /**
-   * 複数のロッタリーで一括チケット購入
-   * @param {Array} selections - 購入選択の配列 [{lotteryId, tokenAddress, quantity}]
+   * Batch purchase tickets for multiple lotteries
+   * @param {Array} selections - Array of purchase selections [{lotteryId, tokenAddress, quantity}]
    */
   const batchPurchaseTickets = useCallback(async (selections) => {
-    if (!account) {
-      throw new Error('ウォレットが接続されていません');
+    if (!isConnected && !isDevelopmentMode) {
+      throw new Error('Wallet is not connected');
     }
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await api.batchPurchaseTickets(selections);
+      // Generate a signature if we have a wallet client
+      let signature = null;
+      if (walletClient) {
+        const message = `Batch purchase tickets for ${selections.length} lotteries`;
+        // In a real implementation, we would sign the message
+        // signature = await walletClient.signMessage({ message });
+      }
+      
+      const response = await api.batchPurchaseTickets(selections, signature);
       
       if (response.success) {
-        // 購入後にすべてのチケットを再取得
+        // Refetch all tickets after purchase
         const lotteryIds = [...new Set(selections.map(s => s.lotteryId))];
         await Promise.all(lotteryIds.map(id => fetchUserTickets(id)));
         
@@ -270,55 +303,70 @@ export const useLotteries = () => {
         return response;
       }
       
-      throw new Error(response.error || 'バッチチケット購入に失敗しました');
+      throw new Error(response.error || 'Failed to batch purchase tickets');
     } catch (err) {
-      console.error('バッチチケット購入エラー:', err);
-      setError(err.message || 'バッチチケット購入エラー');
+      console.error('Error batch purchasing tickets:', err);
+      setError(err.message || 'Error batch purchasing tickets');
       setIsLoading(false);
       throw err;
     }
-  }, [account, fetchUserTickets]);
+  }, [isConnected, walletClient, fetchUserTickets, isDevelopmentMode]);
   
   /**
-   * 賞金を請求
-   * @param {number} lotteryId - ロッタリーID
+   * Claim prize
+   * @param {number} lotteryId - Lottery ID
    */
   const claimPrize = useCallback(async (lotteryId) => {
-    if (!account) {
-      throw new Error('ウォレットが接続されていません');
+    if (!isConnected && !isDevelopmentMode) {
+      throw new Error('Wallet is not connected');
     }
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await api.claimPrize(lotteryId);
+      // Generate a signature if we have a wallet client
+      let signature = null;
+      if (walletClient) {
+        const message = `Claim prize for lottery #${lotteryId}`;
+        // In a real implementation, we would sign the message
+        // signature = await walletClient.signMessage({ message });
+      }
+      
+      const response = await api.claimPrize(lotteryId, signature);
       
       if (response.success) {
         setIsLoading(false);
         return response;
       }
       
-      throw new Error(response.error || '賞金請求に失敗しました');
+      throw new Error(response.error || 'Failed to claim prize');
     } catch (err) {
-      console.error(`賞金請求エラー (Lottery: ${lotteryId}):`, err);
-      setError(err.message || '賞金請求エラー');
+      console.error(`Error claiming prize (Lottery: ${lotteryId}):`, err);
+      setError(err.message || 'Error claiming prize');
       setIsLoading(false);
       throw err;
     }
-  }, [account]);
+  }, [isConnected, walletClient, isDevelopmentMode]);
   
-  // 初期ロード時またはアカウント変更時にロッタリーを取得
+  // Fetch lotteries on initial load or account change
   useEffect(() => {
     fetchLotteries();
   }, [fetchLotteries]);
   
-  // アカウントが変更されたら、ユーザーのチケットを再取得
+  // Refetch user tickets when account changes
   useEffect(() => {
-    if (account && lotteries.length > 0) {
+    if ((address || isDevelopmentMode) && lotteries.length > 0) {
       fetchAllUserTickets();
     }
-  }, [account, lotteries.length, fetchAllUserTickets]);
+  }, [address, lotteries.length, fetchAllUserTickets, isDevelopmentMode]);
+  
+  // Refetch lotteries when chain changes
+  useEffect(() => {
+    if (chain) {
+      fetchLotteries();
+    }
+  }, [chain, fetchLotteries]);
   
   return {
     lotteries,
