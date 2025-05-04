@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useAccount, useNetwork } from 'wagmi'; // Using wagmi hooks
+import { useAccount, useChainId } from 'wagmi';
 import { api } from '../services/api';
-import useWagmiWallet from './useWagmiWallet'; // Using our new wagmi hook
+import useWagmiWallet from './useWagmiWallet'; // Using wagmi wallet hook
 
 // Common token addresses (for test/demo)
 const COMMON_TOKENS = [
@@ -48,7 +48,7 @@ const COMMON_TOKENS = [
 export const useTokens = () => {
   // Using wagmi hooks
   const { address, isConnected } = useAccount();
-  const { chain } = useNetwork();
+  const chainId = useChainId();
   
   // Using our custom hook for additional functionality
   const { aaWalletAddress, isDevelopmentMode, getTokens: fetchWalletTokens } = useWagmiWallet();
@@ -214,10 +214,10 @@ export const useTokens = () => {
   
   // Reload tokens when chain changes
   useEffect(() => {
-    if (isConnected && chain) {
+    if (isConnected && chainId) {
       getTokens();
     }
-  }, [chain, isConnected, getTokens]);
+  }, [chainId, isConnected, getTokens]);
   
   return {
     tokens,

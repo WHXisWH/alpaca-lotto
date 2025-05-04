@@ -1,7 +1,7 @@
 // frontend/src/hooks/useLotteries.js
 
 import { useState, useCallback, useEffect } from 'react';
-import { useAccount, useNetwork, useWalletClient } from 'wagmi'; // Using wagmi hooks
+import { useAccount, useChainId, useWalletClient } from 'wagmi'; 
 import { api } from '../services/api';
 import useWagmiWallet from './useWagmiWallet';
 
@@ -12,7 +12,7 @@ import useWagmiWallet from './useWagmiWallet';
 export const useLotteries = () => {
   // Using wagmi hooks
   const { address, isConnected } = useAccount();
-  const { chain } = useNetwork();
+  const chainId = useChainId(); 
   const { data: walletClient } = useWalletClient();
   
   // Using our custom wagmi wallet hook
@@ -363,10 +363,10 @@ export const useLotteries = () => {
   
   // Refetch lotteries when chain changes
   useEffect(() => {
-    if (chain) {
+    if (chainId) {
       fetchLotteries();
     }
-  }, [chain, fetchLotteries]);
+  }, [chainId, fetchLotteries]);
   
   return {
     lotteries,

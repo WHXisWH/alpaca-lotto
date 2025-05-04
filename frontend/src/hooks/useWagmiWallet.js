@@ -5,8 +5,8 @@ import {
   useDisconnect, 
   useBalance,
   useReadContracts,
-  useNetwork,
-  useSwitchChain
+  useChainId, // useNetworkをuseChainIdに変更
+  useSwitchChain // useSwitchNetworkをuseSwitchChainに変更
 } from 'wagmi';
 import { readContracts } from '@wagmi/core';
 import { mainnet } from 'wagmi/chains';
@@ -113,8 +113,8 @@ export const useWagmiWallet = () => {
   const { address, isConnected, isConnecting: connecting } = useAccount();
   const { connect, connectors, error: connectError, isPending } = useConnect();
   const { disconnect } = useDisconnect();
-  const { chain } = useNetwork();
-  const { switchChain, error: switchError } = useSwitchChain();
+  const chainId = useChainId(); // useNetworkをuseChainIdに変更
+  const { switchChain, error: switchError } = useSwitchChain(); // useSwitchNetworkをuseSwitchChainに変更
   
   // State variables
   const [connectionError, setConnectionError] = useState(null);
@@ -173,67 +173,6 @@ export const useWagmiWallet = () => {
   useEffect(() => {
     setIsConnecting(connecting || isPending);
   }, [connecting, isPending]);
-
-  /**
-   * Connect wallet
-   */
-  const connectWallet = useCallback(async () => {
-    setIsConnecting(true);
-    setConnectionError(null);
-
-    try {
-      // Check for MetaMask
-      if (!isMetaMaskAvailable()) {
-        console.log('MetaMask not detected - activating development mode');
-        setIsDevelopmentMode(true);
-        setIsConnecting(false);
-        
-        // Return mock data in development mode
-        return {
-          account: '0x1234567890123456789012345678901234567890',
-          provider: null,
-          signer: null
-        };
-      }
-
-      // Find the appropriate connector (prefer MetaMask)
-      const connector = connectors.find(c => c.name === 'MetaMask') || connectors[0];
-      
-      if (connector) {
-        await connect({ connector });
-      } else {
-        throw new Error('No suitable connector found');
-      }
-      
-      return {
-        account: address,
-        provider: null, // No longer needed with wagmi
-        signer: null, // No longer needed with wagmi
-      };
-    } catch (err) {
-      console.error('Wallet connection error:', err);
-      setConnectionError(err.message || 'Wallet connection error');
-      
-      // Fall back to development mode
-      setIsDevelopmentMode(true);
-      
-      return {
-        account: '0x1234567890123456789012345678901234567890',
-        provider: null,
-        signer: null
-      };
-    } finally {
-      setIsConnecting(false);
-    }
-  }, [connect, connectors, address, isMetaMaskAvailable]);
-
-  /**
-   * Disconnect wallet
-   */
-  const disconnectWallet = useCallback(() => {
-    disconnect();
-    setIsDevelopmentMode(false);
-  }, [disconnect]);
 
   /**
    * Get tokens in wallet
@@ -364,7 +303,7 @@ export const useWagmiWallet = () => {
     account: address,
     isConnecting,
     connectionError,
-    chainId: chain?.id,
+    chainId,
     aaWalletAddress,
     isDevelopmentMode,
     signer: null, // No longer use ethers signer
@@ -376,5 +315,66 @@ export const useWagmiWallet = () => {
     addNeroChain
   };
 };
+
+export default useWagmiWallet;
+   * Connect wallet
+   */
+  const connectWallet = useCallback(async () => {
+    setIsConnecting(true);
+    setConnectionError(null);
+
+    try {
+      // Check for MetaMask
+      if (!isMetaMaskAvailable()) {
+        console.log('MetaMask not detected - activating development mode');
+        setIsDevelopmentMode(true);
+        setIsConnecting(false);
+        
+        // Return mock data in development mode
+        return {
+          account: '0x1234567890123456789012345678901234567890',
+          provider: null,
+          signer: null
+        };
+      }
+
+      // Find the appropriate connector (prefer MetaMask)
+      const connector = connectors.find(c => c.name === 'MetaMask') || connectors[0];
+      
+      if (connector) {
+        await connect({ connector });
+      } else {
+        throw new Error('No suitable connector found');
+      }
+      
+      return {
+        account: address,
+        provider: null, // No longer needed with wagmi
+        signer: null, // No longer needed with wagmi
+      };
+    } catch (err) {
+      console.error('Wallet connection error:', err);
+      setConnectionError(err.message || 'Wallet connection error');
+      
+      // Fall back to development mode
+      setIsDevelopmentMode(true);
+      
+      return {
+        account: '0x1234567890123456789012345678901234567890',
+        provider: null,
+        signer: null
+      };
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [connect, connectors, address, isMetaMaskAvailable]);
+
+  /**
+   * Disconnect wallet
+   */
+  const disconnectWallet = useCallback(() => {
+    disconnect();
+    setIsDevelopmentMode(false);
+  }, [disconnect]);
 
 export default useWagmiWallet;
