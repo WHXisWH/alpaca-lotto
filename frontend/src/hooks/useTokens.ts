@@ -5,10 +5,9 @@ import useWagmiWallet from './useWagmiWallet';
 
 // Common token addresses (for test/demo)
 const COMMON_TOKENS = [
-
   import.meta.env.VITE_TEST_ERC20_TOKEN_1,
   import.meta.env.VITE_TEST_ERC20_TOKEN_2,
-];
+].filter(Boolean);
 
 export interface Token {
   address: string;
@@ -60,6 +59,21 @@ export const useTokens = (): UseTokensReturn => {
   const [supportedTokens, setSupportedTokens] = useState<string[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
 
+  const getSupportedTokens = useCallback(async (): Promise<string[]> => {
+    try {
+      const response = await api.getSupportedTokens();
+      if (response.success && response.tokens) {
+        const addresses = response.tokens.map((token: any) => token.address.toLowerCase());
+        setSupportedTokens(addresses);
+        return addresses;
+      }
+      return [];
+    } catch (err) {
+      console.error('Failed to fetch supported tokens:', err);
+      return [];
+    }
+  }, []);
+
   const getTokens = useCallback(async (): Promise<Token[]> => {
     if (!isConnected && !isDevelopmentMode) {
       setError('Wallet is not connected');
@@ -75,8 +89,8 @@ export const useTokens = (): UseTokensReturn => {
     setError(null);
 
     try {
-      const tokensToFetch = COMMON_TOKENS.filter(Boolean);
-      const walletTokens = await fetchWalletTokens(tokensToFetch, 5555003); // Pass NERO Testnet chainId explicitly
+      const tokensToFetch = COMMON_TOKENS;
+      const walletTokens = await fetchWalletTokens(tokensToFetch, chainId || 5555003);
       setTokens(walletTokens);
       await getSupportedTokens();
       setIsLoading(false);
@@ -87,22 +101,7 @@ export const useTokens = (): UseTokensReturn => {
       setIsLoading(false);
       return [];
     }
-  }, [address, aaWalletAddress, isConnected, isDevelopmentMode, fetchWalletTokens]);
-
-  const getSupportedTokens = useCallback(async (): Promise<string[]> => {
-    try {
-      const response = await api.getSupportedTokens();
-      if (response.success && response.tokens) {
-        const addresses = response.tokens.map((token: any) => token.address.toLowerCase());
-        setSupportedTokens(addresses);
-        return addresses;
-      }
-      return [];
-    } catch (err) {
-      console.error('Failed to fetch supported tokens:', err);
-      return [];
-    }
-  }, []);
+  }, [address, aaWalletAddress, isConnected, isDevelopmentMode, fetchWalletTokens, chainId, getSupportedTokens]);
 
   const getRecommendation = useCallback(async (targetTokens: Token[] | null = null, ticketPrice: number | null = null): Promise<Recommendation | null> => {
     const tokensToUse = targetTokens || tokens;
@@ -177,12 +176,12 @@ export const useTokens = (): UseTokensReturn => {
       getTokens();
     } else if (isDevelopmentMode) {
       const fetchMockTokens = async () => {
-        const mockTokens = await fetchWalletTokens(COMMON_TOKENS, 5555003);
+        const mockTokens = await fetchWalletTokens(COMMON_TOKENS, chainId || 5555003);
         setTokens(mockTokens);
       };
       fetchMockTokens();
     }
-  }, [isConnected, address, aaWalletAddress, isDevelopmentMode, getTokens, fetchWalletTokens]);
+  }, [isConnected, address, aaWalletAddress, isDevelopmentMode, getTokens, fetchWalletTokens, chainId]);
 
   useEffect(() => {
     if (isConnected && chainId) {
