@@ -4,11 +4,10 @@ import {
   useConnect, 
   useDisconnect, 
   useBalance,
-  useReadContracts,
   useChainId,
-  useSwitchChain
+  useSwitchChain,
+  readContract
 } from 'wagmi';
-import { readContracts } from '@wagmi/core';
 import { mainnet } from 'wagmi/chains';
 import { formatUnits } from 'viem';
 
@@ -261,7 +260,7 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
   }, [disconnect]);
 
   /**
-   * Get tokens in wallet
+   * Get tokens in wallet - Updated to use individual readContract calls
    * @param {Array} tokenAddresses - Array of token addresses to check
    * @returns {Array} - Array of token objects with balances and metadata
    */
@@ -277,74 +276,89 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
 
     // Target address - EOA or AA wallet
     const targetAddress = aaWalletAddress || address;
+    if (!targetAddress) {
+      throw new Error('No valid address available');
+    }
 
     try {
-      // Get tokens data using wagmi
-      const contracts = tokenAddresses.map(tokenAddress => ({
-        address: tokenAddress,
-        abi: ERC20_ABI,
-      }));
-
-      // First, let's get all the tokens metadata
-      const metadataCalls = tokenAddresses.flatMap(tokenAddress => [
-        {
-          address: tokenAddress,
-          abi: ERC20_ABI,
-          functionName: 'decimals',
-        },
-        {
-          address: tokenAddress,
-          abi: ERC20_ABI,
-          functionName: 'symbol',
-        },
-        {
-          address: tokenAddress,
-          abi: ERC20_ABI,
-          functionName: 'name',
-        },
-      ]);
-
-      const metadataResults = await readContracts({
-        contracts: metadataCalls,
-      });
-
-      // Then, get balances for each token
-      const balanceCalls = tokenAddresses.map(tokenAddress => ({
-        address: tokenAddress,
-        abi: ERC20_ABI,
-        functionName: 'balanceOf',
-        args: [targetAddress],
-      }));
-
-      const balanceResults = await readContracts({
-        contracts: balanceCalls,
-      });
-
-      // Process the results
-      const tokens: Token[] = [];
-      for (let i = 0; i < tokenAddresses.length; i++) {
-        try {
-          const decimals = metadataResults[i * 3];
-          const symbol = metadataResults[i * 3 + 1];
-          const name = metadataResults[i * 3 + 2];
-          const rawBalance = balanceResults[i];
-
-          if (rawBalance && rawBalance > 0n) {
-            const formattedBalance = formatUnits(rawBalance, decimals);
+      // 1. Get metadata for each token individually
+      const tokensMetadata = await Promise.all(
+        tokenAddresses.map(async (tokenAddress) => {
+          try {
+            // Make individual contract calls
+            const [decimalsResult, symbolResult, nameResult] = await Promise.all([
+              readContract({
+                address: tokenAddress,
+                abi: ERC20_ABI,
+                functionName: 'decimals',
+                chainId: 5555003,
+              }),
+              readContract({
+                address: tokenAddress,
+                abi: ERC20_ABI,
+                functionName: 'symbol',
+                chainId: 5555003,
+              }),
+              readContract({
+                address: tokenAddress,
+                abi: ERC20_ABI,
+                functionName: 'name',
+                chainId: 5555003,
+              }),
+            ]);
             
-            tokens.push({
-              address: tokenAddresses[i],
-              symbol,
-              name,
-              decimals,
-              balance: formattedBalance,
-              rawBalance: rawBalance.toString()
-            });
+            return {
+              address: tokenAddress,
+              decimals: decimalsResult,
+              symbol: symbolResult,
+              name: nameResult
+            };
+          } catch (err) {
+            console.error(`Error fetching metadata for token ${tokenAddress}:`, err);
+            return null;
           }
-        } catch (err) {
-          console.error(`Error processing token ${tokenAddresses[i]}:`, err);
-        }
-      }
+        })
+      );
+      
+      // Filter out null metadata
+      const validTokensMetadata = tokensMetadata.filter(Boolean);
+      
+      // 2. Get balance for each token individually
+      const tokensWithBalances = await Promise.all(
+        validTokensMetadata.map(async (metadata) => {
+          if (!metadata) return null;
+          
+          try {
+            const balance = await readContract({
+              address: metadata.address,
+              abi: ERC20_ABI,
+              functionName: 'balanceOf',
+              args: [targetAddress],
+              chainId: 5555003,
+            });
+            
+            if (balance && balance > 0n) {
+              const formattedBalance = formatUnits(balance, metadata.decimals);
+              
+              return {
+                address: metadata.address,
+                symbol: metadata.symbol,
+                name: metadata.name,
+                decimals: metadata.decimals,
+                balance: formattedBalance,
+                rawBalance: balance.toString()
+              };
+            }
+          } catch (err) {
+            console.error(`Error fetching balance for token ${metadata.address}:`, err);
+          }
+          
+          return null;
+        })
+      );
+      
+      // Filter out null tokens
+      const tokens = tokensWithBalances.filter(Boolean) as Token[];
 
       // If no tokens found, return mock tokens in development mode
       if (tokens.length === 0 && isDevelopmentMode) {

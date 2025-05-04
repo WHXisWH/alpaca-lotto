@@ -1,6 +1,7 @@
 import { createConfig, http } from 'wagmi'
 import { mainnet, sepolia } from 'wagmi/chains'
 import { injected, metaMask, walletConnect } from 'wagmi/connectors'
+import { createPublicClient, http as viemHttp } from 'viem'
 
 // Create a custom NERO Chain configuration
 const neroTestnet = {
@@ -28,6 +29,12 @@ const neroTestnet = {
   testnet: true,
 }
 
+// Create public client for multicall
+const publicClient = createPublicClient({
+  chain: neroTestnet,
+  transport: viemHttp(neroTestnet.rpcUrls.default.http[0])
+});
+
 // WalletConnect projectId - should be stored in env variable in production
 const projectId = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID || 'YOUR_PROJECT_ID'
 
@@ -44,6 +51,10 @@ export const config = createConfig({
     [mainnet.id]: http(),
     [sepolia.id]: http(),
   },
+  // Add multicall configuration
+  multicall: {
+    wait: 500, // Wait time in milliseconds
+  }
 })
 
 export default config

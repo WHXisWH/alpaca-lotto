@@ -5,19 +5,9 @@ import useWagmiWallet from './useWagmiWallet';
 
 // Common token addresses (for test/demo)
 const COMMON_TOKENS = [
-  // Stablecoins
-  '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
-  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
-  '0xdac17f958d2ee523a2206206994597c13d831ec7', // USDT
-  '0x853d955acef822db058eb8505911ed77f175b99e', // FRAX
-  
-  // Major cryptocurrencies
-  '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599', // WBTC
-  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // WETH
-  
-  // DeFi tokens
-  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', // UNI
-  '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9', // AAVE
+
+  import.meta.env.VITE_TEST_ERC20_TOKEN_1,
+  import.meta.env.VITE_TEST_ERC20_TOKEN_2,
 ];
 
 export interface Token {
@@ -59,43 +49,36 @@ interface UseTokensReturn {
   getSupportedTokensOnly: () => Token[];
 }
 
-/**
- * Custom hook for managing and recommending tokens
- * Updated to use wagmi
- */
 export const useTokens = (): UseTokensReturn => {
-  // Using wagmi hooks
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  
-  // Using our custom hook for additional functionality
   const { aaWalletAddress, isDevelopmentMode, getTokens: fetchWalletTokens } = useWagmiWallet();
-  
-  // State
+
   const [tokens, setTokens] = useState<Token[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [supportedTokens, setSupportedTokens] = useState<string[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
-  
-  /**
-   * Retrieve tokens from wallet
-   */
+
   const getTokens = useCallback(async (): Promise<Token[]> => {
-    if (!address && !aaWalletAddress && !isDevelopmentMode) {
+    if (!isConnected && !isDevelopmentMode) {
       setError('Wallet is not connected');
       return [];
     }
-    
+
+    if (!address && !aaWalletAddress && !isDevelopmentMode) {
+      setError('No valid address available');
+      return [];
+    }
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const walletTokens = await fetchWalletTokens(COMMON_TOKENS);
+      const tokensToFetch = COMMON_TOKENS.filter(Boolean);
+      const walletTokens = await fetchWalletTokens(tokensToFetch, 5555003); // Pass NERO Testnet chainId explicitly
       setTokens(walletTokens);
-      
       await getSupportedTokens();
-      
       setIsLoading(false);
       return walletTokens;
     } catch (err: any) {
@@ -104,93 +87,63 @@ export const useTokens = (): UseTokensReturn => {
       setIsLoading(false);
       return [];
     }
-  }, [address, aaWalletAddress, isDevelopmentMode, fetchWalletTokens]);
-  
-  /**
-   * Get tokens supported by the Paymaster
-   */
+  }, [address, aaWalletAddress, isConnected, isDevelopmentMode, fetchWalletTokens]);
+
   const getSupportedTokens = useCallback(async (): Promise<string[]> => {
     try {
       const response = await api.getSupportedTokens();
-      
       if (response.success && response.tokens) {
-        const addresses = response.tokens.map((token: any) => 
-          token.address.toLowerCase()
-        );
-        
+        const addresses = response.tokens.map((token: any) => token.address.toLowerCase());
         setSupportedTokens(addresses);
         return addresses;
       }
-      
       return [];
     } catch (err) {
       console.error('Failed to fetch supported tokens:', err);
       return [];
     }
   }, []);
-  
-  /**
-   * Get token recommendation from API
-   * @param {Array} targetTokens - Tokens to analyze (defaults to current tokens)
-   * @param {number} [ticketPrice] - Ticket price in USD (affects recommendation logic)
-   */
+
   const getRecommendation = useCallback(async (targetTokens: Token[] | null = null, ticketPrice: number | null = null): Promise<Recommendation | null> => {
     const tokensToUse = targetTokens || tokens;
-    
     if (tokensToUse.length === 0) {
       setError('No tokens found');
       return null;
     }
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const userPreferences: Record<string, any> = {};
-      if (ticketPrice) {
-        if (ticketPrice >= 50) {
-          userPreferences.weights = {
-            balance: 0.5,
-            volatility: 0.25,
-            slippage: 0.25
-          };
-        }
+      if (ticketPrice && ticketPrice >= 50) {
+        userPreferences.weights = {
+          balance: 0.5,
+          volatility: 0.25,
+          slippage: 0.25
+        };
       }
-      
+
       const response = await api.optimizeToken(tokensToUse, userPreferences);
-      
       if (response.success && response.recommendedToken) {
         setRecommendation(response);
-        
+
         const updatedTokens = tokensToUse.map(token => {
           if (token.address.toLowerCase() === response.recommendedToken.address.toLowerCase()) {
-            return {
-              ...token,
-              ...response.recommendedToken,
-              recommended: true
-            };
+            return { ...token, ...response.recommendedToken, recommended: true };
           }
-          
-          const scoreInfo = response.allScores.find(
-            (t: Token) => t.address.toLowerCase() === token.address.toLowerCase()
-          );
-          
+          const scoreInfo = response.allScores.find(t => t.address.toLowerCase() === token.address.toLowerCase());
           if (scoreInfo) {
-            return {
-              ...token,
-              ...scoreInfo,
-              recommended: false
-            };
+            return { ...token, ...scoreInfo, recommended: false };
           }
-          
           return token;
         });
-        
+
         setTokens(updatedTokens);
         setIsLoading(false);
         return response;
       }
-      
+
       setIsLoading(false);
       return null;
     } catch (err: any) {
@@ -200,44 +153,43 @@ export const useTokens = (): UseTokensReturn => {
       return null;
     }
   }, [tokens]);
-  
-  /**
-   * Check if a token is supported by the Paymaster
-   * @param {string} tokenAddress - Token address to check
-   * @returns {boolean} - Whether the token is supported
-   */
+
   const isTokenSupported = useCallback((tokenAddress: string): boolean => {
     if (!tokenAddress || supportedTokens.length === 0) {
       return false;
     }
-    
     return supportedTokens.includes(tokenAddress.toLowerCase());
   }, [supportedTokens]);
-  
-  /**
-   * Filter only supported tokens
-   * @returns {Array} - Array of supported tokens
-   */
+
   const getSupportedTokensOnly = useCallback((): Token[] => {
-    return tokens.filter(token => 
-      isTokenSupported(token.address)
-    );
+    return tokens.filter(token => isTokenSupported(token.address));
   }, [tokens, isTokenSupported]);
-  
-  // Load tokens when wallet is connected
+
   useEffect(() => {
-    if (isConnected || aaWalletAddress || isDevelopmentMode) {
-      getTokens();
+    if (!isConnected && !isDevelopmentMode) {
+      setIsLoading(false);
+      return;
     }
-  }, [isConnected, aaWalletAddress, isDevelopmentMode, getTokens]);
-  
-  // Reload tokens when chain changes
+
+    if (isConnected && address) {
+      getTokens();
+    } else if (aaWalletAddress) {
+      getTokens();
+    } else if (isDevelopmentMode) {
+      const fetchMockTokens = async () => {
+        const mockTokens = await fetchWalletTokens(COMMON_TOKENS, 5555003);
+        setTokens(mockTokens);
+      };
+      fetchMockTokens();
+    }
+  }, [isConnected, address, aaWalletAddress, isDevelopmentMode, getTokens, fetchWalletTokens]);
+
   useEffect(() => {
     if (isConnected && chainId) {
       getTokens();
     }
   }, [chainId, isConnected, getTokens]);
-  
+
   return {
     tokens,
     isLoading,
