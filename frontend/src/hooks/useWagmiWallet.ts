@@ -346,8 +346,8 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
                 name: metadata.name,
                 decimals: metadata.decimals,
                 balance: formattedBalance,
-                rawBalance: balance.toString()
-                abi: ERC20_ABI,
+                rawBalance: balance.toString(),
+                abi: ERC20_ABI
               };
             }
           } catch (err) {
