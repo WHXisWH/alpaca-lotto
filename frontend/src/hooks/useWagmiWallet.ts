@@ -5,13 +5,11 @@ import {
   useDisconnect, 
   useBalance,
   useChainId,
-  useSwitchChain,
-  useReadContract,
-  useReadContracts
+  useSwitchChain
 } from 'wagmi';
-import { readContract } from 'wagmi/actions';
+import { readContracts } from 'wagmi/actions';
 import { mainnet } from 'wagmi/chains';
-import { formatUnits, parseUnits } from 'viem';
+import { formatUnits } from 'viem';
 
 // Custom NERO Chain config
 const neroTestnet = {
@@ -262,11 +260,12 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
   }, [disconnect]);
 
   /**
-   * Get tokens in wallet - Updated for wagmi v2
+   * Get tokens in wallet - Updated for wagmi v2 using readContracts
    * @param {Array} tokenAddresses - Array of token addresses to check
    * @returns {Array} - Array of token objects with balances and metadata
    */
   const getTokens = useCallback(async (tokenAddresses: string[], chainIdParam?: number): Promise<Token[]> => {
+    // Development mode check - return mock tokens immediately if in dev mode
     if (isDevelopmentMode || !isConnected) {
       console.log('Using mock tokens in development mode');
       return MOCK_TOKENS;
@@ -285,60 +284,74 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     const currentChainId = chainIdParam || chainId || 5555003;
 
     try {
-      // Create token contract configurations for useReadContracts
-      const tokenContracts = tokenAddresses.flatMap(tokenAddress => [
-        {
-          address: tokenAddress,
-          abi: ERC20_ABI,
-          functionName: 'decimals',
-          chainId: currentChainId,
-        },
-        {
-          address: tokenAddress,
-          abi: ERC20_ABI,
-          functionName: 'symbol',
-          chainId: currentChainId,
-        },
-        {
-          address: tokenAddress,
-          abi: ERC20_ABI,
-          functionName: 'name',
-          chainId: currentChainId,
-        },
-        {
-          address: tokenAddress,
-          abi: ERC20_ABI,
-          functionName: 'balanceOf',
-          args: [targetAddress],
-          chainId: currentChainId,
-        }
-      ]);
+      // Create token contract configurations for readContracts
+      const tokenContracts = [];
+      
+      // For each token, create contract calls for decimals, symbol, name, and balanceOf
+      for (const tokenAddress of tokenAddresses) {
+        tokenContracts.push(
+          {
+            address: tokenAddress as `0x${string}`,
+            abi: ERC20_ABI,
+            functionName: 'decimals',
+            chainId: currentChainId,
+          },
+          {
+            address: tokenAddress as `0x${string}`,
+            abi: ERC20_ABI,
+            functionName: 'symbol',
+            chainId: currentChainId,
+          },
+          {
+            address: tokenAddress as `0x${string}`,
+            abi: ERC20_ABI,
+            functionName: 'name',
+            chainId: currentChainId,
+          },
+          {
+            address: tokenAddress as `0x${string}`,
+            abi: ERC20_ABI,
+            functionName: 'balanceOf',
+            args: [targetAddress as `0x${string}`],
+            chainId: currentChainId,
+          }
+        );
+      }
 
-      // Use wagmi v2's readContracts directly
-      const tokenResults = await readContract.batch(tokenContracts);
+      // Use wagmi v2's readContracts
+      const tokenResults = await readContracts({
+        contracts: tokenContracts
+      });
       
       const tokens: Token[] = [];
       
       // Process results - every 4 results constitute one token's data
       for (let i = 0; i < tokenResults.length; i += 4) {
         try {
-          const decimals = tokenResults[i] as number;
-          const symbol = tokenResults[i + 1] as string;
-          const name = tokenResults[i + 2] as string;
-          const rawBalance = tokenResults[i + 3] as bigint;
+          const index = Math.floor(i / 4);
           
-          if (rawBalance > 0n) {
-            const index = Math.floor(i / 4);
-            const formattedBalance = formatUnits(rawBalance, decimals);
+          if (tokenResults[i].status === 'success' && 
+              tokenResults[i+1].status === 'success' && 
+              tokenResults[i+2].status === 'success' && 
+              tokenResults[i+3].status === 'success') {
             
-            tokens.push({
-              address: tokenAddresses[index],
-              symbol,
-              name,
-              decimals,
-              balance: formattedBalance,
-              rawBalance: rawBalance.toString()
-            });
+            const decimals = tokenResults[i].result as number;
+            const symbol = tokenResults[i+1].result as string;
+            const name = tokenResults[i+2].result as string;
+            const rawBalance = tokenResults[i+3].result as bigint;
+            
+            if (rawBalance > 0n) {
+              const formattedBalance = formatUnits(rawBalance, decimals);
+              
+              tokens.push({
+                address: tokenAddresses[index],
+                symbol,
+                name,
+                decimals,
+                balance: formattedBalance,
+                rawBalance: rawBalance.toString()
+              });
+            }
           }
         } catch (error) {
           console.error(`Error processing token results at index ${i}:`, error);
