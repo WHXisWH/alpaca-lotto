@@ -96,7 +96,7 @@ export const useTokens = (): UseTokensReturn => {
         '0xdac17f958d2ee523a2206206994597c13d831ec7', // USDT
       ];
       
-      // Use fetchWalletTokens from useWagmiWallet (which is now properly implemented for wagmi v2)
+      // Use fetchWalletTokens from useWagmiWallet
       const walletTokens = await fetchWalletTokens(tokensToFetch, chainId || 5555003);
       setTokens(walletTokens);
       

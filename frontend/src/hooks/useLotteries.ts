@@ -247,7 +247,7 @@ export const useLotteries = (): UseLotteriesReturn => {
       console.error('Error fetching all user tickets:', err);
       setIsLoading(false);
     }
-  }, [address, lotteries, isDevelopmentMode]);
+  }, [address, lotteries.length, isDevelopmentMode]);
   
   /**
    * Check if user is a winner for a lottery

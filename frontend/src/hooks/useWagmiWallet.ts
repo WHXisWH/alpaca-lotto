@@ -3,13 +3,11 @@ import {
   useAccount, 
   useConnect, 
   useDisconnect, 
-  useBalance,
   useChainId,
   useSwitchChain
 } from 'wagmi';
-import { readContract, readContracts } from 'wagmi/actions';
+import { createPublicClient, http, formatUnits } from 'viem';
 import { mainnet } from 'wagmi/chains';
-import { formatUnits } from 'viem';
 
 // Custom NERO Chain config
 const neroTestnet = {
@@ -260,7 +258,7 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
   }, [disconnect]);
 
   /**
-   * Get tokens in wallet - Updated for wagmi v2
+   * Get tokens in wallet - Updated to use viem directly
    * @param {Array} tokenAddresses - Array of token addresses to check
    * @returns {Array} - Array of token objects with balances and metadata
    */
@@ -284,39 +282,52 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     const currentChainId = chainIdParam || chainId || 5555003;
 
     try {
-      // Create contract calls for tokens using readContracts
+      // Create a viem public client for the current chain
+      const publicClient = createPublicClient({
+        chain: {
+          id: currentChainId,
+          name: currentChainId === 5555003 ? 'NERO Chain Testnet' : 'Unknown Chain',
+          rpcUrls: {
+            default: {
+              http: [currentChainId === 5555003 
+                ? (import.meta.env.VITE_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io')
+                : 'https://ethereum.publicnode.com'
+              ],
+            },
+          },
+        },
+        transport: http(),
+      });
+
+      // Create contract calls for tokens using viem's multicall
       const contractCalls = tokenAddresses.flatMap((tokenAddress) => [
         {
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: 'decimals',
-          chainId: currentChainId
         },
         {
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: 'symbol',
-          chainId: currentChainId
         },
         {
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: 'name',
-          chainId: currentChainId
         },
         {
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: 'balanceOf',
           args: [targetAddress as `0x${string}`],
-          chainId: currentChainId
         }
       ]);
 
-      // Use readContracts for batch processing - with allowFailure at the top level
-      const responses = await readContracts({ 
+      // Use viem's multicall for batch processing
+      const responses = await publicClient.multicall({
         contracts: contractCalls,
-        allowFailure: true 
+        allowFailure: true
       });
 
       // Process results into token objects
@@ -332,10 +343,8 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
         const balanceResponse = responses[offset + 3];
         
         // Check if any of the responses failed
-        if (decimalResponse.status !== 'success' || 
-            symbolResponse.status !== 'success' ||
-            nameResponse.status !== 'success' ||
-            balanceResponse.status !== 'success') {
+        if (!decimalResponse.status || !symbolResponse.status || 
+            !nameResponse.status || !balanceResponse.status) {
           console.warn(`Skipping token ${tokenAddresses[i]} due to failed contract call`);
           continue;
         }
