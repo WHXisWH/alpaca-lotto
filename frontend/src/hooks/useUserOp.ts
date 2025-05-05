@@ -1,17 +1,7 @@
-import { useState, useCallback } from 'react';
-import { useAccount, useConnect, useDisconnect, useWalletClient } from 'wagmi';
-import { hexToBigInt } from 'viem';
-
-// Constants from environment variables
-const CONSTANTS = {
-  NERO_RPC_URL: import.meta.env.VITE_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io',
-  BUNDLER_URL: import.meta.env.VITE_BUNDLER_URL || 'https://bundler-testnet.nerochain.io',
-  PAYMASTER_URL: import.meta.env.VITE_PAYMASTER_URL || 'https://paymaster-testnet.nerochain.io',
-  PAYMASTER_API_KEY: import.meta.env.VITE_PAYMASTER_API_KEY || 'demo-api-key',
-  ENTRYPOINT_ADDRESS: import.meta.env.VITE_ENTRYPOINT_ADDRESS || '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
-  ACCOUNT_FACTORY_ADDRESS: import.meta.env.VITE_ACCOUNT_FACTORY_ADDRESS || '0x9406Cc6185a346906296840746125a0E44976454',
-  LOTTERY_CONTRACT_ADDRESS: import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS || '0x1234567890123456789012345678901234567890'
-};
+import { useState, useCallback, useEffect } from 'react';
+import { useAccount, useWalletClient } from 'wagmi';
+import userOpSDK from '../services/userOpSDK';
+import useWagmiWallet from './useWagmiWallet';
 
 // Transaction type definitions
 interface Call {
@@ -53,493 +43,436 @@ interface BatchPurchaseParams {
   paymentToken?: string;
 }
 
+interface SessionKeyParams {
+  duration: number;
+  paymentType?: number;
+  paymentToken?: string;
+}
+
 interface UseUserOpReturn {
   isLoading: boolean;
   error: string | null;
   txHash: string | null;
   aaWalletAddress: string | null;
   isDevelopmentMode: boolean;
-  initClient: () => Promise<{
-    client: any;
-    builder: any;
-    aaAddress: string;
-  }>;
+  initSDK: () => Promise<{ client: any; builder: any; aaAddress: string }>;
   isWalletDeployed: (address: string) => Promise<boolean>;
   executeTransfer: (params: TransferParams) => Promise<string>;
   executeBatch: (params: BatchParams) => Promise<string>;
-  getPaymasterData: (builder: any, params: { type: number; token?: string }) => Promise<any>;
   executeTicketPurchase: (params: TicketPurchaseParams) => Promise<string>;
   executeBatchPurchase: (params: BatchPurchaseParams) => Promise<string>;
+  createSessionKey: (params: SessionKeyParams) => Promise<string>;
+  revokeSessionKey: (sessionKey: string) => Promise<string>;
+  claimPrize: (lotteryId: number) => Promise<string>;
+  getSupportedTokens: () => Promise<any[]>;
 }
 
 /**
  * Custom hook for managing UserOperations with NERO Chain's Account Abstraction
- * Updated to use wagmi hooks
+ * Using the UserOpSDK service
  */
 export const useUserOp = (): UseUserOpReturn => {
   // Use wagmi hooks
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
+  const { isDevelopmentMode } = useWagmiWallet();
   
+  // State
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [aaWalletAddress, setAaWalletAddress] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
-  const [isDevelopmentMode, setIsDevelopmentMode] = useState<boolean>(false);
   
-  /**
-   * Generate a random transaction hash for development mode
-   * @returns {string} - Random transaction hash
-   */
-  const _generateMockTxHash = (): string => {
-    return '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-  };
-  
-  /**
-   * Check if we should use development mode
-   */
-  const checkDevelopmentMode = useCallback((): boolean => {
-    const noWallet = !isConnected && typeof window !== 'undefined' && (!window.ethereum || !window.ethereum.isMetaMask);
-    if (noWallet) {
-      setIsDevelopmentMode(true);
-    }
-    return noWallet;
-  }, [isConnected]);
-  
-  /**
-   * Initialize client and builder
-   * @returns {Object} - Initialized client and builder
-   */
-  const initClient = useCallback(async () => {
-    try {
-      // Check if walletClient is available or we should use development mode
-      const devMode = checkDevelopmentMode();
-      
-      if (devMode || !walletClient) {
-        console.log('No signer available, activating development mode');
-        setIsDevelopmentMode(true);
-        
-        // Generate mock AA wallet address
-        const mockAddress = '0x8901b77345cC8936Bd6E142570AdE93f5ccF3417';
-        setAaWalletAddress(mockAddress);
-        
-        return { 
-          client: { sendUserOperation: () => Promise.resolve({ userOpHash: _generateMockTxHash() }) },
-          builder: { getSender: () => Promise.resolve(mockAddress) },
-          aaAddress: mockAddress
-        };
-      }
-      
-      try {
-        // In a real implementation, we would use the UserOpSDK here
-        console.log('Initializing AA client with walletClient');
-        
-        // Generate consistent AA wallet address from account
-        const aaAddress = "0x" + address!.slice(2, 12) + "Ab" + address!.slice(14);
-        setAaWalletAddress(aaAddress);
-        
-        // Return client and builder for userop (mock implementation for this fix)
-        return {
-          client: { 
-            sendUserOperation: () => Promise.resolve({ 
-              userOpHash: _generateMockTxHash(),
-              wait: async () => ({ transactionHash: _generateMockTxHash() })
-            }) 
-          },
-          builder: { 
-            getSender: () => Promise.resolve(aaAddress),
-            execute: () => {},
-            executeBatch: () => {},
-            setPaymasterOptions: () => {},
-            setCallGasLimit: () => {},
-            setVerificationGasLimit: () => {},
-            setPreVerificationGas: () => {},
-            setMaxFeePerGas: () => {},
-            setMaxPriorityFeePerGas: () => {} 
-          },
-          aaAddress
-        };
-      } catch (err) {
-        console.error('Error initializing Client:', err);
-        setIsDevelopmentMode(true);
-        
-        // Generate mock AA wallet address
-        const mockAddress = '0x8901b77345cC8936Bd6E142570AdE93f5ccF3417';
-        setAaWalletAddress(mockAddress);
-        
-        return { 
-          client: { sendUserOperation: () => Promise.resolve({ userOpHash: _generateMockTxHash() }) },
-          builder: { getSender: () => Promise.resolve(mockAddress) },
-          aaAddress: mockAddress
-        };
-      }
-    } catch (err: any) {
-      console.error('AA client initialization error:', err);
-      setError(err.message || 'AA client initialization error');
-      throw err;
-    }
-  }, [address, walletClient, checkDevelopmentMode]);
-  
-  /**
-   * Check if AA wallet is already deployed
-   * @param {string} address - AA wallet address to check
-   * @returns {boolean} - Whether wallet is deployed
-   */
-  const isWalletDeployed = useCallback(async (address: string): Promise<boolean> => {
-    if (isDevelopmentMode) {
-      return Math.random() > 0.5; // Random result in development mode
-    }
+  // Initialize SDK
+  const initSDK = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
     
     try {
-      // In a real implementation, we would use walletClient to check the code at the address
-      // For now, simulate with a random result
-      return Math.random() > 0.3; // 70% chance it's deployed
+      // Check if development mode
+      if (isDevelopmentMode || !walletClient) {
+        console.log('Using development mode for UserOp SDK');
+        
+        // Mock wallet
+        const mockWallet = {
+          getAddress: async () => address || '0x1234567890123456789012345678901234567890',
+          signMessage: async (message: string) => '0x123456'
+        };
+        
+        // Initialize with mock signer
+        const { client, builder, aaWalletAddress: aaAddress } = await userOpSDK.init(mockWallet);
+        
+        setAaWalletAddress(aaAddress);
+        setIsLoading(false);
+        
+        return { client, builder, aaAddress };
+      }
+
+      // Initialize with real wallet client
+      const signer = {
+        getAddress: async () => address!,
+        signMessage: async (message: { message: string }) => {
+          return await walletClient.signMessage({
+            message: message.message
+          });
+        }
+      };
+      
+      const { client, builder, aaWalletAddress: aaAddress } = await userOpSDK.init(signer);
+      
+      setAaWalletAddress(aaAddress);
+      setIsLoading(false);
+      
+      return { client, builder, aaAddress };
+    } catch (err: any) {
+      console.error('Error initializing UserOp SDK:', err);
+      setError(err.message || 'Failed to initialize UserOp SDK');
+      setIsLoading(false);
+      throw err;
+    }
+  }, [address, walletClient, isDevelopmentMode]);
+  
+  // Check if AA wallet is deployed
+  const isWalletDeployed = useCallback(async (address: string): Promise<boolean> => {
+    try {
+      return await userOpSDK.isWalletDeployed(address);
     } catch (err) {
       console.error('Error checking wallet deployment:', err);
       return false;
     }
-  }, [isDevelopmentMode]);
+  }, []);
   
-  /**
-   * Execute token transfer
-   * @param {Object} params - Token transfer parameters
-   * @returns {string} - Transaction hash
-   */
-  const executeTransfer = useCallback(async ({
-    tokenAddress,
-    recipientAddress,
-    amount,
-    decimals,
-    paymentType,
-    paymentToken
-  }: TransferParams): Promise<string> => {
+  // Execute token transfer
+  const executeTransfer = useCallback(async (params: TransferParams): Promise<string> => {
     setIsLoading(true);
     setError(null);
     setTxHash(null);
     
     try {
-      // Development mode handling
-      if (isDevelopmentMode || !walletClient) {
-        console.log('Using development mode for transfer execution');
-        
-        // Simulate delay
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Generate mock transaction hash
-        const mockTxHash = _generateMockTxHash();
-        setTxHash(mockTxHash);
+      // Initialize SDK if not already
+      if (!userOpSDK.initialized) {
+        await initSDK();
+      }
+      
+      // Create ERC20 transfer UserOperation
+      userOpSDK.createERC20Transfer(
+        params.tokenAddress,
+        params.recipientAddress,
+        params.amount,
+        params.decimals
+      );
+      
+      // Set paymaster options
+      userOpSDK.setPaymasterOptions(
+        params.paymentType,
+        params.paymentToken
+      );
+      
+      // Estimate and set gas parameters
+      const gasEstimation = await userOpSDK.estimateGas();
+      userOpSDK.setGasParameters(gasEstimation);
+      
+      // Send UserOperation
+      const result = await userOpSDK.sendUserOperation();
+      
+      if (result.success) {
+        setTxHash(result.transactionHash);
         setIsLoading(false);
-        return mockTxHash;
+        return result.transactionHash;
+      } else {
+        throw new Error('Failed to send UserOperation');
       }
-      
-      // Initialize client and builder
-      const { client, builder } = await initClient();
-      
-      // Create ERC20 interface for the transfer
-      const erc20Interface = {
-        func: 'transfer',
-        args: [recipientAddress, hexToBigInt(`0x${BigInt(parseInt(amount) * 10 ** decimals).toString(16)}`)]
-      };
-      
-      // Set up builder with transfer call
-      builder.execute(tokenAddress, 0, erc20Interface);
-      
-      // Set paymaster options based on payment type
-      if (paymentType === 0) {
-        // Sponsored gas
-        builder.setPaymasterOptions({ type: 0, apikey: CONSTANTS.PAYMASTER_API_KEY, rpc: CONSTANTS.PAYMASTER_URL });
-      } else if (paymentType === 1 || paymentType === 2) {
-        // ERC20 token gas payment
-        builder.setPaymasterOptions({ 
-          type: paymentType, 
-          token: paymentToken, 
-          apikey: CONSTANTS.PAYMASTER_API_KEY, 
-          rpc: CONSTANTS.PAYMASTER_URL 
-        });
-      }
-      
-      // Simulate transaction processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Generate mock transaction hash
-      const mockTxHash = _generateMockTxHash();
-      setTxHash(mockTxHash);
-      setIsLoading(false);
-      return mockTxHash;
     } catch (err: any) {
-      console.error("UserOperation submission error:", err);
-      setError(err.message || 'UserOperation submission error');
+      console.error('Error executing transfer:', err);
+      setError(err.message || 'Failed to execute transfer');
       setIsLoading(false);
       throw err;
     }
-  }, [initClient, isDevelopmentMode, walletClient]);
+  }, [initSDK]);
   
-  /**
-   * Execute batch transaction
-   * @param {Object} params - Batch parameters
-   * @returns {string} - Transaction hash
-   */
-  const executeBatch = useCallback(async ({
-    calls,
-    paymentType,
-    paymentToken
-  }: BatchParams): Promise<string> => {
+  // Execute batch operations
+  const executeBatch = useCallback(async (params: BatchParams): Promise<string> => {
     setIsLoading(true);
     setError(null);
     setTxHash(null);
     
     try {
-      // Development mode handling
-      if (isDevelopmentMode || !walletClient) {
-        console.log('Using development mode for batch execution');
-        
-        // Simulate delay
-        await new Promise(resolve => setTimeout(resolve, 2500));
-        
-        // Generate mock transaction hash
-        const mockTxHash = _generateMockTxHash();
-        setTxHash(mockTxHash);
+      // Initialize SDK if not already
+      if (!userOpSDK.initialized) {
+        await initSDK();
+      }
+      
+      // Create batch UserOperation
+      userOpSDK.createBatchOperation(params.calls);
+      
+      // Set paymaster options
+      userOpSDK.setPaymasterOptions(
+        params.paymentType,
+        params.paymentToken
+      );
+      
+      // Estimate and set gas parameters
+      const gasEstimation = await userOpSDK.estimateGas();
+      userOpSDK.setGasParameters(gasEstimation);
+      
+      // Send UserOperation
+      const result = await userOpSDK.sendUserOperation();
+      
+      if (result.success) {
+        setTxHash(result.transactionHash);
         setIsLoading(false);
-        return mockTxHash;
+        return result.transactionHash;
+      } else {
+        throw new Error('Failed to send batch UserOperation');
       }
-      
-      // Initialize client and builder
-      const { client, builder } = await initClient();
-      
-      // Create batch transaction
-      const callAddresses = calls.map(call => call.to);
-      const callData = calls.map(call => call.data);
-      
-      // Set up builder with batch call
-      builder.executeBatch(callAddresses, callData);
-      
-      // Set paymaster options based on payment type
-      if (paymentType === 0) {
-        // Sponsored gas
-        builder.setPaymasterOptions({ type: 0, apikey: CONSTANTS.PAYMASTER_API_KEY, rpc: CONSTANTS.PAYMASTER_URL });
-      } else if (paymentType === 1 || paymentType === 2) {
-        // ERC20 token gas payment
-        builder.setPaymasterOptions({ 
-          type: paymentType, 
-          token: paymentToken, 
-          apikey: CONSTANTS.PAYMASTER_API_KEY, 
-          rpc: CONSTANTS.PAYMASTER_URL 
-        });
-      }
-      
-      // Simulate transaction processing
-      await new Promise(resolve => setTimeout(resolve, 2500));
-      
-      // Generate mock transaction hash
-      const mockTxHash = _generateMockTxHash();
-      setTxHash(mockTxHash);
-      setIsLoading(false);
-      return mockTxHash;
     } catch (err: any) {
-      console.error("Batch UserOperation error:", err);
-      setError(err.message || 'Batch UserOperation error');
+      console.error('Error executing batch operation:', err);
+      setError(err.message || 'Failed to execute batch operation');
       setIsLoading(false);
       throw err;
     }
-  }, [initClient, isDevelopmentMode, walletClient]);
+  }, [initSDK]);
   
-  /**
-   * Get Paymaster data for UserOperation
-   * @param {Object} builder - SimpleAccount builder
-   * @param {Object} params - Paymaster parameters
-   * @returns {Object} - Updated builder
-   */
-  const getPaymasterData = useCallback(async (
-    builder: any,
-    { type, token }: { type: number; token?: string }
-  ): Promise<any> => {
-    try {
-      // In development mode, just return the builder
-      if (isDevelopmentMode) {
-        return builder;
-      }
-      
-      // Set paymaster options based on payment type
-      if (type === 0) {
-        // Sponsored gas
-        builder.setPaymasterOptions({ type: 0, apikey: CONSTANTS.PAYMASTER_API_KEY, rpc: CONSTANTS.PAYMASTER_URL });
-      } else if (type === 1 || type === 2) {
-        // ERC20 token gas payment
-        builder.setPaymasterOptions({ 
-          type, 
-          token, 
-          apikey: CONSTANTS.PAYMASTER_API_KEY, 
-          rpc: CONSTANTS.PAYMASTER_URL 
-        });
-      }
-      
-      return builder;
-    } catch (err) {
-      console.error("Paymaster data retrieval error:", err);
-      throw err;
-    }
-  }, [isDevelopmentMode]);
-  
-  /**
-   * Execute lottery ticket purchase UserOperation
-   * @param {Object} params - Ticket purchase parameters
-   * @returns {string} - Transaction hash
-   */
-  const executeTicketPurchase = useCallback(async ({
-    lotteryId,
-    tokenAddress,
-    quantity,
-    paymentType = 0,
-    paymentToken = null,
-    useSessionKey = false
-  }: TicketPurchaseParams): Promise<string> => {
+  // Execute ticket purchase
+  const executeTicketPurchase = useCallback(async (params: TicketPurchaseParams): Promise<string> => {
     setIsLoading(true);
     setError(null);
     setTxHash(null);
     
     try {
-      // Development mode handling
-      if (isDevelopmentMode || !walletClient) {
-        console.log('Using development mode for ticket purchase');
-        console.log(`Purchasing ${quantity} tickets for lottery ${lotteryId}`);
-        console.log(`Using token: ${tokenAddress}`);
-        console.log(`Payment type: ${paymentType}`);
-        if (paymentToken) console.log(`Payment token: ${paymentToken}`);
-        console.log(`Using session key: ${useSessionKey}`);
-        
-        // Simulate delay - longer if using session key
-        await new Promise(resolve => setTimeout(resolve, useSessionKey ? 1500 : 2500));
-        
-        // Generate mock transaction hash
-        const mockTxHash = _generateMockTxHash();
-        setTxHash(mockTxHash);
+      // Initialize SDK if not already
+      if (!userOpSDK.initialized) {
+        await initSDK();
+      }
+      
+      // Create ticket purchase UserOperation
+      userOpSDK.createTicketPurchaseOp(
+        params.lotteryId,
+        params.tokenAddress,
+        params.quantity
+      );
+      
+      // Set paymaster options
+      userOpSDK.setPaymasterOptions(
+        params.paymentType || 0,
+        params.paymentToken
+      );
+      
+      // Estimate and set gas parameters
+      const gasEstimation = await userOpSDK.estimateGas();
+      userOpSDK.setGasParameters(gasEstimation);
+      
+      // Send UserOperation
+      const result = await userOpSDK.sendUserOperation();
+      
+      if (result.success) {
+        setTxHash(result.transactionHash);
         setIsLoading(false);
-        return mockTxHash;
+        return result.transactionHash;
+      } else {
+        throw new Error('Failed to send ticket purchase UserOperation');
       }
-      
-      // Initialize client and builder
-      const { client, builder } = await initClient();
-      
-      // Create lottery contract interface
-      const lotteryInterface = {
-        func: 'purchaseTickets',
-        args: [lotteryId, tokenAddress, quantity]
-      };
-      
-      // Set up builder with purchaseTickets call
-      builder.execute(CONSTANTS.LOTTERY_CONTRACT_ADDRESS, 0, lotteryInterface);
-      
-      // Set paymaster options based on payment type
-      if (paymentType === 0) {
-        // Sponsored gas
-        builder.setPaymasterOptions({ type: 0, apikey: CONSTANTS.PAYMASTER_API_KEY, rpc: CONSTANTS.PAYMASTER_URL });
-      } else if (paymentType === 1 || paymentType === 2) {
-        // ERC20 token gas payment
-        builder.setPaymasterOptions({ 
-          type: paymentType, 
-          token: paymentToken, 
-          apikey: CONSTANTS.PAYMASTER_API_KEY, 
-          rpc: CONSTANTS.PAYMASTER_URL 
-        });
-      }
-      
-      // Simulate ticket purchase processing
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Generate mock transaction hash
-      const mockTxHash = _generateMockTxHash();
-      setTxHash(mockTxHash);
-      setIsLoading(false);
-      return mockTxHash;
     } catch (err: any) {
-      console.error("Ticket purchase UserOperation error:", err);
-      setError(err.message || 'Ticket purchase UserOperation error');
+      console.error('Error executing ticket purchase:', err);
+      setError(err.message || 'Failed to execute ticket purchase');
       setIsLoading(false);
       throw err;
     }
-  }, [initClient, isDevelopmentMode, walletClient]);
+  }, [initSDK]);
   
-  /**
-   * Execute batch ticket purchase
-   * @param {Object} params - Batch purchase parameters
-   * @returns {string} - Transaction hash
-   */
-  const executeBatchPurchase = useCallback(async ({
-    selections,
-    paymentType = 0,
-    paymentToken = null
-  }: BatchPurchaseParams): Promise<string> => {
+  // Execute batch ticket purchase
+  const executeBatchPurchase = useCallback(async (params: BatchPurchaseParams): Promise<string> => {
     setIsLoading(true);
     setError(null);
     setTxHash(null);
     
     try {
-      // Development mode handling
-      if (isDevelopmentMode || !walletClient) {
-        console.log('Using development mode for batch ticket purchase');
-        console.log('Selections:', selections);
-        
-        // Simulate delay
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        // Generate mock transaction hash
-        const mockTxHash = _generateMockTxHash();
-        setTxHash(mockTxHash);
+      // Initialize SDK if not already
+      if (!userOpSDK.initialized) {
+        await initSDK();
+      }
+      
+      // Create batch ticket purchase UserOperation
+      userOpSDK.createBatchTicketPurchaseOp(params.selections);
+      
+      // Set paymaster options
+      userOpSDK.setPaymasterOptions(
+        params.paymentType || 0,
+        params.paymentToken
+      );
+      
+      // Estimate and set gas parameters
+      const gasEstimation = await userOpSDK.estimateGas();
+      userOpSDK.setGasParameters(gasEstimation);
+      
+      // Send UserOperation
+      const result = await userOpSDK.sendUserOperation();
+      
+      if (result.success) {
+        setTxHash(result.transactionHash);
         setIsLoading(false);
-        return mockTxHash;
+        return result.transactionHash;
+      } else {
+        throw new Error('Failed to send batch ticket purchase UserOperation');
       }
-      
-      // Initialize client and builder
-      const { client, builder } = await initClient();
-      
-      // Prepare batch transaction parameters
-      const lotteryIds = selections.map(s => s.lotteryId);
-      const tokenAddresses = selections.map(s => s.tokenAddress);
-      const quantities = selections.map(s => s.quantity);
-      
-      // Create batch purchase interface
-      const batchPurchaseInterface = {
-        func: 'batchPurchaseTickets',
-        args: [lotteryIds, tokenAddresses, quantities]
-      };
-      
-      // Set up builder with batchPurchaseTickets call
-      builder.execute(CONSTANTS.LOTTERY_CONTRACT_ADDRESS, 0, batchPurchaseInterface);
-      
-      // Set paymaster options based on payment type
-      if (paymentType === 0) {
-        // Sponsored gas
-        builder.setPaymasterOptions({ type: 0, apikey: CONSTANTS.PAYMASTER_API_KEY, rpc: CONSTANTS.PAYMASTER_URL });
-      } else if (paymentType === 1 || paymentType === 2) {
-        // ERC20 token gas payment
-        builder.setPaymasterOptions({ 
-          type: paymentType, 
-          token: paymentToken, 
-          apikey: CONSTANTS.PAYMASTER_API_KEY, 
-          rpc: CONSTANTS.PAYMASTER_URL 
-        });
-      }
-      
-      // Simulate batch purchase processing
-      await new Promise(resolve => setTimeout(resolve, 3500));
-      
-      // Generate mock transaction hash
-      const mockTxHash = _generateMockTxHash();
-      setTxHash(mockTxHash);
-      setIsLoading(false);
-      return mockTxHash;
     } catch (err: any) {
-      console.error("Batch ticket purchase error:", err);
-      setError(err.message || 'Batch ticket purchase error');
+      console.error('Error executing batch ticket purchase:', err);
+      setError(err.message || 'Failed to execute batch ticket purchase');
       setIsLoading(false);
       throw err;
     }
-  }, [initClient, isDevelopmentMode, walletClient]);
+  }, [initSDK]);
   
-  // Check development mode on initialization
-  useCallback(() => {
-    checkDevelopmentMode();
-  }, [checkDevelopmentMode]);
+  // Create session key
+  const createSessionKey = useCallback(async (params: SessionKeyParams): Promise<string> => {
+    setIsLoading(true);
+    setError(null);
+    setTxHash(null);
+    
+    try {
+      // Initialize SDK if not already
+      if (!userOpSDK.initialized) {
+        await initSDK();
+      }
+      
+      // Generate new session key
+      const sessionKeyAddress = '0x' + [...Array(40)].map(() => 
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('');
+      
+      // Create session key UserOperation
+      userOpSDK.createSessionKeyOp(sessionKeyAddress, params.duration);
+      
+      // Set paymaster options
+      userOpSDK.setPaymasterOptions(
+        params.paymentType || 0,
+        params.paymentToken
+      );
+      
+      // Estimate and set gas parameters
+      const gasEstimation = await userOpSDK.estimateGas();
+      userOpSDK.setGasParameters(gasEstimation);
+      
+      // Send UserOperation
+      const result = await userOpSDK.sendUserOperation();
+      
+      if (result.success) {
+        setTxHash(result.transactionHash);
+        setIsLoading(false);
+        return sessionKeyAddress;
+      } else {
+        throw new Error('Failed to create session key');
+      }
+    } catch (err: any) {
+      console.error('Error creating session key:', err);
+      setError(err.message || 'Failed to create session key');
+      setIsLoading(false);
+      throw err;
+    }
+  }, [initSDK]);
+  
+  // Revoke session key
+  const revokeSessionKey = useCallback(async (sessionKey: string): Promise<string> => {
+    setIsLoading(true);
+    setError(null);
+    setTxHash(null);
+    
+    try {
+      // Initialize SDK if not already
+      if (!userOpSDK.initialized) {
+        await initSDK();
+      }
+      
+      // Create revoke session key UserOperation
+      userOpSDK.createRevokeSessionKeyOp(sessionKey);
+      
+      // Set paymaster options - Type 0 (sponsored) for better UX
+      userOpSDK.setPaymasterOptions(0);
+      
+      // Estimate and set gas parameters
+      const gasEstimation = await userOpSDK.estimateGas();
+      userOpSDK.setGasParameters(gasEstimation);
+      
+      // Send UserOperation
+      const result = await userOpSDK.sendUserOperation();
+      
+      if (result.success) {
+        setTxHash(result.transactionHash);
+        setIsLoading(false);
+        return result.transactionHash;
+      } else {
+        throw new Error('Failed to revoke session key');
+      }
+    } catch (err: any) {
+      console.error('Error revoking session key:', err);
+      setError(err.message || 'Failed to revoke session key');
+      setIsLoading(false);
+      throw err;
+    }
+  }, [initSDK]);
+  
+  // Claim lottery prize
+  const claimPrize = useCallback(async (lotteryId: number): Promise<string> => {
+    setIsLoading(true);
+    setError(null);
+    setTxHash(null);
+    
+    try {
+      // Initialize SDK if not already
+      if (!userOpSDK.initialized) {
+        await initSDK();
+      }
+      
+      // Create claim prize UserOperation
+      userOpSDK.createClaimPrizeOp(lotteryId);
+      
+      // Set paymaster options - Type 0 (sponsored) for better UX
+      userOpSDK.setPaymasterOptions(0);
+      
+      // Estimate and set gas parameters
+      const gasEstimation = await userOpSDK.estimateGas();
+      userOpSDK.setGasParameters(gasEstimation);
+      
+      // Send UserOperation
+      const result = await userOpSDK.sendUserOperation();
+      
+      if (result.success) {
+        setTxHash(result.transactionHash);
+        setIsLoading(false);
+        return result.transactionHash;
+      } else {
+        throw new Error('Failed to claim prize');
+      }
+    } catch (err: any) {
+      console.error('Error claiming prize:', err);
+      setError(err.message || 'Failed to claim prize');
+      setIsLoading(false);
+      throw err;
+    }
+  }, [initSDK]);
+  
+  // Get supported tokens from Paymaster
+  const getSupportedTokens = useCallback(async (): Promise<any[]> => {
+    try {
+      // Initialize SDK if not already
+      if (!userOpSDK.initialized) {
+        await initSDK();
+      }
+      
+      return await userOpSDK.getSupportedTokens();
+    } catch (err: any) {
+      console.error('Error getting supported tokens:', err);
+      setError(err.message || 'Failed to get supported tokens');
+      return [];
+    }
+  }, [initSDK]);
+  
+  // Initialize SDK on mount if wallet is connected
+  useEffect(() => {
+    if (isConnected && !userOpSDK.initialized) {
+      initSDK().catch(console.error);
+    }
+  }, [isConnected, initSDK]);
   
   return {
     isLoading,
@@ -547,13 +480,16 @@ export const useUserOp = (): UseUserOpReturn => {
     txHash,
     aaWalletAddress,
     isDevelopmentMode,
-    initClient,
+    initSDK,
     isWalletDeployed,
     executeTransfer,
     executeBatch,
-    getPaymasterData,
     executeTicketPurchase,
-    executeBatchPurchase
+    executeBatchPurchase,
+    createSessionKey,
+    revokeSessionKey,
+    claimPrize,
+    getSupportedTokens
   };
 };
 
