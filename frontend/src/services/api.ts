@@ -1,4 +1,5 @@
 import axios from 'axios';
+import contractService from './contractService';
 
 // Get API Base Endpoint
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
@@ -60,7 +61,9 @@ _generateMockLotteries() {
     '0xdac17f958d2ee523a2206206994597c13d831ec7'  // USDT
   ];
   
-  // FIX: Ensure at least 2 lotteries are always active by adjusting time
+  console.log("Generating mock lotteries with current time:", currentTime);
+  
+  // ALWAYS create at least 3 active lotteries
   return [
     {
       id: 1,
@@ -192,15 +195,19 @@ _generateMockLotteries() {
    */
   async getLotteries() {
     try {
+      console.log("Fetching lotteries...");
       const response = await apiClient.get('/lotteries');
       return response.data;
     } catch (error) {
       console.error('Lottery fetch error:', error);
       
-      console.log('Using mock data...');
+      console.log('Using mock data for lotteries');
+      const mockLotteries = this._generateMockLotteries();
+      console.log("Generated mock lotteries:", mockLotteries.length);
+      
       return {
         success: true,
-        lotteries: api._generateMockLotteries()
+        lotteries: mockLotteries
       };
     }
   },

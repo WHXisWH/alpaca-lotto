@@ -1,4 +1,5 @@
 import { ethers } from 'ethers';
+import { Client, Presets } from 'userop';
 
 // Constants
 const CONSTANTS = {
@@ -8,6 +9,7 @@ const CONSTANTS = {
   PAYMASTER_API_KEY: import.meta.env.VITE_PAYMASTER_API_KEY || '',
   ENTRYPOINT_ADDRESS: import.meta.env.VITE_ENTRYPOINT_ADDRESS || '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
   ACCOUNT_FACTORY_ADDRESS: import.meta.env.VITE_ACCOUNT_FACTORY_ADDRESS || '0x9406Cc6185a346906296840746125a0E44976454',
+  LOTTERY_CONTRACT_ADDRESS: import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS || '',
 };
 
 /**
@@ -31,25 +33,20 @@ class UserOpSDK {
    */
   async init(signer) {
     try {
-      if (!signer) {
-        throw new Error('Signer is required for initialization');
-      }
-
-      this.signer = signer;
-      this.provider = new ethers.providers.JsonRpcProvider(CONSTANTS.NERO_RPC_URL);
+      console.log("Initializing UserOpSDK with parameters:", CONSTANTS);
       
-      // Import Client and Presets from userop package
-      // In a real implementation this would be:
-      // const { Client, Presets } = await import('userop');
-      // In this demo we'll use a mock implementation
-      const userop = await this._loadUserOpPackage();
-      const { Client, Presets } = userop;
-
+      this.signer = signer;
+      
+      // Safely create provider
+      this.provider = new ethers.providers.JsonRpcProvider(CONSTANTS.NERO_RPC_URL);
+      console.log("Provider created successfully");
+      
       // Initialize the AA Client
       this.client = await Client.init(CONSTANTS.NERO_RPC_URL, {
         overrideBundlerRpc: CONSTANTS.BUNDLER_URL,
         entryPoint: CONSTANTS.ENTRYPOINT_ADDRESS,
       });
+      console.log("AA Client initialized successfully");
       
       // Create a SimpleAccount builder
       this.builder = await Presets.Builder.SimpleAccount.init(
@@ -61,9 +58,11 @@ class UserOpSDK {
           factory: CONSTANTS.ACCOUNT_FACTORY_ADDRESS,
         }
       );
+      console.log("SimpleAccount builder initialized successfully");
       
       // Get the AA wallet address
       this.aaWalletAddress = await this.builder.getSender();
+      console.log("AA wallet address retrieved:", this.aaWalletAddress);
       
       this.initialized = true;
       
@@ -76,77 +75,6 @@ class UserOpSDK {
       console.error('Error initializing UserOpSDK:', error);
       throw error;
     }
-  }
-
-  /**
-   * Mock loading of the userop package
-   * In a real implementation this would import the actual package
-   * @private
-   * @returns {Object} - Mock userop implementation
-   */
-  async _loadUserOpPackage() {
-    // This is a simplified mock of the userop package for demonstration
-    return {
-      Client: {
-        init: async (rpcUrl, options) => ({
-          sendUserOperation: async (builder) => {
-            console.log('Sending UserOperation with builder:', builder);
-            const userOpHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-            
-            return {
-              userOpHash,
-              wait: async () => ({
-                transactionHash: '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('')
-              })
-            };
-          },
-          estimateUserOperationGas: async (builder) => ({
-            callGasLimit: '0x88b8',
-            verificationGasLimit: '0x33450',
-            preVerificationGas: '0xc350'
-          })
-        })
-      },
-      Presets: {
-        Builder: {
-          SimpleAccount: {
-            init: async (signer, rpcUrl, options) => {
-              // Generate deterministic AA wallet address from signer
-              const address = await signer.getAddress();
-              const aaAddress = ethers.utils.getCreate2Address(
-                options.factory,
-                ethers.utils.keccak256(
-                  ethers.utils.defaultAbiCoder.encode(
-                    ['address', 'uint256'],
-                    [address, 0] // Index 0 for the first wallet
-                  )
-                ),
-                ethers.utils.keccak256('0x00')
-              );
-              
-              return {
-                getSender: async () => aaAddress,
-                execute: (to, value, data) => {
-                  console.log(`Execute: to=${to}, value=${value}, data=${data}`);
-                },
-                executeBatch: (to, data) => {
-                  console.log(`Execute batch: to=${to}, data=${data}`);
-                },
-                setPaymasterOptions: (options) => {
-                  console.log('Setting paymaster options:', options);
-                },
-                setCallGasLimit: (limit) => {},
-                setVerificationGasLimit: (limit) => {},
-                setPreVerificationGas: (limit) => {},
-                setMaxFeePerGas: (fee) => {},
-                setMaxPriorityFeePerGas: (fee) => {},
-                setNonce: (nonce) => {}
-              };
-            }
-          }
-        }
-      }
-    };
   }
 
   /**
@@ -177,8 +105,9 @@ class UserOpSDK {
    * @returns {Object} - Builder with the transfer operation
    */
   createERC20Transfer(tokenAddress, recipientAddress, amount, decimals) {
-    if (!this.initialized || !this.builder) {
-      throw new Error('UserOpSDK not initialized. Call init() first.');
+    if (!this.initialized) {
+      this.init(this.signer).catch(console.error);
+      return this.builder;
     }
     
     // Create ERC20 interface
@@ -204,8 +133,9 @@ class UserOpSDK {
    * @returns {Object} - Builder with the batch operation
    */
   createBatchOperation(calls) {
-    if (!this.initialized || !this.builder) {
-      throw new Error('UserOpSDK not initialized. Call init() first.');
+    if (!this.initialized) {
+      this.init(this.signer).catch(console.error);
+      return this.builder;
     }
     
     const callAddresses = calls.map(call => call.to);
@@ -224,8 +154,9 @@ class UserOpSDK {
    * @returns {Object} - Updated builder
    */
   setPaymasterOptions(type, token = null) {
-    if (!this.initialized || !this.builder) {
-      throw new Error('UserOpSDK not initialized. Call init() first.');
+    if (!this.initialized) {
+      this.init(this.signer).catch(console.error);
+      return this.builder;
     }
     
     const options = {
@@ -251,6 +182,10 @@ class UserOpSDK {
    */
   async getSupportedTokens() {
     try {
+      if (!this.aaWalletAddress) {
+        await this.init(this.signer);
+      }
+      
       if (!this.aaWalletAddress) {
         throw new Error('AA wallet address not available. Initialize first.');
       }
@@ -329,7 +264,7 @@ class UserOpSDK {
    */
   async estimateGas() {
     if (!this.initialized || !this.client || !this.builder) {
-      throw new Error('UserOpSDK not initialized. Call init() first.');
+      await this.init(this.signer);
     }
     
     try {
@@ -359,7 +294,8 @@ class UserOpSDK {
    */
   setGasParameters(params) {
     if (!this.initialized || !this.builder) {
-      throw new Error('UserOpSDK not initialized. Call init() first.');
+      this.init(this.signer).catch(console.error);
+      return this.builder;
     }
     
     if (params.callGasLimit) {
@@ -391,7 +327,7 @@ class UserOpSDK {
    */
   async sendUserOperation() {
     if (!this.initialized || !this.client || !this.builder) {
-      throw new Error('UserOpSDK not initialized. Call init() first.');
+      await this.init(this.signer);
     }
     
     try {
@@ -431,10 +367,12 @@ class UserOpSDK {
    */
   createTicketPurchaseOp(lotteryId, tokenAddress, quantity) {
     if (!this.initialized || !this.builder) {
-      throw new Error('UserOpSDK not initialized. Call init() first.');
+      this.init(this.signer).catch(console.error);
+      return this.builder;
     }
     
-    const contractAddress = import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS;
+    const contractAddress = CONSTANTS.LOTTERY_CONTRACT_ADDRESS;
+    console.log(`Creating ticket purchase operation for lottery ${lotteryId} with contract ${contractAddress}`);
     
     // Create contract interface
     const contractInterface = new ethers.utils.Interface([
@@ -460,10 +398,12 @@ class UserOpSDK {
    */
   createBatchTicketPurchaseOp(selections) {
     if (!this.initialized || !this.builder) {
-      throw new Error('UserOpSDK not initialized. Call init() first.');
+      this.init(this.signer).catch(console.error);
+      return this.builder;
     }
     
-    const contractAddress = import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS;
+    const contractAddress = CONSTANTS.LOTTERY_CONTRACT_ADDRESS;
+    console.log(`Creating batch ticket purchase operation for ${selections.length} selections`);
     
     // Create contract interface
     const contractInterface = new ethers.utils.Interface([
@@ -495,10 +435,12 @@ class UserOpSDK {
    */
   createSessionKeyOp(sessionKey, validDuration) {
     if (!this.initialized || !this.builder) {
-      throw new Error('UserOpSDK not initialized. Call init() first.');
+      this.init(this.signer).catch(console.error);
+      return this.builder;
     }
     
-    const contractAddress = import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS;
+    const contractAddress = CONSTANTS.LOTTERY_CONTRACT_ADDRESS;
+    console.log(`Creating session key operation for key ${sessionKey} with duration ${validDuration}s`);
     
     // Current timestamp
     const currentTime = Math.floor(Date.now() / 1000);
@@ -536,10 +478,12 @@ class UserOpSDK {
    */
   createRevokeSessionKeyOp(sessionKey) {
     if (!this.initialized || !this.builder) {
-      throw new Error('UserOpSDK not initialized. Call init() first.');
+      this.init(this.signer).catch(console.error);
+      return this.builder;
     }
     
-    const contractAddress = import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS;
+    const contractAddress = CONSTANTS.LOTTERY_CONTRACT_ADDRESS;
+    console.log(`Creating revoke session key operation for key ${sessionKey}`);
     
     // Create contract interface
     const contractInterface = new ethers.utils.Interface([
@@ -565,10 +509,12 @@ class UserOpSDK {
    */
   createClaimPrizeOp(lotteryId) {
     if (!this.initialized || !this.builder) {
-      throw new Error('UserOpSDK not initialized. Call init() first.');
+      this.init(this.signer).catch(console.error);
+      return this.builder;
     }
     
-    const contractAddress = import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS;
+    const contractAddress = CONSTANTS.LOTTERY_CONTRACT_ADDRESS;
+    console.log(`Creating claim prize operation for lottery ${lotteryId}`);
     
     // Create contract interface
     const contractInterface = new ethers.utils.Interface([
