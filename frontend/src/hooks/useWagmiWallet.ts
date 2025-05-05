@@ -7,7 +7,7 @@ import {
   useChainId,
   useSwitchChain
 } from 'wagmi';
-import { readContracts } from 'wagmi/actions';
+import { readContract, readContracts } from 'wagmi/actions';
 import { mainnet } from 'wagmi/chains';
 import { formatUnits } from 'viem';
 
@@ -260,12 +260,12 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
   }, [disconnect]);
 
   /**
-   * Get tokens in wallet - Updated for wagmi v2 using readContracts
+   * Get tokens in wallet - Updated for wagmi v2
    * @param {Array} tokenAddresses - Array of token addresses to check
    * @returns {Array} - Array of token objects with balances and metadata
    */
   const getTokens = useCallback(async (tokenAddresses: string[], chainIdParam?: number): Promise<Token[]> => {
-    // Development mode check - return mock tokens immediately if in dev mode
+    // Development mode check - immediately return mock tokens if in development mode
     if (isDevelopmentMode || !isConnected) {
       console.log('Using mock tokens in development mode');
       return MOCK_TOKENS;
@@ -284,82 +284,85 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     const currentChainId = chainIdParam || chainId || 5555003;
 
     try {
-      // Create token contract configurations for readContracts
-      const tokenContracts = [];
-      
-      // For each token, create contract calls for decimals, symbol, name, and balanceOf
-      for (const tokenAddress of tokenAddresses) {
-        tokenContracts.push(
-          {
-            address: tokenAddress as `0x${string}`,
-            abi: ERC20_ABI,
-            functionName: 'decimals',
-            chainId: currentChainId,
-          },
-          {
-            address: tokenAddress as `0x${string}`,
-            abi: ERC20_ABI,
-            functionName: 'symbol',
-            chainId: currentChainId,
-          },
-          {
-            address: tokenAddress as `0x${string}`,
-            abi: ERC20_ABI,
-            functionName: 'name',
-            chainId: currentChainId,
-          },
-          {
-            address: tokenAddress as `0x${string}`,
-            abi: ERC20_ABI,
-            functionName: 'balanceOf',
-            args: [targetAddress as `0x${string}`],
-            chainId: currentChainId,
-          }
-        );
-      }
+      // Create contract calls for tokens using readContracts with allowFailure
+      const contractCalls = tokenAddresses.flatMap((tokenAddress) => [
+        {
+          address: tokenAddress as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: 'decimals',
+          chainId: currentChainId,
+          allowFailure: true,
+        },
+        {
+          address: tokenAddress as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: 'symbol',
+          chainId: currentChainId,
+          allowFailure: true,
+        },
+        {
+          address: tokenAddress as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: 'name',
+          chainId: currentChainId,
+          allowFailure: true,
+        },
+        {
+          address: tokenAddress as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: 'balanceOf',
+          args: [targetAddress as `0x${string}`],
+          chainId: currentChainId,
+          allowFailure: true,
+        }
+      ]);
 
-      // Use wagmi v2's readContracts
-      const tokenResults = await readContracts({
-        contracts: tokenContracts
-      });
-      
+      // Use readContracts for batch processing
+      const responses = await readContracts({ contracts: contractCalls });
+
+      // Process results into token objects
       const tokens: Token[] = [];
       
-      // Process results - every 4 results constitute one token's data
-      for (let i = 0; i < tokenResults.length; i += 4) {
-        try {
-          const index = Math.floor(i / 4);
+      for (let i = 0; i < tokenAddresses.length; i++) {
+        const offset = i * 4;
+        
+        // Extract responses for the current token
+        const decimalResponse = responses[offset];
+        const symbolResponse = responses[offset + 1];
+        const nameResponse = responses[offset + 2];
+        const balanceResponse = responses[offset + 3];
+        
+        // Check if any of the responses failed
+        if (decimalResponse.status !== 'success' || 
+            symbolResponse.status !== 'success' ||
+            nameResponse.status !== 'success' ||
+            balanceResponse.status !== 'success') {
+          console.warn(`Skipping token ${tokenAddresses[i]} due to failed contract call`);
+          continue;
+        }
+        
+        // Extract values from responses
+        const decimals = decimalResponse.result ?? 18;
+        const symbol = symbolResponse.result ?? 'UNKNOWN';
+        const name = nameResponse.result ?? 'Unknown Token';
+        const balance = balanceResponse.result;
+        
+        // Only add tokens with positive balances and ensure balance is a bigint
+        if (typeof balance === 'bigint' && balance > 0n) {
+          const formattedBalance = formatUnits(balance, decimals as number);
           
-          if (tokenResults[i].status === 'success' && 
-              tokenResults[i+1].status === 'success' && 
-              tokenResults[i+2].status === 'success' && 
-              tokenResults[i+3].status === 'success') {
-            
-            const decimals = tokenResults[i].result as number;
-            const symbol = tokenResults[i+1].result as string;
-            const name = tokenResults[i+2].result as string;
-            const rawBalance = tokenResults[i+3].result as bigint;
-            
-            if (rawBalance > 0n) {
-              const formattedBalance = formatUnits(rawBalance, decimals);
-              
-              tokens.push({
-                address: tokenAddresses[index],
-                symbol,
-                name,
-                decimals,
-                balance: formattedBalance,
-                rawBalance: rawBalance.toString()
-              });
-            }
-          }
-        } catch (error) {
-          console.error(`Error processing token results at index ${i}:`, error);
-          // Continue with next token
+          tokens.push({
+            address: tokenAddresses[i],
+            symbol: symbol as string,
+            name: name as string,
+            decimals: decimals as number,
+            balance: formattedBalance,
+            rawBalance: balance.toString()
+          });
         }
       }
 
-      // If no tokens found, return mock tokens in development mode
+      // If no tokens found and in development mode, return mock tokens
       if (tokens.length === 0 && isDevelopmentMode) {
         return MOCK_TOKENS;
       }
