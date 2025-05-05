@@ -108,23 +108,33 @@ export const useLotteries = (): UseLotteriesReturn => {
         console.warn('No lotteries returned from API, using mock data');
         // If no lotteries returned or empty array, use mock data in development mode
         if (isDevelopmentMode) {
+          console.log('Development mode active, using mock data');
           const mockLotteries = api._generateMockLotteries ? 
             api._generateMockLotteries() : [];
-          
+        
+          console.log('Generated mock lotteries:', mockLotteries);
+        
           setLotteries(mockLotteries);
-          
-          // Categorize active and past mock lotteries
+        
           const currentTime = Math.floor(Date.now() / 1000);
-          const active = mockLotteries.filter(lottery => 
+          let active = mockLotteries.filter(lottery => 
             lottery.startTime <= currentTime && lottery.endTime > currentTime
           );
+        
+          if (active.length === 0) {
+            console.log('No active lotteries found, showing first mock lottery as active');
+            active = mockLotteries.length > 0 ? [mockLotteries[0]] : [];
+          }
+        
+          console.log('Active lotteries:', active);
+          setActiveLotteries(active);
+        
           const past = mockLotteries.filter(lottery => 
             lottery.endTime <= currentTime || lottery.drawn
           );
-          
-          setActiveLotteries(active);
+        
           setPastLotteries(past);
-          
+        
           setIsLoading(false);
           return mockLotteries;
         }
