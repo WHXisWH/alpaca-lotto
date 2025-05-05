@@ -284,41 +284,40 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     const currentChainId = chainIdParam || chainId || 5555003;
 
     try {
-      // Create contract calls for tokens using readContracts with allowFailure
+      // Create contract calls for tokens using readContracts
       const contractCalls = tokenAddresses.flatMap((tokenAddress) => [
         {
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: 'decimals',
-          chainId: currentChainId,
-          allowFailure: true,
+          chainId: currentChainId
         },
         {
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: 'symbol',
-          chainId: currentChainId,
-          allowFailure: true,
+          chainId: currentChainId
         },
         {
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: 'name',
-          chainId: currentChainId,
-          allowFailure: true,
+          chainId: currentChainId
         },
         {
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: 'balanceOf',
           args: [targetAddress as `0x${string}`],
-          chainId: currentChainId,
-          allowFailure: true,
+          chainId: currentChainId
         }
       ]);
 
-      // Use readContracts for batch processing
-      const responses = await readContracts({ contracts: contractCalls });
+      // Use readContracts for batch processing - with allowFailure at the top level
+      const responses = await readContracts({ 
+        contracts: contractCalls,
+        allowFailure: true 
+      });
 
       // Process results into token objects
       const tokens: Token[] = [];
