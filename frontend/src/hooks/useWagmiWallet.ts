@@ -258,7 +258,7 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
   }, [disconnect]);
 
   /**
-   * Get tokens in wallet - Updated to use viem directly
+   * Get tokens in wallet - Updated to avoid multicall3 dependency
    * @param {Array} tokenAddresses - Array of token addresses to check
    * @returns {Array} - Array of token objects with balances and metadata
    */
@@ -282,7 +282,7 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     const currentChainId = chainIdParam || chainId || 5555003;
 
     try {
-      // Create a viem public client for the current chain
+      // Create a viem public client for the current chain - without multicall configuration
       const publicClient = createPublicClient({
         chain: {
           id: currentChainId,
@@ -299,74 +299,64 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
         transport: http(),
       });
 
-      // Create contract calls for tokens using viem's multicall
-      const contractCalls = tokenAddresses.flatMap((tokenAddress) => [
-        {
-          address: tokenAddress as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: 'decimals',
-        },
-        {
-          address: tokenAddress as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: 'symbol',
-        },
-        {
-          address: tokenAddress as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: 'name',
-        },
-        {
-          address: tokenAddress as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: 'balanceOf',
-          args: [targetAddress as `0x${string}`],
-        }
-      ]);
-
-      // Use viem's multicall for batch processing
-      const responses = await publicClient.multicall({
-        contracts: contractCalls,
-        allowFailure: true
-      });
-
       // Process results into token objects
       const tokens: Token[] = [];
       
+      // Process each token one by one instead of using multicall
       for (let i = 0; i < tokenAddresses.length; i++) {
-        const offset = i * 4;
+        const tokenAddress = tokenAddresses[i] as `0x${string}`;
         
-        // Extract responses for the current token
-        const decimalResponse = responses[offset];
-        const symbolResponse = responses[offset + 1];
-        const nameResponse = responses[offset + 2];
-        const balanceResponse = responses[offset + 3];
-        
-        // Check if any of the responses failed
-        if (!decimalResponse.status || !symbolResponse.status || 
-            !nameResponse.status || !balanceResponse.status) {
-          console.warn(`Skipping token ${tokenAddresses[i]} due to failed contract call`);
-          continue;
-        }
-        
-        // Extract values from responses
-        const decimals = decimalResponse.result ?? 18;
-        const symbol = symbolResponse.result ?? 'UNKNOWN';
-        const name = nameResponse.result ?? 'Unknown Token';
-        const balance = balanceResponse.result;
-        
-        // Only add tokens with positive balances and ensure balance is a bigint
-        if (typeof balance === 'bigint' && balance > 0n) {
-          const formattedBalance = formatUnits(balance, decimals as number);
-          
-          tokens.push({
-            address: tokenAddresses[i],
-            symbol: symbol as string,
-            name: name as string,
-            decimals: decimals as number,
-            balance: formattedBalance,
-            rawBalance: balance.toString()
+        try {
+          // Individual contract calls for each token
+          const decimalsPromise = publicClient.readContract({
+            address: tokenAddress,
+            abi: ERC20_ABI,
+            functionName: 'decimals',
           });
+          
+          const symbolPromise = publicClient.readContract({
+            address: tokenAddress,
+            abi: ERC20_ABI,
+            functionName: 'symbol',
+          });
+          
+          const namePromise = publicClient.readContract({
+            address: tokenAddress,
+            abi: ERC20_ABI,
+            functionName: 'name',
+          });
+          
+          const balancePromise = publicClient.readContract({
+            address: tokenAddress,
+            abi: ERC20_ABI,
+            functionName: 'balanceOf',
+            args: [targetAddress as `0x${string}`],
+          });
+          
+          // Execute all promises in parallel
+          const [decimals, symbol, name, balance] = await Promise.all([
+            decimalsPromise,
+            symbolPromise,
+            namePromise,
+            balancePromise
+          ]);
+          
+          // Only add tokens with positive balances
+          if (typeof balance === 'bigint' && balance > 0n) {
+            const formattedBalance = formatUnits(balance, decimals as number);
+            
+            tokens.push({
+              address: tokenAddresses[i],
+              symbol: symbol as string,
+              name: name as string,
+              decimals: decimals as number,
+              balance: formattedBalance,
+              rawBalance: balance.toString()
+            });
+          }
+        } catch (err) {
+          console.warn(`Skipping token ${tokenAddresses[i]} due to failed contract call:`, err);
+          continue;
         }
       }
 
