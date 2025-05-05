@@ -119,7 +119,7 @@ _generateMockLotteries() {
       winningTickets: [42]
     }
   ];
-}
+},
 
   /**
    * Generate mock user tickets for testing
