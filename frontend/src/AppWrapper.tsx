@@ -5,7 +5,14 @@ import App from './App';
 import { config } from './config/wagmiConfig';
 
 // Create a client for React Query
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 3,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+});
 
 /**
  * AppWrapper provides the WagmiProvider and QueryClientProvider

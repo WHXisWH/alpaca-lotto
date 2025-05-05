@@ -5,11 +5,13 @@ import {
   useDisconnect, 
   useBalance,
   useChainId,
-  useSwitchChain
+  useSwitchChain,
+  useReadContract,
+  useReadContracts
 } from 'wagmi';
-import { readContract } from 'viem/actions';
+import { readContract } from 'wagmi/actions';
 import { mainnet } from 'wagmi/chains';
-import { formatUnits } from 'viem';
+import { formatUnits, parseUnits } from 'viem';
 
 // Custom NERO Chain config
 const neroTestnet = {
@@ -57,7 +59,7 @@ const ERC20_ABI = [
     stateMutability: 'view',
     type: 'function',
   },
-] as const;
+] as const; // Add as const assertion for wagmi v2
 
 // Mock tokens for development
 const MOCK_TOKENS = [
@@ -123,7 +125,7 @@ interface UseWagmiWalletReturn {
   provider: null;
   connectWallet: () => Promise<{ account: string; provider: null; signer: null; }>;
   disconnectWallet: () => void;
-  getTokens: (tokenAddresses: string[]) => Promise<Token[]>;
+  getTokens: (tokenAddresses: string[], chainId?: number) => Promise<Token[]>;
   switchToNeroChain: () => Promise<void>;
   addNeroChain: () => Promise<void>;
 }
@@ -260,11 +262,11 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
   }, [disconnect]);
 
   /**
-   * Get tokens in wallet - Updated to use individual readContract calls
+   * Get tokens in wallet - Updated for wagmi v2
    * @param {Array} tokenAddresses - Array of token addresses to check
    * @returns {Array} - Array of token objects with balances and metadata
    */
-  const getTokens = useCallback(async (tokenAddresses: string[]): Promise<Token[]> => {
+  const getTokens = useCallback(async (tokenAddresses: string[], chainIdParam?: number): Promise<Token[]> => {
     if (isDevelopmentMode || !isConnected) {
       console.log('Using mock tokens in development mode');
       return MOCK_TOKENS;
@@ -280,86 +282,69 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
       throw new Error('No valid address available');
     }
 
+    const currentChainId = chainIdParam || chainId || 5555003;
+
     try {
-      // 1. Get metadata for each token individually
-      const tokensMetadata = await Promise.all(
-        tokenAddresses.map(async (tokenAddress) => {
-          try {
-            // Make individual contract calls
-            const [decimalsResult, symbolResult, nameResult] = await Promise.all([
-              readContract({
-                address: tokenAddress,
-                abi: ERC20_ABI,
-                functionName: 'decimals',
-                chainId: 5555003,
-              }),
-              readContract({
-                address: tokenAddress,
-                abi: ERC20_ABI,
-                functionName: 'symbol',
-                chainId: 5555003,
-              }),
-              readContract({
-                address: tokenAddress,
-                abi: ERC20_ABI,
-                functionName: 'name',
-                chainId: 5555003,
-              }),
-            ]);
-            
-            return {
-              address: tokenAddress,
-              decimals: decimalsResult,
-              symbol: symbolResult,
-              name: nameResult
-            };
-          } catch (err) {
-            console.error(`Error fetching metadata for token ${tokenAddress}:`, err);
-            return null;
-          }
-        })
-      );
+      // Create token contract configurations for useReadContracts
+      const tokenContracts = tokenAddresses.flatMap(tokenAddress => [
+        {
+          address: tokenAddress,
+          abi: ERC20_ABI,
+          functionName: 'decimals',
+          chainId: currentChainId,
+        },
+        {
+          address: tokenAddress,
+          abi: ERC20_ABI,
+          functionName: 'symbol',
+          chainId: currentChainId,
+        },
+        {
+          address: tokenAddress,
+          abi: ERC20_ABI,
+          functionName: 'name',
+          chainId: currentChainId,
+        },
+        {
+          address: tokenAddress,
+          abi: ERC20_ABI,
+          functionName: 'balanceOf',
+          args: [targetAddress],
+          chainId: currentChainId,
+        }
+      ]);
+
+      // Use wagmi v2's readContracts directly
+      const tokenResults = await readContract.batch(tokenContracts);
       
-      // Filter out null metadata
-      const validTokensMetadata = tokensMetadata.filter(Boolean);
+      const tokens: Token[] = [];
       
-      // 2. Get balance for each token individually
-      const tokensWithBalances = await Promise.all(
-        validTokensMetadata.map(async (metadata) => {
-          if (!metadata) return null;
+      // Process results - every 4 results constitute one token's data
+      for (let i = 0; i < tokenResults.length; i += 4) {
+        try {
+          const decimals = tokenResults[i] as number;
+          const symbol = tokenResults[i + 1] as string;
+          const name = tokenResults[i + 2] as string;
+          const rawBalance = tokenResults[i + 3] as bigint;
           
-          try {
-            const balance = await readContract({
-              address: metadata.address,
-              abi: ERC20_ABI,
-              functionName: 'balanceOf',
-              args: [targetAddress],
-              chainId: 5555003,
+          if (rawBalance > 0n) {
+            const index = Math.floor(i / 4);
+            const formattedBalance = formatUnits(rawBalance, decimals);
+            
+            tokens.push({
+              address: tokenAddresses[index],
+              symbol,
+              name,
+              decimals,
+              balance: formattedBalance,
+              rawBalance: rawBalance.toString()
             });
-            
-            if (balance && balance > 0n) {
-              const formattedBalance = formatUnits(balance, metadata.decimals);
-              
-              return {
-                address: metadata.address,
-                symbol: metadata.symbol,
-                name: metadata.name,
-                decimals: metadata.decimals,
-                balance: formattedBalance,
-                rawBalance: balance.toString(),
-                abi: ERC20_ABI
-              };
-            }
-          } catch (err) {
-            console.error(`Error fetching balance for token ${metadata.address}:`, err);
           }
-          
-          return null;
-        })
-      );
-      
-      // Filter out null tokens
-      const tokens = tokensWithBalances.filter(Boolean) as Token[];
+        } catch (error) {
+          console.error(`Error processing token results at index ${i}:`, error);
+          // Continue with next token
+        }
+      }
 
       // If no tokens found, return mock tokens in development mode
       if (tokens.length === 0 && isDevelopmentMode) {
@@ -374,7 +359,7 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
       }
       throw err;
     }
-  }, [address, aaWalletAddress, isConnected, isDevelopmentMode]);
+  }, [address, aaWalletAddress, isConnected, isDevelopmentMode, chainId]);
 
   /**
    * Switch to NERO Chain

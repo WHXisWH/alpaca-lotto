@@ -38,7 +38,7 @@ const publicClient = createPublicClient({
 // WalletConnect projectId - should be stored in env variable in production
 const projectId = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID || 'YOUR_PROJECT_ID'
 
-// Create the config
+// Create the config according to wagmi v2 specs
 export const config = createConfig({
   chains: [neroTestnet, mainnet, sepolia],
   connectors: [
@@ -53,7 +53,8 @@ export const config = createConfig({
   },
   // Add multicall configuration
   multicall: {
-    wait: 500, // Wait time in milliseconds
+    batchSize: 1024, // Maximum size of encoded batch calldata
+    wait: 500, // Wait time in milliseconds between requests
   }
 })
 

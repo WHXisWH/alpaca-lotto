@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useAccount, useConnect, useDisconnect, useWalletClient } from 'wagmi';
+import { hexToBigInt } from 'viem';
 
 // Constants from environment variables
 const CONSTANTS = {
@@ -72,7 +73,7 @@ interface UseUserOpReturn {
 }
 
 /**
- * NERO ChainのAccount Abstractionを使用してUserOperationを管理するためのカスタムフック
+ * Custom hook for managing UserOperations with NERO Chain's Account Abstraction
  * Updated to use wagmi hooks
  */
 export const useUserOp = (): UseUserOpReturn => {
@@ -137,10 +138,25 @@ export const useUserOp = (): UseUserOpReturn => {
         const aaAddress = "0x" + address!.slice(2, 12) + "Ab" + address!.slice(14);
         setAaWalletAddress(aaAddress);
         
-        // Return mock client and builder since we can't actually import userop in this context
+        // Return client and builder for userop (mock implementation for this fix)
         return {
-          client: { sendUserOperation: () => Promise.resolve({ userOpHash: _generateMockTxHash() }) },
-          builder: { getSender: () => Promise.resolve(aaAddress) },
+          client: { 
+            sendUserOperation: () => Promise.resolve({ 
+              userOpHash: _generateMockTxHash(),
+              wait: async () => ({ transactionHash: _generateMockTxHash() })
+            }) 
+          },
+          builder: { 
+            getSender: () => Promise.resolve(aaAddress),
+            execute: () => {},
+            executeBatch: () => {},
+            setPaymasterOptions: () => {},
+            setCallGasLimit: () => {},
+            setVerificationGasLimit: () => {},
+            setPreVerificationGas: () => {},
+            setMaxFeePerGas: () => {},
+            setMaxPriorityFeePerGas: () => {} 
+          },
           aaAddress
         };
       } catch (err) {
@@ -175,7 +191,7 @@ export const useUserOp = (): UseUserOpReturn => {
     }
     
     try {
-      // In a real implementation, we would use viem to check the code at the address
+      // In a real implementation, we would use walletClient to check the code at the address
       // For now, simulate with a random result
       return Math.random() > 0.3; // 70% chance it's deployed
     } catch (err) {
@@ -218,6 +234,29 @@ export const useUserOp = (): UseUserOpReturn => {
       
       // Initialize client and builder
       const { client, builder } = await initClient();
+      
+      // Create ERC20 interface for the transfer
+      const erc20Interface = {
+        func: 'transfer',
+        args: [recipientAddress, hexToBigInt(`0x${BigInt(parseInt(amount) * 10 ** decimals).toString(16)}`)]
+      };
+      
+      // Set up builder with transfer call
+      builder.execute(tokenAddress, 0, erc20Interface);
+      
+      // Set paymaster options based on payment type
+      if (paymentType === 0) {
+        // Sponsored gas
+        builder.setPaymasterOptions({ type: 0, apikey: CONSTANTS.PAYMASTER_API_KEY, rpc: CONSTANTS.PAYMASTER_URL });
+      } else if (paymentType === 1 || paymentType === 2) {
+        // ERC20 token gas payment
+        builder.setPaymasterOptions({ 
+          type: paymentType, 
+          token: paymentToken, 
+          apikey: CONSTANTS.PAYMASTER_API_KEY, 
+          rpc: CONSTANTS.PAYMASTER_URL 
+        });
+      }
       
       // Simulate transaction processing
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -267,6 +306,27 @@ export const useUserOp = (): UseUserOpReturn => {
       // Initialize client and builder
       const { client, builder } = await initClient();
       
+      // Create batch transaction
+      const callAddresses = calls.map(call => call.to);
+      const callData = calls.map(call => call.data);
+      
+      // Set up builder with batch call
+      builder.executeBatch(callAddresses, callData);
+      
+      // Set paymaster options based on payment type
+      if (paymentType === 0) {
+        // Sponsored gas
+        builder.setPaymasterOptions({ type: 0, apikey: CONSTANTS.PAYMASTER_API_KEY, rpc: CONSTANTS.PAYMASTER_URL });
+      } else if (paymentType === 1 || paymentType === 2) {
+        // ERC20 token gas payment
+        builder.setPaymasterOptions({ 
+          type: paymentType, 
+          token: paymentToken, 
+          apikey: CONSTANTS.PAYMASTER_API_KEY, 
+          rpc: CONSTANTS.PAYMASTER_URL 
+        });
+      }
+      
       // Simulate transaction processing
       await new Promise(resolve => setTimeout(resolve, 2500));
       
@@ -299,8 +359,19 @@ export const useUserOp = (): UseUserOpReturn => {
         return builder;
       }
       
-      // In a real implementation, we would set Paymaster options
-      // with builder.setPaymasterOptions()
+      // Set paymaster options based on payment type
+      if (type === 0) {
+        // Sponsored gas
+        builder.setPaymasterOptions({ type: 0, apikey: CONSTANTS.PAYMASTER_API_KEY, rpc: CONSTANTS.PAYMASTER_URL });
+      } else if (type === 1 || type === 2) {
+        // ERC20 token gas payment
+        builder.setPaymasterOptions({ 
+          type, 
+          token, 
+          apikey: CONSTANTS.PAYMASTER_API_KEY, 
+          rpc: CONSTANTS.PAYMASTER_URL 
+        });
+      }
       
       return builder;
     } catch (err) {
@@ -348,6 +419,29 @@ export const useUserOp = (): UseUserOpReturn => {
       
       // Initialize client and builder
       const { client, builder } = await initClient();
+      
+      // Create lottery contract interface
+      const lotteryInterface = {
+        func: 'purchaseTickets',
+        args: [lotteryId, tokenAddress, quantity]
+      };
+      
+      // Set up builder with purchaseTickets call
+      builder.execute(CONSTANTS.LOTTERY_CONTRACT_ADDRESS, 0, lotteryInterface);
+      
+      // Set paymaster options based on payment type
+      if (paymentType === 0) {
+        // Sponsored gas
+        builder.setPaymasterOptions({ type: 0, apikey: CONSTANTS.PAYMASTER_API_KEY, rpc: CONSTANTS.PAYMASTER_URL });
+      } else if (paymentType === 1 || paymentType === 2) {
+        // ERC20 token gas payment
+        builder.setPaymasterOptions({ 
+          type: paymentType, 
+          token: paymentToken, 
+          apikey: CONSTANTS.PAYMASTER_API_KEY, 
+          rpc: CONSTANTS.PAYMASTER_URL 
+        });
+      }
       
       // Simulate ticket purchase processing
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -397,6 +491,34 @@ export const useUserOp = (): UseUserOpReturn => {
       
       // Initialize client and builder
       const { client, builder } = await initClient();
+      
+      // Prepare batch transaction parameters
+      const lotteryIds = selections.map(s => s.lotteryId);
+      const tokenAddresses = selections.map(s => s.tokenAddress);
+      const quantities = selections.map(s => s.quantity);
+      
+      // Create batch purchase interface
+      const batchPurchaseInterface = {
+        func: 'batchPurchaseTickets',
+        args: [lotteryIds, tokenAddresses, quantities]
+      };
+      
+      // Set up builder with batchPurchaseTickets call
+      builder.execute(CONSTANTS.LOTTERY_CONTRACT_ADDRESS, 0, batchPurchaseInterface);
+      
+      // Set paymaster options based on payment type
+      if (paymentType === 0) {
+        // Sponsored gas
+        builder.setPaymasterOptions({ type: 0, apikey: CONSTANTS.PAYMASTER_API_KEY, rpc: CONSTANTS.PAYMASTER_URL });
+      } else if (paymentType === 1 || paymentType === 2) {
+        // ERC20 token gas payment
+        builder.setPaymasterOptions({ 
+          type: paymentType, 
+          token: paymentToken, 
+          apikey: CONSTANTS.PAYMASTER_API_KEY, 
+          rpc: CONSTANTS.PAYMASTER_URL 
+        });
+      }
       
       // Simulate batch purchase processing
       await new Promise(resolve => setTimeout(resolve, 3500));

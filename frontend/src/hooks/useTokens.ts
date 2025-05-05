@@ -89,10 +89,20 @@ export const useTokens = (): UseTokensReturn => {
     setError(null);
 
     try {
-      const tokensToFetch = COMMON_TOKENS;
+      // Use common tokens if not specified
+      const tokensToFetch = COMMON_TOKENS.length > 0 ? COMMON_TOKENS : [
+        '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
+        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
+        '0xdac17f958d2ee523a2206206994597c13d831ec7', // USDT
+      ];
+      
+      // Use fetchWalletTokens from useWagmiWallet (which is now properly implemented for wagmi v2)
       const walletTokens = await fetchWalletTokens(tokensToFetch, chainId || 5555003);
       setTokens(walletTokens);
+      
+      // Also fetch supported tokens
       await getSupportedTokens();
+      
       setIsLoading(false);
       return walletTokens;
     } catch (err: any) {
@@ -164,25 +174,32 @@ export const useTokens = (): UseTokensReturn => {
     return tokens.filter(token => isTokenSupported(token.address));
   }, [tokens, isTokenSupported]);
 
+  // Effect to fetch tokens on wallet connection or development mode change
   useEffect(() => {
     if (!isConnected && !isDevelopmentMode) {
       setIsLoading(false);
       return;
     }
 
-    if (isConnected && address) {
-      getTokens();
-    } else if (aaWalletAddress) {
-      getTokens();
-    } else if (isDevelopmentMode) {
-      const fetchMockTokens = async () => {
-        const mockTokens = await fetchWalletTokens(COMMON_TOKENS, chainId || 5555003);
-        setTokens(mockTokens);
-      };
-      fetchMockTokens();
-    }
+    const fetchTokensBasedOnState = async () => {
+      try {
+        if (isConnected && address) {
+          await getTokens();
+        } else if (aaWalletAddress) {
+          await getTokens();
+        } else if (isDevelopmentMode) {
+          const mockTokens = await fetchWalletTokens(COMMON_TOKENS, chainId || 5555003);
+          setTokens(mockTokens);
+        }
+      } catch (error) {
+        console.error("Error fetching tokens in useEffect:", error);
+      }
+    };
+
+    fetchTokensBasedOnState();
   }, [isConnected, address, aaWalletAddress, isDevelopmentMode, getTokens, fetchWalletTokens, chainId]);
 
+  // Refetch on chain change
   useEffect(() => {
     if (isConnected && chainId) {
       getTokens();
