@@ -55,7 +55,7 @@ const ERC20_ABI = [
     stateMutability: 'view',
     type: 'function',
   },
-] as const; // Add as const assertion for wagmi v2
+] as const;
 
 // Mock tokens for development
 const MOCK_TOKENS = [
@@ -147,11 +147,11 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
   // Handle AA wallet address derivation
   useEffect(() => {
     if (address) {
-      // Generate AA wallet address from the EOA address (same logic as original hook)
-      const aaAddress = "0x" + address.slice(2, 12) + "Ab" + address.slice(14);
-      setAaWalletAddress(aaAddress);
+      // FIX: Instead of creating an invalid format address, we'll use the EOA address for now
+      // This solves the checksum validation errors until a proper AA address generation is implemented
+      setAaWalletAddress(address);
     } else {
-      // In development mode, provide a mock AA address
+      // In development mode, provide a valid mock AA address
       if (isDevelopmentMode) {
         setAaWalletAddress("0x8901b77345cC8936Bd6E142570AdE93f5ccF3417");
       } else {

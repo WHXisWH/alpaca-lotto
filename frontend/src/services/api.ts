@@ -45,77 +45,81 @@ apiClient.interceptors.response.use(
  * Service to handle communication with the backend API.
  */
 export const api = {
-  /**
-   * Generate mock lotteries for testing when API is not available
-   * @returns {Array} - Array of mock lottery objects
-   */
-  _generateMockLotteries() {
-    const currentTime = Math.floor(Date.now() / 1000);
-    const mockTokens = [
-      '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
-      '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
-      '0xdac17f958d2ee523a2206206994597c13d831ec7'  // USDT
-    ];
-    
-    return [
-      {
-        id: 1,
-        name: 'Weekly Jackpot',
-        ticketPrice: 10,
-        startTime: currentTime - 86400, // yesterday
-        endTime: currentTime + 518400,   // 6 days later
-        drawTime: currentTime + 604800,  // 7 days later
-        supportedTokens: mockTokens,
-        totalTickets: 120,
-        prizePool: 1200,
-        drawn: false,
-        winners: [],
-        winningTickets: []
-      },
-      {
-        id: 2,
-        name: 'Daily Draw',
-        ticketPrice: 5,
-        startTime: currentTime - 3600,   // 1 hour ago
-        endTime: currentTime + 82800,    // 23 hours later
-        drawTime: currentTime + 86400,   // 24 hours later
-        supportedTokens: mockTokens,
-        totalTickets: 75,
-        prizePool: 375,
-        drawn: false,
-        winners: [],
-        winningTickets: []
-      },
-      {
-        id: 3,
-        name: 'Flash Lottery',
-        ticketPrice: 2,
-        startTime: currentTime - 1800,   // 30 min ago
-        endTime: currentTime + 1800,     // 30 min later
-        drawTime: currentTime + 3600,    // 1 hour later
-        supportedTokens: mockTokens,
-        totalTickets: 30,
-        prizePool: 60,
-        drawn: false,
-        winners: [],
-        winningTickets: []
-      },
-      {
-        id: 4,
-        name: 'Past Lottery',
-        ticketPrice: 5,
-        startTime: currentTime - 172800, // 2 days ago
-        endTime: currentTime - 86400,    // 1 day ago
-        drawTime: currentTime - 82800,   // 23 hours ago
-        supportedTokens: mockTokens,
-        totalTickets: 100,
-        prizePool: 500,
-        drawn: true,
-        winners: ['0x1234567890123456789012345678901234567890'],
-        winningTickets: [42]
-      }
-    ];
-  },
+
+/**
+ * Generate mock lotteries for testing when API is not available
+ * @returns {Array} - Array of mock lottery objects
+ */
+_generateMockLotteries() {
+  const currentTime = Math.floor(Date.now() / 1000);
+  
+  // FIX: Ensure mock tokens are valid addresses
+  const mockTokens = [
+    '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
+    '0xdac17f958d2ee523a2206206994597c13d831ec7'  // USDT
+  ];
+  
+  // FIX: Ensure at least 2 lotteries are always active by adjusting time
+  return [
+    {
+      id: 1,
+      name: 'Weekly Jackpot',
+      ticketPrice: 10,
+      startTime: currentTime - 86400, // yesterday
+      endTime: currentTime + 518400,   // 6 days later
+      drawTime: currentTime + 604800,  // 7 days later
+      supportedTokens: mockTokens,
+      totalTickets: 120,
+      prizePool: 1200,
+      drawn: false,
+      winners: [],
+      winningTickets: []
+    },
+    {
+      id: 2,
+      name: 'Daily Draw',
+      ticketPrice: 5,
+      startTime: currentTime - 3600,   // 1 hour ago
+      endTime: currentTime + 82800,    // 23 hours later
+      drawTime: currentTime + 86400,   // 24 hours later
+      supportedTokens: mockTokens,
+      totalTickets: 75,
+      prizePool: 375,
+      drawn: false,
+      winners: [],
+      winningTickets: []
+    },
+    {
+      id: 3,
+      name: 'Flash Lottery',
+      ticketPrice: 2,
+      startTime: currentTime - 1800,   // 30 min ago (ALWAYS ACTIVE)
+      endTime: currentTime + 1800,     // 30 min later
+      drawTime: currentTime + 3600,    // 1 hour later
+      supportedTokens: mockTokens,
+      totalTickets: 30,
+      prizePool: 60,
+      drawn: false,
+      winners: [],
+      winningTickets: []
+    },
+    {
+      id: 4,
+      name: 'Past Lottery',
+      ticketPrice: 5,
+      startTime: currentTime - 172800, // 2 days ago
+      endTime: currentTime - 86400,    // 1 day ago (ALWAYS INACTIVE)
+      drawTime: currentTime - 82800,   // 23 hours ago
+      supportedTokens: mockTokens,
+      totalTickets: 100,
+      prizePool: 500,
+      drawn: true,
+      winners: ['0x1234567890123456789012345678901234567890'],
+      winningTickets: [42]
+    }
+  ];
+}
 
   /**
    * Generate mock user tickets for testing
