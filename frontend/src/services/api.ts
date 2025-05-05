@@ -200,7 +200,7 @@ _generateMockLotteries() {
       console.log('Using mock data...');
       return {
         success: true,
-        lotteries: this._generateMockLotteries()
+        lotteries: api._generateMockLotteries()
       };
     }
   },
@@ -217,7 +217,7 @@ _generateMockLotteries() {
       console.error('Error fetching active lotteries:', error);
       // Filter mock lotteries for active ones
       const currentTime = Math.floor(Date.now() / 1000);
-      const mockLotteries = this._generateMockLotteries();
+      const mockLotteries = api._generateMockLotteries();
       const activeLotteries = mockLotteries.filter(
         lottery => lottery.startTime <= currentTime && lottery.endTime > currentTime
       );
@@ -241,7 +241,7 @@ _generateMockLotteries() {
     } catch (error) {
       console.error(`Error fetching lottery details (ID: ${lotteryId}):`, error);
       // Find lottery in mock data
-      const mockLotteries = this._generateMockLotteries();
+      const mockLotteries = api._generateMockLotteries();
       const lottery = mockLotteries.find(l => l.id === lotteryId);
       
       return {
@@ -265,7 +265,7 @@ _generateMockLotteries() {
       console.error(`Error fetching user tickets (Lottery: ${lotteryId}, User: ${address}):`, error);
       return {
         success: true,
-        tickets: this._generateMockTickets(lotteryId)
+        tickets: api._generateMockTickets(lotteryId)
       };
     }
   },
@@ -331,7 +331,7 @@ _generateMockLotteries() {
       console.error('Error optimizing token:', error);
       return {
         success: true,
-        ...this._generateMockRecommendation(tokens)
+        ...api._generateMockRecommendation(tokens)
       };
     }
   },
