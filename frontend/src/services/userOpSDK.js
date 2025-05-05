@@ -105,11 +105,11 @@ class UserOpSDK {
       console.error('Error initializing UserOpSDK:', error);
       throw error;
     }
-  },
+  }
   
   _createMockAddress() {
     return '0x' + [...Array(40)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-  },
+  }
   
   _createMockClient() {
     return {
@@ -125,7 +125,7 @@ class UserOpSDK {
         preVerificationGas: '0xc350'
       })
     };
-  },
+  }
   
   _createMockBuilder() {
     return {
@@ -139,7 +139,7 @@ class UserOpSDK {
       setMaxFeePerGas: () => {},
       setMaxPriorityFeePerGas: () => {}
     };
-  },
+  }
   
   async _getAAWalletAddress() {
     if (this.builder && typeof this.builder.getSender === 'function') {
