@@ -25,6 +25,9 @@ export default defineConfig(({ mode }) => {
         }, {}),
       },
     },
+    optimizeDeps: {
+      include: ['wagmi', 'wagmi/actions', 'viem'],
+    },
     server: {
       port: 3000,
       open: true,
