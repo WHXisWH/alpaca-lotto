@@ -50,11 +50,11 @@ export const api = {
 
 _generateMockLotteries() {
   return mockData.generateMockLotteries();
-}
+},
 
   _generateMockTickets(lotteryId) {
   return mockData.generateMockTickets(lotteryId);
-}
+},
 
   /**
    * Generate mock token recommendations
