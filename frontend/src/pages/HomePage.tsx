@@ -9,6 +9,7 @@ import useWagmiWallet from '../hooks/useWagmiWallet'; // Using our new wagmi wal
 import useTokens from '../hooks/useTokens';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
+import { api } from '../services/api';
 
 /**
  * Home page of the application
@@ -25,6 +26,7 @@ const HomePage = () => {
   const { 
     lotteries, 
     activeLotteries, 
+    pastLotteries, 
     userTickets, 
     isLoading: lotteriesLoading, 
     error: lotteriesError,
@@ -53,42 +55,19 @@ const HomePage = () => {
   const [isSessionKeyModalOpen, setIsSessionKeyModalOpen] = useState(false);
   const [ticketQuantity, setTicketQuantity] = useState(1);
   const [error, setError] = useState(null);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
   
-  // Fetch lotteries when wallet is connected
+  // Log component mount and lottery state
   useEffect(() => {
-    const loadLotteries = async () => {
-      try {
-        await fetchLotteries();
-      } catch (err) {
-        setError(err.message || 'Failed to load lotteries');
-      }
-    };
-    
-    if (isConnected || isDevelopmentMode) {
-      loadLotteries();
-    }
-  }, [isConnected, fetchLotteries, isDevelopmentMode]);
-  
-  // Fetch user tickets when lottery is selected
-  useEffect(() => {
-    const loadTickets = async () => {
-      try {
-        if (selectedLottery) {
-          await fetchUserTickets(selectedLottery.id);
-        }
-      } catch (err) {
-        console.error('Error fetching user tickets:', err);
-      }
-    };
-    
-    if ((isConnected || isDevelopmentMode) && selectedLottery) {
-      loadTickets();
-    }
-  }, [isConnected, selectedLottery, fetchUserTickets, isDevelopmentMode]);
+    console.log('HomePage mounted, lottery state:');
+    console.log('activeLotteries:', activeLotteries);
+    console.log('selectedLottery:', selectedLottery);
+  }, []);
   
   // Select first lottery when lottery list changes
   useEffect(() => {
     if (activeLotteries && activeLotteries.length > 0 && !selectedLottery) {
+      console.log('Setting selected lottery to first active lottery');
       setSelectedLottery(activeLotteries[0]);
     }
   }, [activeLotteries, selectedLottery]);
@@ -199,13 +178,11 @@ const HomePage = () => {
    * Retry loading data
    */
   const handleRetry = async () => {
+    console.log('Retrying data load...');
     setError(null);
+    setIsDataLoaded(false);
     try {
       await fetchLotteries();
-      if (tokens.length === 0) {
-        // No need to handle this error as it will be captured in the tokensError
-        getRecommendation();
-      }
     } catch (err) {
       setError(err.message || 'Failed to reload data');
     }
@@ -278,6 +255,71 @@ const HomePage = () => {
   
   // No active lotteries
   if (activeLotteries.length === 0) {
+    // Development mode fallback
+    if (isDevelopmentMode && lotteries.length > 0) {
+      console.warn('Development mode: Active lotteries is empty -> forcing fallback display');
+      
+      // Get current time to calculate lottery timing
+      const currentTime = Math.floor(Date.now() / 1000);
+      
+      // Create a copy of the first lottery and force it to be active
+      const forcedActiveLotteries = lotteries.slice(0, 3).map(lottery => ({
+        ...lottery,
+        startTime: currentTime - 3600, // 1 hour ago
+        endTime: currentTime + 86400   // 24 hours later
+      }));
+      
+      return (
+        <div className="lottery-container">
+          <div className="dev-mode-notice">
+            <p>Development Mode: Displaying mock lotteries as active. No active lotteries found in the actual data.</p>
+            <button className="retry-button" onClick={handleRetry}>
+              Retry Loading
+            </button>
+          </div>
+          
+          <div className="lottery-grid">
+            <div className="lottery-list-panel">
+              <ActiveLotteries 
+                lotteries={forcedActiveLotteries}
+                isLoading={false}
+                onSelect={handleSelectLottery}
+                selectedId={selectedLottery?.id}
+              />
+            </div>
+            
+            {selectedLottery && (
+              <div className="lottery-details-panel">
+                <LotteryDetails 
+                  lottery={selectedLottery}
+                  userTickets={userTickets[selectedLottery.id] || []}
+                />
+                
+                <div className="action-buttons">
+                  <button
+                    className="primary-button"
+                    onClick={handleOpenTicketModal}
+                  >
+                    Purchase Tickets
+                  </button>
+                  
+                  {!hasActiveSessionKey && (
+                    <button
+                      className="secondary-button"
+                      onClick={handleOpenSessionKeyModal}
+                    >
+                      Enable Quick Play
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    // Regular no lotteries display
     return (
       <div className="no-lotteries">
         <h2>No active lotteries</h2>
@@ -294,6 +336,7 @@ const HomePage = () => {
     );
   }
   
+  // Regular display with active lotteries
   return (
     <div className="home-page">
       <div className="lottery-container">
