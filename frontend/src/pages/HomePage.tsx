@@ -56,6 +56,7 @@ const HomePage = () => {
   const [ticketQuantity, setTicketQuantity] = useState(1);
   const [error, setError] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [fallbackLotteries, setFallbackLotteries] = useState<Lottery[]>([]);
   
   // Log component mount and lottery state
   useEffect(() => {
@@ -71,7 +72,22 @@ const HomePage = () => {
       setSelectedLottery(activeLotteries[0]);
     }
   }, [activeLotteries, selectedLottery]);
- 
+
+  useEffect(() => {
+  if (activeLotteries.length === 0 && lotteries.length > 0) {
+    const currentTime = Math.floor(Date.now() / 1000);
+    const forced = lotteries.slice(0, 3).map(lottery => ({
+      ...lottery,
+      startTime: currentTime - 3600,
+      endTime: currentTime + 86400,
+    }));
+    setFallbackLotteries(forced);
+
+    if (!selectedLottery) {
+      setSelectedLottery(forced[0]);
+    }
+  }
+}, [activeLotteries, lotteries, selectedLottery]);
  
   // Update recommendation when token list and selected lottery change
   useEffect(() => {
@@ -254,76 +270,49 @@ const HomePage = () => {
     );
   }
   
-  // No active lotteries
-if (activeLotteries.length === 0) {
-  const currentTime = Math.floor(Date.now() / 1000);
-
-  // fallback lotteries if we have data but no active ones
-  if (lotteries.length > 0) {
-    const fallbackLotteries = lotteries.slice(0, 3).map(lottery => ({
-      ...lottery,
-      startTime: currentTime - 3600,
-      endTime: currentTime + 86400,
-    }));
-
-    return (
-      <div className="lottery-container">
-        <div className="dev-mode-notice">
-          <p>Fallback: Displaying forced active lotteries since none are active.</p>
-          <button className="retry-button" onClick={handleRetry}>
-            Retry Loading
-          </button>
-        </div>
-
-        <div className="lottery-grid">
-          <div className="lottery-list-panel">
-            <ActiveLotteries 
-              lotteries={fallbackLotteries}
-              isLoading={false}
-              onSelect={handleSelectLottery}
-              selectedId={selectedLottery?.id}
-            />
-          </div>
-
-          {selectedLottery && (
-            <div className="lottery-details-panel">
-              <LotteryDetails 
-                lottery={selectedLottery}
-                userTickets={userTickets[selectedLottery.id] || []}
-              />
-              <div className="action-buttons">
-                <button className="primary-button" onClick={handleOpenTicketModal}>
-                  Purchase Tickets
-                </button>
-                {!hasActiveSessionKey && (
-                  <button className="secondary-button" onClick={handleOpenSessionKeyModal}>
-                    Enable Quick Play
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
+// No active lotteries
+if (activeLotteries.length === 0 && fallbackLotteries.length > 0) {
   return (
-    <div className="no-lotteries">
-      <h2>No active lotteries</h2>
-      <p>There are no lotteries currently in progress. Please try again later.</p>
-      {isDevelopmentMode && (
-        <div className="dev-mode-note">
-          <p>In development mode, you should see mock lotteries. If not, check the console for errors.</p>
-          <button className="retry-button" onClick={handleRetry}>
-            Retry Loading
-          </button>
+    <div className="lottery-container">
+      <div className="dev-mode-notice">
+        <p>Fallback: Displaying forced active lotteries since none are active.</p>
+        <button className="retry-button" onClick={handleRetry}>
+          Retry Loading
+        </button>
+      </div>
+
+      <div className="lottery-grid">
+        <div className="lottery-list-panel">
+          <ActiveLotteries 
+            lotteries={fallbackLotteries}
+            isLoading={false}
+            onSelect={handleSelectLottery}
+            selectedId={selectedLottery?.id}
+          />
         </div>
-      )}
+
+        {selectedLottery && (
+          <div className="lottery-details-panel">
+            <LotteryDetails 
+              lottery={selectedLottery}
+              userTickets={userTickets[selectedLottery.id] || []}
+            />
+            <div className="action-buttons">
+              <button className="primary-button" onClick={handleOpenTicketModal}>
+                Purchase Tickets
+              </button>
+              {!hasActiveSessionKey && (
+                <button className="secondary-button" onClick={handleOpenSessionKeyModal}>
+                  Enable Quick Play
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
-}
-    
+}    
   // Regular display with active lotteries
   return (
     <div className="home-page">
