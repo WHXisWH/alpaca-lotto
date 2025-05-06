@@ -54,7 +54,7 @@ export const api = {
 _generateMockLotteries() {
   const currentTime = Math.floor(Date.now() / 1000);
   
-  // FIX: Ensure mock tokens are valid addresses
+  // Valid mock tokens
   const mockTokens = [
     '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
     '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
@@ -64,7 +64,7 @@ _generateMockLotteries() {
   console.log("Generating mock lotteries with current time:", currentTime);
   
   // ALWAYS create at least 3 active lotteries
-  return [
+  const mockLotteries = [
     {
       id: 1,
       name: 'Weekly Jackpot',
@@ -122,6 +122,10 @@ _generateMockLotteries() {
       winningTickets: [42]
     }
   ];
+  
+  console.log("Generated mock lotteries:", mockLotteries.length);
+  
+  return mockLotteries;
 },
 
   /**
