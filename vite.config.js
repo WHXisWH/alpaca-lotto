@@ -6,6 +6,9 @@ export default defineConfig(({ mode }) => {
   // Load env file based on mode
   const env = loadEnv(mode, process.cwd(), '');
   
+  console.log('Vite config mode:', mode);
+  console.log('Environment variables:', Object.keys(env));
+  
   return {
     plugins: [react()],
     resolve: {
@@ -35,8 +38,10 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true,
-        },
+          rewrite: (path) => path.replace(/^\/api/, '')
+        }
       },
+      cors: true
     },
     build: {
       outDir: 'dist',
