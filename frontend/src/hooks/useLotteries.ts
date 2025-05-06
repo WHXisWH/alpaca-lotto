@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useChainId, useWalletClient } from 'wagmi'; 
 import { api } from '../services/api';
 import useWagmiWallet from './useWagmiWallet';
-
+import mockData from '../mock/mockLotteries';
 interface Lottery {
   id: number;
   name: string;
@@ -67,224 +67,143 @@ export const useLotteries = (): UseLotteriesReturn => {
   const [error, setError] = useState<string | null>(null);
   const [isDataLoaded, setIsDataLoaded] = useState<boolean>(false);
   
-  /**
-   * Fetch all lotteries
-   */
   const fetchLotteries = useCallback(async (): Promise<Lottery[]> => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      console.log("Fetching lotteries...");
-      const response = await api.getLotteries();
-      
-      if (response.success && response.lotteries && response.lotteries.length > 0) {
-        setLotteries(response.lotteries);
-        
-        // Get current time
-        const currentTime = Math.floor(Date.now() / 1000);
-        console.log("Current time:", currentTime);
-        
-        // Categorize active and past lotteries
-        // Improved filtering to catch edge cases
-        const active = response.lotteries.filter(lottery => 
-          lottery.startTime <= currentTime && lottery.endTime > currentTime
-        );
-        
-        console.log("Active lotteries after filtering:", active.length);
-        
-        // If in development mode and no active lotteries, show all lotteries as active
-        if (active.length === 0 && isDevelopmentMode) {
-          console.log('No active lotteries found, forcing active lotteries in development mode');
-          // Force the first 3 lotteries to be active by adjusting their times
-          const forcedActive = response.lotteries.slice(0, 3).map(lottery => ({
-            ...lottery,
-            // Force current time to be within start and end times
-            startTime: currentTime - 3600, // 1 hour ago
-            endTime: currentTime + 86400   // 24 hours later
-          }));
-          setActiveLotteries(forcedActive);
-        } else {
-          setActiveLotteries(active);
-        }
-        
-        // Filter past lotteries
-        const past = response.lotteries.filter(lottery => 
-          lottery.endTime <= currentTime || lottery.drawn
-        );
-        
-        setPastLotteries(past);
-        setIsDataLoaded(true);
-        setIsLoading(false);
-        return response.lotteries;
-      } else {
-        console.warn('No lotteries returned from API, using mock data');
-        // If no lotteries returned or empty array, use mock data in development mode
-        if (isDevelopmentMode) {
-          console.log('Development mode active, using mock data');
-          const mockLotteries = api._generateMockLotteries ? 
-            api._generateMockLotteries() : [];
-        
-          console.log('Generated mock lotteries:', mockLotteries);
-        
-          setLotteries(mockLotteries);
-        
-          const currentTime = Math.floor(Date.now() / 1000);
-          let active = mockLotteries.filter(lottery => 
-            lottery.startTime <= currentTime && lottery.endTime > currentTime
-          );
-        
-          if (active.length === 0) {
-            console.log('No active lotteries found, showing first mock lottery as active');
-            // If no active lotteries are found, make the first one active
-            if (mockLotteries.length > 0) {
-              // Create a deep copy to avoid modifying the original
-              const forcedActive = JSON.parse(JSON.stringify(mockLotteries[0]));
-              forcedActive.startTime = currentTime - 3600; // 1 hour ago
-              forcedActive.endTime = currentTime + 86400;  // 24 hours later
-              active = [forcedActive];
-            }
-          }
-        
-          console.log('Active lotteries:', active);
-          setActiveLotteries(active);
-        
-          const past = mockLotteries.filter(lottery => 
-            lottery.endTime <= currentTime || lottery.drawn
-          );
-        
-          setPastLotteries(past);
-          setIsDataLoaded(true);
-          setIsLoading(false);
-          return mockLotteries;
-        }
-        
-        setIsLoading(false);
-        return [];
-      }
-    } catch (err: any) {
-      console.error('Error fetching lotteries:', err);
-      setError(err.message || 'Error fetching lotteries');
-      
-      // On error, use mock data in development mode
-      if (isDevelopmentMode) {
-        console.log('Error fetching lotteries, using mock data instead');
-        const mockLotteries = api._generateMockLotteries ? 
-          api._generateMockLotteries() : [];
-        
-        setLotteries(mockLotteries);
-        
-        // Categorize active and past mock lotteries
-        const currentTime = Math.floor(Date.now() / 1000);
-        let active = mockLotteries.filter(lottery => 
-          lottery.startTime <= currentTime && lottery.endTime > currentTime
-        );
-        
-        // If no active mock lotteries, make the first one active
-        if (active.length === 0 && mockLotteries.length > 0) {
-          // Deep copy to avoid modifying the original
-          const forcedActive = JSON.parse(JSON.stringify(mockLotteries[0]));
-          forcedActive.startTime = currentTime - 3600; // 1 hour ago
-          forcedActive.endTime = currentTime + 86400;  // 24 hours later
-          active = [forcedActive];
-        }
-        
-        setActiveLotteries(active);
-        
-        const past = mockLotteries.filter(lottery => 
-          lottery.endTime <= currentTime || lottery.drawn
-        );
-        
-        setPastLotteries(past);
-        setIsDataLoaded(true);
-        setIsLoading(false);
-        return mockLotteries;
-      }
-      
-      setIsLoading(false);
-      return [];
-    }
-  }, [isDevelopmentMode]);
+  setIsLoading(true);
+  setError(null);
   
-  /**
-   * Fetch only active lotteries
-   */
-  const fetchActiveLotteries = useCallback(async (): Promise<Lottery[]> => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const response = await api.getActiveLotteries();
+  try {
+    // Always check if we're in development mode first
+    if (isDevelopmentMode) {
+      console.log('Development mode active, using mock data');
       
-      if (response.success && response.lotteries && response.lotteries.length > 0) {
-        setActiveLotteries(response.lotteries);
-        setIsLoading(false);
-        return response.lotteries;
-      } else {
-        // If no active lotteries returned, use mock data in development mode
-        if (isDevelopmentMode) {
-          console.log('No active lotteries returned, using mock data');
-          const mockLotteries = api._generateMockLotteries ? 
-            api._generateMockLotteries() : [];
-          
-          const currentTime = Math.floor(Date.now() / 1000);
-          let activeMockLotteries = mockLotteries.filter(lottery => 
-            lottery.startTime <= currentTime && lottery.endTime > currentTime
-          );
-          
-          // If no active mock lotteries in development mode, show all mock lotteries
-          if (activeMockLotteries.length === 0 && isDevelopmentMode) {
-            console.log('No active mock lotteries found, showing first mock lottery as active');
-            if (mockLotteries.length > 0) {
-              // Create a deep copy to avoid modifying the original
-              const forcedActive = JSON.parse(JSON.stringify(mockLotteries[0]));
-              forcedActive.startTime = currentTime - 3600; // 1 hour ago
-              forcedActive.endTime = currentTime + 86400;  // 24 hours later
-              activeMockLotteries = [forcedActive];
-            }
-          }
-          
-          setActiveLotteries(activeMockLotteries);
-          setIsLoading(false);
-          return activeMockLotteries;
-        }
-      }
+      // Get mock data
+      const mockLotteries = mockData.generateMockLotteries();
+      const activeMockLotteries = mockData.getActiveMockLotteries();
       
+      console.log('Generated mock lotteries:', mockLotteries.length);
+      console.log('Active mock lotteries:', activeMockLotteries.length);
+      
+      // Set all states at once with reliable mock data
+      setLotteries(mockLotteries);
+      setActiveLotteries(activeMockLotteries);
+      setPastLotteries(mockLotteries.filter(lottery => lottery.drawn));
+      setIsDataLoaded(true);
       setIsLoading(false);
-      return [];
-    } catch (err: any) {
-      console.error('Error fetching active lotteries:', err);
-      setError(err.message || 'Error fetching active lotteries');
       
-      // On error, use mock data in development mode
-      if (isDevelopmentMode) {
-        console.log('Error fetching active lotteries, using mock data instead');
-        const mockLotteries = api._generateMockLotteries ? 
-          api._generateMockLotteries() : [];
-        
-        const currentTime = Math.floor(Date.now() / 1000);
-        let activeMockLotteries = mockLotteries.filter(lottery => 
-          lottery.startTime <= currentTime && lottery.endTime > currentTime
-        );
-        
-        // If no active mock lotteries, make the first one active
-        if (activeMockLotteries.length === 0 && mockLotteries.length > 0) {
-          // Deep copy to avoid modifying the original
-          const forcedActive = JSON.parse(JSON.stringify(mockLotteries[0]));
-          forcedActive.startTime = currentTime - 3600; // 1 hour ago
-          forcedActive.endTime = currentTime + 86400;  // 24 hours later
-          activeMockLotteries = [forcedActive];
-        }
-        
-        setActiveLotteries(activeMockLotteries);
-        setIsLoading(false);
-        return activeMockLotteries;
-      }
-      
-      setIsLoading(false);
-      return [];
+      return mockLotteries;
     }
-  }, [isDevelopmentMode]);
+
+    // Normal API flow for production
+    console.log("Fetching lotteries...");
+    const response = await api.getLotteries();
+    
+    if (response.success && response.lotteries && response.lotteries.length > 0) {
+      setLotteries(response.lotteries);
+      
+      // Get current time
+      const currentTime = Math.floor(Date.now() / 1000);
+      
+      // Categorize active and past lotteries
+      const active = response.lotteries.filter(lottery => 
+        lottery.startTime <= currentTime && lottery.endTime > currentTime
+      );
+      
+      setActiveLotteries(active);
+      
+      // Filter past lotteries
+      const past = response.lotteries.filter(lottery => 
+        lottery.endTime <= currentTime || lottery.drawn
+      );
+      
+      setPastLotteries(past);
+      setIsDataLoaded(true);
+      setIsLoading(false);
+      return response.lotteries;
+    } else {
+      console.warn('No lotteries returned from API, using mock data');
+      
+      // Fallback to mock data if API returns empty
+      const mockLotteries = mockData.generateMockLotteries();
+      const activeMockLotteries = mockData.getActiveMockLotteries();
+      
+      setLotteries(mockLotteries);
+      setActiveLotteries(activeMockLotteries);
+      setPastLotteries(mockLotteries.filter(lottery => lottery.drawn));
+      setIsDataLoaded(true);
+      setIsLoading(false);
+      
+      return mockLotteries;
+    }
+  } catch (err: any) {
+    console.error('Error fetching lotteries:', err);
+    setError(err.message || 'Error fetching lotteries');
+    
+    // On error, use mock data in development mode
+    if (isDevelopmentMode) {
+      console.log('Error fetching lotteries, using mock data instead');
+      
+      const mockLotteries = mockData.generateMockLotteries();
+      const activeMockLotteries = mockData.getActiveMockLotteries();
+      
+      setLotteries(mockLotteries);
+      setActiveLotteries(activeMockLotteries);
+      setPastLotteries(mockLotteries.filter(lottery => lottery.drawn));
+      setIsDataLoaded(true);
+      setIsLoading(false);
+      
+      return mockLotteries;
+    }
+    
+    setIsLoading(false);
+    return [];
+  }
+}, [isDevelopmentMode]);
+  
+  const fetchActiveLotteries = useCallback(async (): Promise<Lottery[]> => {
+  setIsLoading(true);
+  setError(null);
+  
+  try {
+    // Check for development mode first for consistency
+    if (isDevelopmentMode) {
+      console.log('Using mock data for active lotteries');
+      const activeMockLotteries = mockData.getActiveMockLotteries();
+      setActiveLotteries(activeMockLotteries);
+      setIsLoading(false);
+      return activeMockLotteries;
+    }
+    
+    const response = await api.getActiveLotteries();
+    
+    if (response.success && response.lotteries && response.lotteries.length > 0) {
+      setActiveLotteries(response.lotteries);
+      setIsLoading(false);
+      return response.lotteries;
+    } else {
+      // If no active lotteries returned, use mock data in development mode
+      console.log('No active lotteries returned, using mock data');
+      const activeMockLotteries = mockData.getActiveMockLotteries();
+      setActiveLotteries(activeMockLotteries);
+      setIsLoading(false);
+      return activeMockLotteries;
+    }
+  } catch (err: any) {
+    console.error('Error fetching active lotteries:', err);
+    setError(err.message || 'Error fetching active lotteries');
+    
+    // On error, use mock data
+    if (isDevelopmentMode) {
+      console.log('Error fetching active lotteries, using mock data instead');
+      const activeMockLotteries = mockData.getActiveMockLotteries();
+      setActiveLotteries(activeMockLotteries);
+      setIsLoading(false);
+      return activeMockLotteries;
+    }
+    
+    setIsLoading(false);
+    return [];
+  }
+}, [isDevelopmentMode]);
   
   /**
    * Fetch details of a specific lottery
