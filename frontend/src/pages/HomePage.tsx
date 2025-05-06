@@ -204,6 +204,9 @@ const HomePage = () => {
       setError(err.message || 'Failed to reload data');
     }
   };
+
+ console.log("Fallback lotteries:", fallbackLotteries);
+ console.log("Selected lottery:", selectedLottery);
   
   // Display error state
   if (error) {
@@ -271,7 +274,7 @@ const HomePage = () => {
   }
   
 // No active lotteries
-if (activeLotteries.length === 0 && fallbackLotteries.length > 0) {
+if (activeLotteries.length === 0 && fallbackLotteries.length > 0 && selectedLottery) {
   return (
     <div className="lottery-container">
       <div className="dev-mode-notice">
@@ -280,39 +283,35 @@ if (activeLotteries.length === 0 && fallbackLotteries.length > 0) {
           Retry Loading
         </button>
       </div>
-
       <div className="lottery-grid">
         <div className="lottery-list-panel">
           <ActiveLotteries 
             lotteries={fallbackLotteries}
             isLoading={false}
             onSelect={handleSelectLottery}
-            selectedId={selectedLottery?.id}
+            selectedId={selectedLottery.id}
           />
         </div>
-
-        {selectedLottery && (
-          <div className="lottery-details-panel">
-            <LotteryDetails 
-              lottery={selectedLottery}
-              userTickets={userTickets[selectedLottery.id] || []}
-            />
-            <div className="action-buttons">
-              <button className="primary-button" onClick={handleOpenTicketModal}>
-                Purchase Tickets
+        <div className="lottery-details-panel">
+          <LotteryDetails 
+            lottery={selectedLottery}
+            userTickets={userTickets[selectedLottery.id] || []}
+          />
+          <div className="action-buttons">
+            <button className="primary-button" onClick={handleOpenTicketModal}>
+              Purchase Tickets
+            </button>
+            {!hasActiveSessionKey && (
+              <button className="secondary-button" onClick={handleOpenSessionKeyModal}>
+                Enable Quick Play
               </button>
-              {!hasActiveSessionKey && (
-                <button className="secondary-button" onClick={handleOpenSessionKeyModal}>
-                  Enable Quick Play
-                </button>
-              )}
-            </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
-}    
+}
   // Regular display with active lotteries
   return (
     <div className="home-page">
