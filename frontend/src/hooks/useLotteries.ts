@@ -65,6 +65,7 @@ export const useLotteries = (): UseLotteriesReturn => {
   const [userTickets, setUserTickets] = useState<Record<number, Ticket[]>>({});
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDataLoaded, setIsDataLoaded] = useState<boolean>(false);
   
   /**
    * Fetch all lotteries
@@ -74,6 +75,7 @@ export const useLotteries = (): UseLotteriesReturn => {
     setError(null);
     
     try {
+      console.log("Fetching lotteries...");
       const response = await api.getLotteries();
       
       if (response.success && response.lotteries && response.lotteries.length > 0) {
@@ -81,6 +83,7 @@ export const useLotteries = (): UseLotteriesReturn => {
         
         // Get current time
         const currentTime = Math.floor(Date.now() / 1000);
+        console.log("Current time:", currentTime);
         
         // Categorize active and past lotteries
         // Improved filtering to catch edge cases
@@ -88,20 +91,30 @@ export const useLotteries = (): UseLotteriesReturn => {
           lottery.startTime <= currentTime && lottery.endTime > currentTime
         );
         
-        const past = response.lotteries.filter(lottery => 
-          lottery.endTime <= currentTime || lottery.drawn
-        );
+        console.log("Active lotteries after filtering:", active.length);
         
         // If in development mode and no active lotteries, show all lotteries as active
         if (active.length === 0 && isDevelopmentMode) {
-          console.log('No active lotteries found, displaying all lotteries in development mode');
-          setActiveLotteries(response.lotteries);
+          console.log('No active lotteries found, forcing active lotteries in development mode');
+          // Force the first 3 lotteries to be active by adjusting their times
+          const forcedActive = response.lotteries.slice(0, 3).map(lottery => ({
+            ...lottery,
+            // Force current time to be within start and end times
+            startTime: currentTime - 3600, // 1 hour ago
+            endTime: currentTime + 86400   // 24 hours later
+          }));
+          setActiveLotteries(forcedActive);
         } else {
           setActiveLotteries(active);
         }
         
-        setPastLotteries(past);
+        // Filter past lotteries
+        const past = response.lotteries.filter(lottery => 
+          lottery.endTime <= currentTime || lottery.drawn
+        );
         
+        setPastLotteries(past);
+        setIsDataLoaded(true);
         setIsLoading(false);
         return response.lotteries;
       } else {
@@ -123,7 +136,14 @@ export const useLotteries = (): UseLotteriesReturn => {
         
           if (active.length === 0) {
             console.log('No active lotteries found, showing first mock lottery as active');
-            active = mockLotteries.length > 0 ? [mockLotteries[0]] : [];
+            // If no active lotteries are found, make the first one active
+            if (mockLotteries.length > 0) {
+              // Create a deep copy to avoid modifying the original
+              const forcedActive = JSON.parse(JSON.stringify(mockLotteries[0]));
+              forcedActive.startTime = currentTime - 3600; // 1 hour ago
+              forcedActive.endTime = currentTime + 86400;  // 24 hours later
+              active = [forcedActive];
+            }
           }
         
           console.log('Active lotteries:', active);
@@ -134,7 +154,7 @@ export const useLotteries = (): UseLotteriesReturn => {
           );
         
           setPastLotteries(past);
-        
+          setIsDataLoaded(true);
           setIsLoading(false);
           return mockLotteries;
         }
@@ -156,16 +176,27 @@ export const useLotteries = (): UseLotteriesReturn => {
         
         // Categorize active and past mock lotteries
         const currentTime = Math.floor(Date.now() / 1000);
-        const active = mockLotteries.filter(lottery => 
+        let active = mockLotteries.filter(lottery => 
           lottery.startTime <= currentTime && lottery.endTime > currentTime
         );
+        
+        // If no active mock lotteries, make the first one active
+        if (active.length === 0 && mockLotteries.length > 0) {
+          // Deep copy to avoid modifying the original
+          const forcedActive = JSON.parse(JSON.stringify(mockLotteries[0]));
+          forcedActive.startTime = currentTime - 3600; // 1 hour ago
+          forcedActive.endTime = currentTime + 86400;  // 24 hours later
+          active = [forcedActive];
+        }
+        
+        setActiveLotteries(active);
+        
         const past = mockLotteries.filter(lottery => 
           lottery.endTime <= currentTime || lottery.drawn
         );
         
-        setActiveLotteries(active);
         setPastLotteries(past);
-        
+        setIsDataLoaded(true);
         setIsLoading(false);
         return mockLotteries;
       }
@@ -197,16 +228,20 @@ export const useLotteries = (): UseLotteriesReturn => {
             api._generateMockLotteries() : [];
           
           const currentTime = Math.floor(Date.now() / 1000);
-          const activeMockLotteries = mockLotteries.filter(lottery => 
+          let activeMockLotteries = mockLotteries.filter(lottery => 
             lottery.startTime <= currentTime && lottery.endTime > currentTime
           );
           
           // If no active mock lotteries in development mode, show all mock lotteries
           if (activeMockLotteries.length === 0 && isDevelopmentMode) {
-            console.log('No active mock lotteries found, displaying all mock lotteries in development mode');
-            setActiveLotteries(mockLotteries);
-            setIsLoading(false);
-            return mockLotteries;
+            console.log('No active mock lotteries found, showing first mock lottery as active');
+            if (mockLotteries.length > 0) {
+              // Create a deep copy to avoid modifying the original
+              const forcedActive = JSON.parse(JSON.stringify(mockLotteries[0]));
+              forcedActive.startTime = currentTime - 3600; // 1 hour ago
+              forcedActive.endTime = currentTime + 86400;  // 24 hours later
+              activeMockLotteries = [forcedActive];
+            }
           }
           
           setActiveLotteries(activeMockLotteries);
@@ -228,9 +263,18 @@ export const useLotteries = (): UseLotteriesReturn => {
           api._generateMockLotteries() : [];
         
         const currentTime = Math.floor(Date.now() / 1000);
-        const activeMockLotteries = mockLotteries.filter(lottery => 
+        let activeMockLotteries = mockLotteries.filter(lottery => 
           lottery.startTime <= currentTime && lottery.endTime > currentTime
         );
+        
+        // If no active mock lotteries, make the first one active
+        if (activeMockLotteries.length === 0 && mockLotteries.length > 0) {
+          // Deep copy to avoid modifying the original
+          const forcedActive = JSON.parse(JSON.stringify(mockLotteries[0]));
+          forcedActive.startTime = currentTime - 3600; // 1 hour ago
+          forcedActive.endTime = currentTime + 86400;  // 24 hours later
+          activeMockLotteries = [forcedActive];
+        }
         
         setActiveLotteries(activeMockLotteries);
         setIsLoading(false);
@@ -713,33 +757,31 @@ export const useLotteries = (): UseLotteriesReturn => {
     }
   }, [isConnected, walletClient, fetchLotteryDetails, isDevelopmentMode]);
   
-  // Fetch lotteries on initial load or account change
+  // Initialize data when component mounts or when initialized state changes
   useEffect(() => {
-    fetchLotteries();
-  }, [fetchLotteries]);
+    if ((isConnected || isDevelopmentMode) && !isDataLoaded) {
+      console.log("Initializing lotteries data...");
+      fetchLotteries().catch(console.error);
+    }
+  }, [isConnected, isDevelopmentMode, isDataLoaded, fetchLotteries]);
   
   // Refetch user tickets when account changes
   useEffect(() => {
-    if ((address || isDevelopmentMode) && lotteries.length > 0) {
+    if ((address || isDevelopmentMode) && lotteries.length > 0 && isDataLoaded) {
       fetchAllUserTickets();
     }
-  }, [address, lotteries.length, fetchAllUserTickets, isDevelopmentMode]);
-  
-  // Refetch lotteries when chain changes
-  useEffect(() => {
-    if (chainId) {
-      fetchLotteries();
-    }
-  }, [chainId, fetchLotteries]);
+  }, [address, lotteries.length, fetchAllUserTickets, isDevelopmentMode, isDataLoaded]);
   
   // Debug logging in development mode
   useEffect(() => {
     if (isDevelopmentMode) {
-      console.log('Development mode active in useLotteries');
+      console.log('=== useLotteries development mode state ===');
       console.log('Active lotteries:', activeLotteries);
       console.log('All lotteries:', lotteries);
+      console.log('isDevelopmentMode:', isDevelopmentMode);
+      console.log('isDataLoaded:', isDataLoaded);
     }
-  }, [isDevelopmentMode, activeLotteries, lotteries]);
+  }, [isDevelopmentMode, activeLotteries, lotteries, isDataLoaded]);
   
   return {
     lotteries,
