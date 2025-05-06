@@ -1,35 +1,26 @@
-// backend/services/lotteryService.js
-
 const { ethers } = require('ethers');
 const AlpacaLottoABI = require('../abis/AlpacaLotto.json');
 
-/**
- * Lottery Service
- * 
- * AlpacaLottoスマートコントラクトと通信し、ロッタリー情報の取得や
- * チケット購入などの操作を行うサービス
- */
+
 class LotteryService {
   constructor(config = {}) {
-    // 設定パラメータ
+
     this.rpcUrl = config.rpcUrl || 'https://rpc-testnet.nerochain.io';
     this.contractAddress = config.contractAddress || '0x1234567890123456789012345678901234567890'; // ダミーアドレス
-    this.cacheExpiryTime = config.cacheExpiryTime || 60 * 1000; // 1分間のキャッシュ
+    this.cacheExpiryTime = config.cacheExpiryTime || 60 * 1000; 
     
-    // プロバイダとコントラクトの初期化
+   
     this.provider = new ethers.providers.JsonRpcProvider(this.rpcUrl);
     this.contract = new ethers.Contract(this.contractAddress, AlpacaLottoABI, this.provider);
     
-    // キャッシュ
+   
     this.lotteriesCache = {
       data: null,
       timestamp: 0
     };
   }
 
-  /**
-   * プロバイダを初期化
-   */
+  
   initProvider() {
     if (!this.provider) {
       this.provider = new ethers.providers.JsonRpcProvider(this.rpcUrl);
@@ -37,21 +28,19 @@ class LotteryService {
     }
   }
 
-  /**
-   * 署名者を設定
-   * @param {ethers.Signer} signer - トランザクション署名用の署名者
+  /*
+   * @param {ethers.Signer} signer 
    */
   setSigner(signer) {
     this.contract = this.contract.connect(signer);
   }
 
-  /**
-   * すべてのロッタリーを取得
-   * @returns {Array} - ロッタリーオブジェクトの配列
+  /*
+   * @returns {Array} 
    */
   async getAllLotteries() {
     try {
-      // キャッシュをチェック
+  
       if (
         this.lotteriesCache.data &&
         Date.now() - this.lotteriesCache.timestamp < this.cacheExpiryTime
@@ -59,20 +48,20 @@ class LotteryService {
         return this.lotteriesCache.data;
       }
 
-      // プロバイダを確認
+
       this.initProvider();
 
-      // ロッタリーカウンターを取得（総ロッタリー数）
+
       const lotteryCounter = await this.contract.lotteryCounter();
       
-      // 各ロッタリーの詳細を取得
+
       const lotteries = [];
       for (let i = 1; i <= lotteryCounter.toNumber(); i++) {
         const lottery = await this.contract.getLottery(i);
         lotteries.push(this._formatLottery(lottery));
       }
       
-      // キャッシュを更新
+     
       this.lotteriesCache = {
         data: lotteries,
         timestamp: Date.now()
@@ -341,22 +330,22 @@ class LotteryService {
 
   /**
    * セッションキーを無効化
-   * @param {string} sessionKeyAddress - セッションキーのアドレス
-   * @returns {Object} - トランザクション結果
+   * @param {string} sessionKeyAddress 
+   * @returns {Object} 
    */
   async revokeSessionKey(sessionKeyAddress) {
     try {
-      // 署名者が設定されているか確認
+      
       if (!this.contract.signer) {
         throw new Error('署名者が設定されていません');
       }
       
-      // セッションキー無効化のトランザクションを送信
+  
       const tx = await this.contract.revokeSessionKey(
         sessionKeyAddress
       );
       
-      // トランザクションの確認を待つ
+ 
       const receipt = await tx.wait();
       
       return {
@@ -374,7 +363,6 @@ class LotteryService {
   }
 
   /**
-   * 賞金を請求
    * @param {number} lotteryId - ロッタリーID
    * @returns {Object} - トランザクション結果
    */
@@ -385,10 +373,10 @@ class LotteryService {
         throw new Error('署名者が設定されていません');
       }
       
-      // 賞金請求のトランザクションを送信
+
       const tx = await this.contract.claimPrize(lotteryId);
       
-      // トランザクションの確認を待つ
+
       const receipt = await tx.wait();
       
       return {
@@ -428,11 +416,10 @@ class LotteryService {
     };
   }
 
-  /**
-   * コントラクトからのチケットデータをフォーマット
-   * @param {Object} ticketData - コントラクトから取得したチケットデータ
-   * @param {number} ticketNumber - チケット番号
-   * @returns {Object} - フォーマットされたチケットオブジェクト
+  /* 
+   * @param {Object} ticketData 
+   * @param {number} ticketNumber 
+   * @returns {Object} 
    */
   _formatTicket(ticketData, ticketNumber) {
     return {
@@ -444,77 +431,19 @@ class LotteryService {
     };
   }
 
-  /**
-   * モックデータを使用してテスト用のロッタリーを生成
-   * @returns {Array} - モックロッタリーの配列
-   */
   _generateMockLotteries() {
-    const currentTime = Math.floor(Date.now() / 1000);
-    const mockTokens = [
-      '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
-      '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
-      '0xdac17f958d2ee523a2206206994597c13d831ec7'  // USDT
-    ];
-    
-    return [
-      {
-        id: 1,
-        name: 'Weekly Jackpot',
-        ticketPrice: 10,
-        startTime: currentTime - 86400, // 昨日開始
-        endTime: currentTime + 518400,   // 6日後終了
-        drawTime: currentTime + 604800,  // 7日後抽選
-        supportedTokens: mockTokens,
-        totalTickets: 120,
-        prizePool: 1200,
-        drawn: false,
-        winners: [],
-        winningTickets: []
-      },
-      {
-        id: 2,
-        name: 'Daily Draw',
-        ticketPrice: 5,
-        startTime: currentTime - 3600,   // 1時間前開始
-        endTime: currentTime + 82800,    // 23時間後終了
-        drawTime: currentTime + 86400,   // 24時間後抽選
-        supportedTokens: mockTokens,
-        totalTickets: 75,
-        prizePool: 375,
-        drawn: false,
-        winners: [],
-        winningTickets: []
-      },
-      {
-        id: 3,
-        name: 'Flash Lottery',
-        ticketPrice: 2,
-        startTime: currentTime - 1800,   // 30分前開始
-        endTime: currentTime + 1800,     // 30分後終了
-        drawTime: currentTime + 3600,    // 1時間後抽選
-        supportedTokens: mockTokens,
-        totalTickets: 30,
-        prizePool: 60,
-        drawn: false,
-        winners: [],
-        winningTickets: []
-      },
-      {
-        id: 4,
-        name: 'Past Lottery',
-        ticketPrice: 5,
-        startTime: currentTime - 172800, // 2日前開始
-        endTime: currentTime - 86400,    // 1日前終了
-        drawTime: currentTime - 82800,   // 23時間前抽選
-        supportedTokens: mockTokens,
-        totalTickets: 100,
-        prizePool: 500,
-        drawn: true,
-        winners: ['0x1234567890123456789012345678901234567890'],
-        winningTickets: [42]
-      }
-    ];
+    const mockData = require('../mock/mockLotteries');
+    return mockData.generateMockLotteries();
   }
-}
+
+  _getActiveMockLotteries() {
+    const mockData = require('../mock/mockLotteries');
+    return mockData.getActiveMockLotteries();
+  }
+
+  _generateMockTickets(lotteryId) {
+    const mockData = require('../mock/mockLotteries');
+    return mockData.generateMockTickets(lotteryId);
+  }
 
 module.exports = LotteryService;
