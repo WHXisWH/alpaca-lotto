@@ -73,8 +73,10 @@ const HomePage = () => {
     }
   }, [activeLotteries, selectedLottery]);
 
-  useEffect(() => {
-  if (activeLotteries.length === 0 && lotteries.length > 0) {
+  
+  
+　useEffect(() => {
+  if (lotteries.length > 0 && activeLotteries.length === 0) {
     const currentTime = Math.floor(Date.now() / 1000);
     const forced = lotteries.slice(0, 3).map(lottery => ({
       ...lottery,
@@ -83,11 +85,14 @@ const HomePage = () => {
     }));
     setFallbackLotteries(forced);
 
-    if (!selectedLottery) {
+    if (!selectedLottery && forced.length > 0) {
       setSelectedLottery(forced[0]);
     }
+
+    console.log("✅ Fallback lotteries set:", forced);
   }
-}, [activeLotteries, lotteries, selectedLottery]);
+}, [lotteries, activeLotteries, selectedLottery]);
+
  
   // Update recommendation when token list and selected lottery change
   useEffect(() => {
