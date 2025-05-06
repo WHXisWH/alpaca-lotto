@@ -445,5 +445,6 @@ class LotteryService {
     const mockData = require('../mock/mockLotteries');
     return mockData.generateMockTickets(lotteryId);
   }
+}
 
 module.exports = LotteryService;
