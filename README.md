@@ -1,6 +1,6 @@
 # AlpacaLotto: AI-Powered Blockchain Lottery with Account Abstraction
 
-AlpacaLotto is a next-generation blockchain lottery platform built on NERO Chain that uses Account Abstraction and AI to deliver a seamless, Web2-like experience with powerful Web3 capabilities. Enter lotteries with any token, leverage AI for optimal token selection, and enjoy one-click interactions through session keys.
+AlpacaLotto is a next-generation blockchain lottery platform built on NERO Chain that leverages Account Abstraction (AA) and AI to deliver a seamless, Web2-like experience with powerful Web3 capabilities. Users can enter lotteries with any token in their wallet, leverage AI for optimal token selection, and enjoy one-click interactions through session keys.
 
 ![AlpacaLotto Banner](./docs/banner.png)
 
@@ -39,14 +39,47 @@ AlpacaLotto is a next-generation blockchain lottery platform built on NERO Chain
 - OpenZeppelin libraries
 
 ### Backend
-- Node.js
-- Express
+- Node.js with Express
 - ethers.js for blockchain interaction
+- UserOp SDK for Account Abstraction
 
 ### Frontend
-- React
-- React Router
-- UserOp SDK for Account Abstraction
+- React with TypeScript
+- wagmi v2 for wallet interactions
+- viem for Ethereum RPC interactions
+- TanStack Query for data fetching
+
+## NERO Chain Account Abstraction Integration
+
+The project deeply integrates with NERO Chain's Account Abstraction capabilities:
+
+### Smart Contract Wallets
+Users interact through AA wallets rather than EOAs (Externally Owned Accounts), enabling:
+- Complex transaction logic (batch operations)
+- Session keys for delegated authority
+- Enhanced security features
+- Social recovery capabilities
+
+### Paymaster Integration
+Enables flexible gas payment options:
+- **Type 0**: Developer-sponsored gas (free for users)
+- **Type 1**: Prepay with ERC20 tokens (user pays upfront)
+- **Type 2**: Postpay with ERC20 tokens (user pays after execution)
+
+Users can pay gas fees with any supported token, removing the need to hold native NERO tokens.
+
+### UserOperation Bundling
+Multiple actions are combined into single transactions:
+- Purchasing tickets for multiple lotteries at once
+- Combining approval and purchase operations
+- Reducing overall gas costs and improving UX
+
+### Signature Abstraction
+The session key system enables:
+- Time-limited authorization for specific operations
+- Reduced signature prompts for repetitive actions
+- Improved user experience similar to Web2 applications
+- Enhanced security through scope-limited permissions
 
 ## Getting Started
 
@@ -59,7 +92,7 @@ AlpacaLotto is a next-generation blockchain lottery platform built on NERO Chain
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/WHXisWH/alpaca-lotto.git
+git clone https://github.com/yourusername/alpaca-lotto.git
 cd alpaca-lotto
 ```
 
@@ -89,12 +122,14 @@ ENTRYPOINT_ADDRESS=0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789
 
 2. Create a `.env` file in the frontend directory:
 ```
-REACT_APP_API_BASE_URL=http://localhost:3001/api
-REACT_APP_NERO_RPC_URL=https://rpc-testnet.nerochain.io
-REACT_APP_BUNDLER_URL=https://bundler-testnet.nerochain.io
-REACT_APP_PAYMASTER_URL=https://paymaster-testnet.nerochain.io
-REACT_APP_LOTTERY_CONTRACT_ADDRESS=your_contract_address
-REACT_APP_PAYMASTER_API_KEY=your_api_key
+VITE_API_BASE_URL=http://localhost:3001/api
+VITE_NERO_RPC_URL=https://rpc-testnet.nerochain.io
+VITE_BUNDLER_URL=https://bundler-testnet.nerochain.io
+VITE_PAYMASTER_URL=https://paymaster-testnet.nerochain.io
+VITE_LOTTERY_CONTRACT_ADDRESS=your_contract_address
+VITE_PAYMASTER_API_KEY=your_api_key
+VITE_ENTRYPOINT_ADDRESS=0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789
+VITE_ACCOUNT_FACTORY_ADDRESS=0x9406Cc6185a346906296840746125a0E44976454
 ```
 
 ### Running the Application
@@ -108,52 +143,10 @@ npm run dev
 2. Start the frontend:
 ```bash
 cd frontend
-npm start
+npm run dev
 ```
 
 3. Open your browser and navigate to `http://localhost:3000`
-
-## Smart Contract Deployment
-
-1. Prepare your deployment private key in a secure file
-2. Deploy the AlpacaLotto contract first:
-```bash
-npx hardhat deploy --network nero-testnet --tags AlpacaLotto
-```
-3. Deploy supporting contracts:
-```bash
-npx hardhat deploy --network nero-testnet --tags SessionKeyManager,SocialRecovery
-```
-
-## Account Abstraction Features
-
-AlpacaLotto leverages NERO Chain's Account Abstraction capabilities:
-
-### Paymaster Integration
-Three payment types are supported:
-- **Type 0**: Sponsored Gas (free for users)
-- **Type 1**: Prepay with ERC20 tokens
-- **Type 2**: Postpay with ERC20 tokens
-
-### Session Keys
-Enable temporary, limited permissions for your AA wallet without sharing your private keys. Perfect for repeated lottery entries without constant wallet confirmations.
-
-### Batched Operations
-Combine multiple transactions into one to save on gas costs and improve efficiency.
-
-### Social Recovery
-Set up guardians who can help you recover your wallet if your keys are lost, ensuring your lottery winnings are always safe.
-
-## AI Token Optimization
-
-Our AI analyzes multiple factors to select the optimal token for gas payment:
-
-- **Balance Analysis**: Ensures you have sufficient tokens for your transaction
-- **Volatility Scoring**: Prefers stable tokens to minimize value fluctuations
-- **Slippage Evaluation**: Considers liquidity to minimize transaction costs
-- **User Preferences**: Takes into account your preferred tokens
-
-The algorithm provides transparent scoring with human-readable explanations for its recommendations.
 
 ## Development Roadmap
 
@@ -175,20 +168,39 @@ The algorithm provides transparent scoring with human-readable explanations for 
 - Loyalty rewards system for frequent players
 - Integration with external protocols for expanded prize options
 
-## Contributing
+## Project Structure
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+The project follows a standard structure:
+
+```
+alpaca-lotto/
+├── README.md                 // Project overview
+├── architecture.md           // Detailed system architecture design
+├── backend/                  // Node.js backend
+│   ├── abis/                 // Contract ABIs
+│   ├── mock/                 // Mock data for development
+│   ├── routes/               // API routes
+│   ├── services/             // Business logic services
+│   ├── app.js                // Express application
+│   └── package.json
+├── contracts/                // Solidity smart contracts
+│   ├── AlpacaLotto.sol       // Main lottery contract
+│   ├── SessionKeyManager.sol // Session key management
+│   ├── SocialRecoveryModule.sol // Social recovery
+│   └── TestToken.sol         // ERC20 test token
+├── frontend/                 // React frontend
+│   ├── src/
+│   │   ├── components/       // React components
+│   │   ├── constants/        // Constants and ABIs
+│   │   ├── hooks/            // Custom React hooks
+│   │   ├── pages/            // Page components
+│   │   ├── services/         // API and blockchain services
+│   │   └── styles/           // CSS styles
+│   ├── package.json
+│   └── vite.config.js        // Vite configuration
+└── scripts/                  // Deployment scripts
+```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgements
-
-- NERO Chain team for the AA infrastructure
-- Account Abstraction ERC-4337 working group
-- All contributors and community members
-
----
-
-Built with ❤️ for the NERO Chain WaveHack
+This project is licensed under the MIT License.
