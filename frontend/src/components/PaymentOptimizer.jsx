@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { debounce } from 'lodash';
 import { useAccount } from 'wagmi';
 import useTokens from '../hooks/useTokens';
 import useUserOp from '../hooks/useUserOp';
@@ -83,52 +84,42 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
   useEffect(() => {
     const optimizeTokens = async () => {
       if (!autoSelectRecommended || !paymentOptions.length || recommendedToken) return;
-      
+  
       setIsLoading(true);
-      
+  
       try {
-        // Calculate gas cost estimates for each token
         const gasEstimates = {};
-        
+  
         for (const token of paymentOptions) {
           const estimate = await paymasterService.getGasCostEstimation(
-            token.address, 
-            300000 // Estimation for a typical transaction
+            token.address,
+            300000
           );
-          
           gasEstimates[token.address] = estimate;
         }
-        
+  
         setGasCostEstimates(gasEstimates);
-        
-        // Calculate scores based on optimization factors
+  
         const scoredTokens = paymentOptions.map(token => {
-          const address = token.address.toLowerCase();
-          
-          // Balance score (higher balance = better score)
           const balance = parseFloat(token.balance);
           const maxBalance = Math.max(...paymentOptions.map(t => parseFloat(t.balance)));
           const balanceScore = maxBalance > 0 ? (balance / maxBalance) : 0;
-          
-          // Volatility score (lower volatility = better score)
-          // For this example, stablecoins have 0 volatility, others range from 0.01 to 0.2
+  
           const isStablecoin = ['DAI', 'USDC', 'USDT'].includes(token.symbol);
           const volatility = isStablecoin ? 0 : (token.symbol === 'WETH' ? 0.05 : (token.symbol === 'WBTC' ? 0.08 : 0.15));
-          const volatilityScore = 1 - volatility; // Convert to score where higher is better
-          
-          // Slippage score (lower slippage/gas cost = better score)
+          const volatilityScore = 1 - volatility;
+  
           const gasEstimate = gasEstimates[token.address]?.gasCostToken || 0;
           const gasScores = Object.values(gasEstimates).map(est => est.gasCostToken || 0);
           const maxGasCost = Math.max(...gasScores.filter(score => score > 0)) || 1;
           const slippageScore = maxGasCost > 0 ? (1 - (gasEstimate / maxGasCost)) : 0;
-          
-          // Total weighted score
+  
           const totalScore = (
             (balanceScore * (optimizationFactors.balanceWeight / 100)) +
             (volatilityScore * (optimizationFactors.volatilityWeight / 100)) +
             (slippageScore * (optimizationFactors.slippageWeight / 100))
           );
-          
+  
           return {
             ...token,
             balanceScore,
@@ -137,19 +128,15 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
             totalScore
           };
         });
-        
-        // Sort by total score (descending)
+  
         const sortedTokens = [...scoredTokens].sort((a, b) => b.totalScore - a.totalScore);
-        
-        // Set recommended token (highest score)
+  
         if (sortedTokens.length > 0) {
           const recommended = sortedTokens[0];
           setRecommendedToken(recommended);
-          
-          // Auto-select if enabled
+  
           if (autoSelectRecommended && !selectedToken) {
             setSelectedToken(recommended);
-            
             if (onSelect) {
               onSelect({
                 token: recommended,
@@ -158,7 +145,7 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
             }
           }
         }
-        
+  
         setIsLoading(false);
       } catch (err) {
         console.error('Failed to optimize tokens:', err);
@@ -166,8 +153,14 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
         setIsLoading(false);
       }
     };
-    
-    optimizeTokens();
+  
+    const debouncedOptimize = debounce(() => {
+      optimizeTokens();
+    }, 1000); // 1秒間隔
+  
+    debouncedOptimize();
+  
+    return () => debouncedOptimize.cancel();
   }, [paymentOptions, optimizationFactors]);
   
   // Handle token selection
