@@ -82,7 +82,7 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
   // Calculate token scores and pick recommended token
   useEffect(() => {
     const optimizeTokens = async () => {
-      if (paymentOptions.length === 0) return;
+      if (!autoSelectRecommended || !paymentOptions.length || recommendedToken) return;
       
       setIsLoading(true);
       
@@ -168,7 +168,7 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
     };
     
     optimizeTokens();
-  }, [paymentOptions, optimizationFactors, autoSelectRecommended, selectedToken, selectedPaymentType, onSelect]);
+  }, [paymentOptions, optimizationFactors]);
   
   // Handle token selection
   const handleTokenSelect = (token) => {

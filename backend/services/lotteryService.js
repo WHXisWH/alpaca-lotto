@@ -10,7 +10,10 @@ class LotteryService {
     this.cacheExpiryTime = config.cacheExpiryTime || 60 * 1000; 
     
    
-    this.provider = new ethers.providers.JsonRpcProvider(this.rpcUrl);
+    this.provider = new ethers.providers.JsonRpcProvider(this.rpcUrl, {
+      name: 'nero-testnet',
+      chainId: 5555003
+    });
     this.contract = new ethers.Contract(this.contractAddress, AlpacaLottoABI, this.provider);
     
    
@@ -23,7 +26,10 @@ class LotteryService {
   
   initProvider() {
     if (!this.provider) {
-      this.provider = new ethers.providers.JsonRpcProvider(this.rpcUrl);
+      this.provider = new ethers.providers.JsonRpcProvider(this.rpcUrl, {
+        name: 'nero-testnet',
+        chainId: 5555003
+      });
       this.contract = new ethers.Contract(this.contractAddress, AlpacaLottoABI, this.provider);
     }
   }
@@ -57,24 +63,29 @@ class LotteryService {
 
       const lotteries = [];
       for (let i = 1; i <= lotteryCounter.toNumber(); i++) {
-        const lottery = await this.contract.getLottery(i);
-        lotteries.push(this._formatLottery(lottery));
+        try {
+          console.log(`Fetching lottery ID: ${i}`);
+          const lottery = await this.contract.getLottery(i);
+          console.log(`Lottery raw:`, lottery);
+          console.log(`ID: ${lottery.id}, Name: ${lottery.name}`);
+          lotteries.push(this._formatLottery(lottery));
+        } catch (err) {
+          console.warn(`Error fetching lottery #${i}:`, err);
+        }
       }
-      
-     
       this.lotteriesCache = {
         data: lotteries,
         timestamp: Date.now()
       };
       
       return lotteries;
-    } catch (error) {
-      console.error('ロッタリー取得エラー:', error);
-      return [];
+      } catch (error) {
+        console.error('ロッタリー取得エラー:', error);
+        return [];
+      }
     }
-  }
-
-  /**
+    
+ /**
    * アクティブなロッタリーを取得
    * @returns {Array} - アクティブなロッタリーオブジェクトの配列
    */
@@ -88,7 +99,7 @@ class LotteryService {
         lottery.startTime <= currentTime && lottery.endTime > currentTime
       );
     } catch (error) {
-      console.error('アクティブなロッタリー取得エラー:', error);
+      console.error('アクティブなロッタリー取得エラー:', error);  
       return [];
     }
   }
@@ -445,5 +456,6 @@ class LotteryService {
     const mockData = require('../mock/mockLotteries');
     return mockData.generateMockTickets(lotteryId);
   }
+}
 
 module.exports = LotteryService;
