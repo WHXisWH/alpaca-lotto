@@ -103,6 +103,17 @@ export const useLotteries = (): UseLotteriesReturn => {
       // Get current time
       const currentTime = Math.floor(Date.now() / 1000);
       
+      console.log('⏱️ currentTime:', currentTime);
+
+      // Output each lottery's timing info
+      response.lotteries.forEach(lottery => {
+        console.log(`🎟️ Lottery #${lottery.id}`);
+        console.log(`  Start Time: ${lottery.startTime} (${new Date(lottery.startTime * 1000).toLocaleString()})`);
+        console.log(`  End Time  : ${lottery.endTime} (${new Date(lottery.endTime * 1000).toLocaleString()})`);
+        console.log(`  Drawn     : ${lottery.drawn}`);
+        console.log('──────────────────────────────');
+      });
+
       // Categorize active and past lotteries
       const active = response.lotteries.filter(lottery => 
         lottery.startTime <= currentTime && lottery.endTime > currentTime
