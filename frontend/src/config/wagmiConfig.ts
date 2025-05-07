@@ -5,7 +5,7 @@ import { createPublicClient, http as viemHttp } from 'viem'
 
 // Create a custom NERO Chain configuration
 const neroTestnet = {
-  id: 5555003,
+  id: 689,
   name: 'NERO Chain Testnet',
   nativeCurrency: {
     name: 'NERO',

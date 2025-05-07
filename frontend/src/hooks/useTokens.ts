@@ -97,7 +97,7 @@ export const useTokens = (): UseTokensReturn => {
       ];
       
       // Use fetchWalletTokens from useWagmiWallet
-      const walletTokens = await fetchWalletTokens(tokensToFetch, chainId || 5555003);
+      const walletTokens = await fetchWalletTokens(tokensToFetch, chainId || 689);
       setTokens(walletTokens);
       
       // Also fetch supported tokens
@@ -188,7 +188,7 @@ export const useTokens = (): UseTokensReturn => {
         } else if (aaWalletAddress) {
           await getTokens();
         } else if (isDevelopmentMode) {
-          const mockTokens = await fetchWalletTokens(COMMON_TOKENS, chainId || 5555003);
+          const mockTokens = await fetchWalletTokens(COMMON_TOKENS, chainId || 689);
           setTokens(mockTokens);
         }
       } catch (error) {

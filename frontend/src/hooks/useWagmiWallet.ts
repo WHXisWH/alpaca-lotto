@@ -11,7 +11,7 @@ import { mainnet } from 'wagmi/chains';
 
 // Custom NERO Chain config
 const neroTestnet = {
-  id: 5555003,
+  id: 689,
   name: 'NERO Chain Testnet',
   nativeCurrency: {
     name: 'NERO',
@@ -279,17 +279,17 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
       throw new Error('No valid address available');
     }
 
-    const currentChainId = chainIdParam || chainId || 5555003;
+    const currentChainId = chainIdParam || chainId || 689;
 
     try {
       // Create a viem public client for the current chain - without multicall configuration
       const publicClient = createPublicClient({
         chain: {
           id: currentChainId,
-          name: currentChainId === 5555003 ? 'NERO Chain Testnet' : 'Unknown Chain',
+          name: currentChainId === 689 ? 'NERO Chain Testnet' : 'Unknown Chain',
           rpcUrls: {
             default: {
-              http: [currentChainId === 5555003 
+              http: [currentChainId === 689 
                 ? (import.meta.env.VITE_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io')
                 : 'https://ethereum.publicnode.com'
               ],

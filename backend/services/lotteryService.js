@@ -12,7 +12,7 @@ class LotteryService {
    
     this.provider = new ethers.providers.JsonRpcProvider(this.rpcUrl, {
       name: 'nero-testnet',
-      chainId: 5555003
+      chainId: 689
     });
     this.contract = new ethers.Contract(this.contractAddress, AlpacaLottoABI, this.provider);
     
@@ -28,7 +28,7 @@ class LotteryService {
     if (!this.provider) {
       this.provider = new ethers.providers.JsonRpcProvider(this.rpcUrl, {
         name: 'nero-testnet',
-        chainId: 5555003
+        chainId: 689
       });
       this.contract = new ethers.Contract(this.contractAddress, AlpacaLottoABI, this.provider);
     }
