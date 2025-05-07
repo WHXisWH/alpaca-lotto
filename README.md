@@ -4,6 +4,9 @@ AlpacaLotto is a next-generation blockchain lottery platform built on NERO Chain
 
 ![AlpacaLotto Banner](./docs/banner.png)
 
+## 🌐 Demo
+https://alpaca-lotto.vercel.app/
+
 ## Key Features
 
 ### 🎟️ Multi-Token Lottery Entry
