@@ -5,10 +5,8 @@ import mockData from '../mock/mockLotteries';
 // Get API Base Endpoint
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
-// Create API client instance
-// 10-18行目を以下に置き換え
 // Create API client instance with retry mechanism
-cconst apiClient = axios.create({
+const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
