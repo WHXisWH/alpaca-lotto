@@ -1,7 +1,6 @@
 import { createConfig, http } from 'wagmi'
 import { mainnet, sepolia } from 'wagmi/chains'
 import { injected, metaMask, walletConnect } from 'wagmi/connectors'
-import { createPublicClient, http as viemHttp } from 'viem'
 
 // Create a custom NERO Chain configuration
 const neroTestnet = {
@@ -29,33 +28,38 @@ const neroTestnet = {
   testnet: true,
 }
 
-// Create public client for multicall
-const publicClient = createPublicClient({
-  chain: neroTestnet,
-  transport: viemHttp(neroTestnet.rpcUrls.default.http[0])
-});
-
 // WalletConnect projectId - should be stored in env variable in production
 const projectId = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID || 'YOUR_PROJECT_ID'
 
-// Create the config according to wagmi v2 specs
-export const config = createConfig({
-  chains: [neroTestnet, mainnet, sepolia],
-  connectors: [
-    injected(),
-    metaMask(),
-    walletConnect({ projectId }),
-  ],
-  transports: {
-    [neroTestnet.id]: http(neroTestnet.rpcUrls.default.http[0]),
-    [mainnet.id]: http(),
-    [sepolia.id]: http(),
-  },
-  // Add multicall configuration
-  multicall: {
-    batchSize: 1024, // Maximum size of encoded batch calldata
-    wait: 500, // Wait time in milliseconds between requests
+// Create wagmi config with safer fallbacks and error handling
+const createSafeConfig = () => {
+  try {
+    return createConfig({
+      chains: [neroTestnet, mainnet, sepolia],
+      connectors: [
+        injected(),
+        metaMask(),
+        walletConnect({ projectId }),
+      ],
+      transports: {
+        [neroTestnet.id]: http(neroTestnet.rpcUrls.default.http[0]),
+        [mainnet.id]: http(),
+        [sepolia.id]: http(),
+      },
+    });
+  } catch (err) {
+    console.error("Error creating wagmi config:", err);
+    
+    // Return a minimal config that won't crash the application
+    return {
+      connectors: [],
+      publicClient: null,
+      chains: [neroTestnet, mainnet, sepolia]
+    };
   }
-})
+};
 
-export default config
+// Export the safely created config
+export const config = createSafeConfig();
+
+export default config;

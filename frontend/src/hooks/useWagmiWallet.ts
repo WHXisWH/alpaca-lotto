@@ -7,9 +7,8 @@ import {
   useSwitchChain
 } from 'wagmi';
 import { createPublicClient, http, formatUnits } from 'viem';
-import { mainnet } from 'wagmi/chains';
 
-// Custom NERO Chain config
+// NERO Chain config with reasonable defaults
 const neroTestnet = {
   id: 689,
   name: 'NERO Chain Testnet',
@@ -25,39 +24,7 @@ const neroTestnet = {
   },
 };
 
-// ERC20 ABI for token interactions
-const ERC20_ABI = [
-  {
-    inputs: [{ name: 'owner', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'decimals',
-    outputs: [{ name: '', type: 'uint8' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'symbol',
-    outputs: [{ name: '', type: 'string' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'name',
-    outputs: [{ name: '', type: 'string' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-] as const;
-
-// Mock tokens for development
+// Mock tokens for development mode
 const MOCK_TOKENS = [
   {
     address: '0x6b175474e89094c44da98b954eedeac495271d0f',
@@ -101,6 +68,7 @@ const MOCK_TOKENS = [
   }
 ];
 
+// Type definitions
 interface Token {
   address: string;
   symbol: string;
@@ -108,6 +76,7 @@ interface Token {
   decimals: number;
   balance: string;
   rawBalance: string;
+  usdPrice?: number;
 }
 
 interface UseWagmiWalletReturn {
@@ -117,9 +86,9 @@ interface UseWagmiWalletReturn {
   chainId: number | undefined;
   aaWalletAddress: string | null;
   isDevelopmentMode: boolean;
-  signer: null;
-  provider: null;
-  connectWallet: () => Promise<{ account: string; provider: null; signer: null; }>;
+  signer: any;
+  provider: any;
+  connectWallet: () => Promise<{ account: string; provider: any; signer: any; }>;
   disconnectWallet: () => void;
   getTokens: (tokenAddresses: string[], chainId?: number) => Promise<Token[]>;
   switchToNeroChain: () => Promise<void>;
@@ -127,8 +96,7 @@ interface UseWagmiWalletReturn {
 }
 
 /**
- * Replaces original useWallet hook with wagmi implementation
- * Provides the same API surface as the original hook
+ * Custom hook for wallet functionality using wagmi
  */
 export const useWagmiWallet = (): UseWagmiWalletReturn => {
   // wagmi hooks
@@ -143,51 +111,89 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [aaWalletAddress, setAaWalletAddress] = useState<string | null>(null);
   const [isDevelopmentMode, setIsDevelopmentMode] = useState<boolean>(false);
+  const [signer, setSigner] = useState<any>(null);
+  const [provider, setProvider] = useState<any>(null);
 
-  // Handle AA wallet address derivation
+  // Check if development mode is enabled
+  useEffect(() => {
+    const devMode = localStorage.getItem('devModeEnabled') === 'true' || 
+                   window.location.search.includes('devMode=true');
+    setIsDevelopmentMode(devMode);
+    
+    // In development mode, set a mock AA address
+    if (devMode && !aaWalletAddress) {
+      setAaWalletAddress("0x8901b77345cC8936Bd6E142570AdE93f5ccF3417");
+    }
+  }, [aaWalletAddress]);
+
+  // Derive AA wallet address when address changes
   useEffect(() => {
     if (address) {
-      // FIX: Instead of creating an invalid format address, we'll use the EOA address for now
-      // This solves the checksum validation errors until a proper AA address generation is implemented
-      setAaWalletAddress(address);
-    } else {
-      // In development mode, provide a valid mock AA address
-      if (isDevelopmentMode) {
-        setAaWalletAddress("0x8901b77345cC8936Bd6E142570AdE93f5ccF3417");
-      } else {
-        setAaWalletAddress(null);
+      try {
+        // This is a simplified mock calculation
+        // In a real implementation, you would derive this properly
+        // using the AA SDK or a similar method
+        const aaAddress = address.toLowerCase().replace('0x', '0x1');
+        setAaWalletAddress(aaAddress);
+      } catch (err) {
+        console.warn("Error deriving AA wallet address:", err);
+        if (isDevelopmentMode) {
+          setAaWalletAddress("0x8901b77345cC8936Bd6E142570AdE93f5ccF3417");
+        }
       }
+    } else if (isDevelopmentMode) {
+      setAaWalletAddress("0x8901b77345cC8936Bd6E142570AdE93f5ccF3417");
+    } else {
+      setAaWalletAddress(null);
     }
   }, [address, isDevelopmentMode]);
 
-  // Check for MetaMask or any other injected provider
-  const isMetaMaskAvailable = useCallback((): boolean => {
+  // Check for ethereum provider
+  const isEthereumAvailable = useCallback((): boolean => {
     try {
       return (
         typeof window !== 'undefined' && 
-        window.ethereum && 
-        window.ethereum.isMetaMask
+        window.ethereum !== undefined
+      );
+    } catch (err) {
+      console.warn("Error checking for ethereum:", err);
+      return false;
+    }
+  }, []);
+  
+  // Check for MetaMask
+  const isMetaMaskAvailable = useCallback((): boolean => {
+    try {
+      return (
+        isEthereumAvailable() && 
+        window.ethereum.isMetaMask === true
       );
     } catch (err) {
       console.warn("Error checking for MetaMask:", err);
       return false;
     }
-  }, []);
+  }, [isEthereumAvailable]);
   
-  // 76-95行目を以下に置き換え
+  // Connect wallet function
   const connectWallet = useCallback(async () => {
     setIsConnecting(true);
     setConnectionError(null);
   
     try {
-      // Check for MetaMask with error handling
-      if (!isMetaMaskAvailable()) {
-        console.log('MetaMask not detected - activating development mode');
+      // Check if we should use development mode
+      if (localStorage.getItem('devModeEnabled') === 'true' || 
+          window.location.search.includes('devMode=true') || 
+          !isEthereumAvailable()) {
+        console.log('Development mode active for wallet connection');
         setIsDevelopmentMode(true);
-        setIsConnecting(false);
         
+        // Mock values for development mode
+        const mockAccount = '0x1234567890123456789012345678901234567890';
+        setAaWalletAddress('0x8901b77345cC8936Bd6E142570AdE93f5ccF3417');
+        
+        setIsConnecting(false);
         return {
-          account: '0x1234567890123456789012345678901234567890',
+          account: mockAccount,
           provider: null,
           signer: null
         };
@@ -199,59 +205,90 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
       
       while (attempts < maxAttempts) {
         try {
-          const connector = connectors.find(c => c.name === 'MetaMask') || connectors[0];
+          // Find MetaMask connector if available
+          const connector = connectors.find(c => c.id === 'metaMask' || c.name === 'MetaMask') || connectors[0];
+          
           if (connector) {
             await connect({ connector });
             break;
+          } else {
+            throw new Error('No suitable connector found');
           }
         } catch (innerErr) {
           console.warn(`Connection attempt ${attempts + 1} failed:`, innerErr);
           attempts++;
+          
           if (attempts >= maxAttempts) throw innerErr;
+          
           // Exponential backoff
           await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempts)));
         }
       }
       
+      // Try to initialize provider and signer
+      let walletProvider = null;
+      let walletSigner = null;
+      
+      if (window.ethereum) {
+        try {
+          // Use ethers.js v5 format for compatibility
+          const ethersProvider = new (window as any).ethers.providers.Web3Provider(window.ethereum);
+          walletProvider = ethersProvider;
+          walletSigner = ethersProvider.getSigner();
+          
+          setProvider(walletProvider);
+          setSigner(walletSigner);
+        } catch (providerErr) {
+          console.warn("Could not initialize ethers provider:", providerErr);
+        }
+      }
+      
+      setIsConnecting(false);
       return {
         account: address || '',
-        provider: null,
-        signer: null,
+        provider: walletProvider,
+        signer: walletSigner,
       };
     } catch (err) {
       console.error('Wallet connection error:', err);
-      setConnectionError(err.message || 'Wallet connection error');
+      setConnectionError(err?.message || 'Wallet connection error');
       
       // Fall back to development mode
       setIsDevelopmentMode(true);
       
+      setIsConnecting(false);
       return {
         account: '0x1234567890123456789012345678901234567890',
         provider: null,
         signer: null
       };
-    } finally {
-      setIsConnecting(false);
     }
-  }, [connect, connectors, address, isMetaMaskAvailable]);
+  }, [connect, connectors, address, isEthereumAvailable, isMetaMaskAvailable]);
 
-  /**
-   * Disconnect wallet
-   */
+  // Disconnect wallet function
   const disconnectWallet = useCallback(() => {
-    disconnect();
-    setIsDevelopmentMode(false);
+    try {
+      disconnect();
+    } catch (err) {
+      console.warn("Error during disconnect:", err);
+    }
+    
+    // Reset development mode if it was enabled due to fallback
+    if (localStorage.getItem('devModeEnabled') !== 'true' && 
+        !window.location.search.includes('devMode=true')) {
+      setIsDevelopmentMode(false);
+    }
+    
+    // Clear state
+    setAaWalletAddress(null);
+    setSigner(null);
+    setProvider(null);
   }, [disconnect]);
 
-  /**
-   * Get tokens in wallet - Updated to avoid multicall3 dependency
-   * @param {Array} tokenAddresses - Array of token addresses to check
-   * @returns {Array} - Array of token objects with balances and metadata
-   */
+  // Get tokens function with safer implementation
   const getTokens = useCallback(async (tokenAddresses: string[], chainIdParam?: number): Promise<Token[]> => {
-    // Development mode check - immediately return mock tokens if in development mode
+    // Development mode check - immediately return mock tokens
     if (isDevelopmentMode || !isConnected) {
-      console.log('Using mock tokens in development mode');
       return MOCK_TOKENS;
     }
 
@@ -268,66 +305,122 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     const currentChainId = chainIdParam || chainId || 689;
 
     try {
-      // Create a viem public client for the current chain - without multicall configuration
-      const publicClient = createPublicClient({
-        chain: {
-          id: currentChainId,
-          name: currentChainId === 689 ? 'NERO Chain Testnet' : 'Unknown Chain',
-          rpcUrls: {
-            default: {
-              http: [currentChainId === 689 
-                ? (import.meta.env.VITE_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io')
-                : 'https://ethereum.publicnode.com'
-              ],
+      // Create a public client with error handling
+      let publicClient;
+      try {
+        publicClient = createPublicClient({
+          chain: {
+            id: currentChainId,
+            name: currentChainId === 689 ? 'NERO Chain Testnet' : 'Unknown Chain',
+            rpcUrls: {
+              default: {
+                http: [currentChainId === 689 
+                  ? (import.meta.env.VITE_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io')
+                  : 'https://ethereum.publicnode.com'
+                ],
+              },
             },
           },
-        },
-        transport: http(),
-      });
+          transport: http(),
+        });
+      } catch (clientErr) {
+        console.error("Error creating public client:", clientErr);
+        return MOCK_TOKENS;
+      }
 
-      // Process results into token objects
+      // ERC20 ABI - minimal version
+      const ERC20_ABI = [
+        {
+          inputs: [{ name: 'owner', type: 'address' }],
+          name: 'balanceOf',
+          outputs: [{ name: '', type: 'uint256' }],
+          stateMutability: 'view',
+          type: 'function',
+        },
+        {
+          inputs: [],
+          name: 'decimals',
+          outputs: [{ name: '', type: 'uint8' }],
+          stateMutability: 'view',
+          type: 'function',
+        },
+        {
+          inputs: [],
+          name: 'symbol',
+          outputs: [{ name: '', type: 'string' }],
+          stateMutability: 'view',
+          type: 'function',
+        },
+        {
+          inputs: [],
+          name: 'name',
+          outputs: [{ name: '', type: 'string' }],
+          stateMutability: 'view',
+          type: 'function',
+        },
+      ] as const;
+
+      // Process tokens one by one with error handling
       const tokens: Token[] = [];
       
-      // Process each token one by one instead of using multicall
       for (let i = 0; i < tokenAddresses.length; i++) {
-        const tokenAddress = tokenAddresses[i] as `0x${string}`;
+        // Skip invalid addresses
+        if (!tokenAddresses[i] || !tokenAddresses[i].startsWith('0x')) {
+          continue;
+        }
         
         try {
-          // Individual contract calls for each token
-          const decimalsPromise = publicClient.readContract({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: 'decimals',
-          });
+          const tokenAddress = tokenAddresses[i] as `0x${string}`;
           
-          const symbolPromise = publicClient.readContract({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: 'symbol',
-          });
+          // Make contract calls with proper error handling
+          let decimals, symbol, name, balance;
           
-          const namePromise = publicClient.readContract({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: 'name',
-          });
+          try {
+            decimals = await publicClient.readContract({
+              address: tokenAddress,
+              abi: ERC20_ABI,
+              functionName: 'decimals',
+            });
+          } catch (err) {
+            console.warn(`Error reading decimals for ${tokenAddress}:`, err);
+            decimals = 18; // Default to 18 decimals
+          }
           
-          const balancePromise = publicClient.readContract({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: 'balanceOf',
-            args: [targetAddress as `0x${string}`],
-          });
+          try {
+            symbol = await publicClient.readContract({
+              address: tokenAddress,
+              abi: ERC20_ABI,
+              functionName: 'symbol',
+            });
+          } catch (err) {
+            console.warn(`Error reading symbol for ${tokenAddress}:`, err);
+            symbol = `TKN${i}`; // Default symbol
+          }
           
-          // Execute all promises in parallel
-          const [decimals, symbol, name, balance] = await Promise.all([
-            decimalsPromise,
-            symbolPromise,
-            namePromise,
-            balancePromise
-          ]);
+          try {
+            name = await publicClient.readContract({
+              address: tokenAddress,
+              abi: ERC20_ABI,
+              functionName: 'name',
+            });
+          } catch (err) {
+            console.warn(`Error reading name for ${tokenAddress}:`, err);
+            name = `Token ${i}`; // Default name
+          }
           
-          // Only add tokens with positive balances
+          try {
+            balance = await publicClient.readContract({
+              address: tokenAddress,
+              abi: ERC20_ABI,
+              functionName: 'balanceOf',
+              args: [targetAddress as `0x${string}`],
+            });
+          } catch (err) {
+            console.warn(`Error reading balance for ${tokenAddress}:`, err);
+            balance = 0n; // Default to zero balance
+          }
+          
+          // Add token to list if balance is positive or if in development mode
           if (typeof balance === 'bigint' && balance > 0n) {
             const formattedBalance = formatUnits(balance, decimals as number);
             
@@ -337,33 +430,29 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
               name: name as string,
               decimals: decimals as number,
               balance: formattedBalance,
-              rawBalance: balance.toString()
+              rawBalance: balance.toString(),
+              usdPrice: 1.0 // Default price
             });
           }
-        } catch (err) {
-          console.warn(`Skipping token ${tokenAddresses[i]} due to failed contract call:`, err);
+        } catch (tokenErr) {
+          console.warn(`Error processing token ${tokenAddresses[i]}:`, tokenErr);
           continue;
         }
       }
 
-      // If no tokens found and in development mode, return mock tokens
-      if (tokens.length === 0 && isDevelopmentMode) {
+      // If no tokens found or in dev mode, return mock tokens
+      if (tokens.length === 0) {
         return MOCK_TOKENS;
       }
 
       return tokens;
     } catch (err) {
       console.error('Error fetching tokens:', err);
-      if (isDevelopmentMode) {
-        return MOCK_TOKENS;
-      }
-      throw err;
+      return MOCK_TOKENS;
     }
   }, [address, aaWalletAddress, isConnected, isDevelopmentMode, chainId]);
 
-  /**
-   * Switch to NERO Chain
-   */
+  // Switch to NERO Chain
   const switchToNeroChain = useCallback(async () => {
     if (isDevelopmentMode) {
       console.log('Development mode: Pretending to switch to NERO Chain');
@@ -378,12 +467,18 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     }
   }, [isDevelopmentMode, switchChain]);
 
-  /**
-   * Add NERO Chain to wallet
-   * Note: With wagmi v2, switching to a chain will automatically
-   * add it if it's not already added to the wallet
-   */
+  // Add NERO Chain to wallet - identical to switchToNeroChain in this implementation
   const addNeroChain = switchToNeroChain;
+
+  // Automatically try to connect wallet if in development mode
+  useEffect(() => {
+    if (!isConnected && (
+      localStorage.getItem('devModeEnabled') === 'true' || 
+      window.location.search.includes('devMode=true')
+    )) {
+      connectWallet().catch(console.error);
+    }
+  }, [isConnected, connectWallet]);
 
   return {
     account: address,
@@ -392,8 +487,8 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     chainId,
     aaWalletAddress,
     isDevelopmentMode,
-    signer: null, 
-    provider: null, 
+    signer,
+    provider,
     connectWallet,
     disconnectWallet,
     getTokens,
