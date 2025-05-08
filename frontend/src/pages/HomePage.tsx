@@ -38,8 +38,6 @@ const HomePage = () => {
     tokens,
     isLoading: tokensLoading,
     error: tokensError,
-    recommendation,
-    getRecommendation
   } = useTokens();
   
   const {
@@ -72,21 +70,6 @@ const HomePage = () => {
     }
   }, [activeLotteries, selectedLottery]);
 
- 
-  // Update recommendation when token list and selected lottery change
-  useEffect(() => {
-    const getTokenRecommendation = async () => {
-      try {
-        if (tokens.length > 0 && selectedLottery) {
-          await getRecommendation(tokens, selectedLottery.ticketPrice);
-        }
-      } catch (err) {
-        console.error('Error getting token recommendation:', err);
-      }
-    };
-    
-    getTokenRecommendation();
-  }, [tokens, selectedLottery, getRecommendation]);
   
   // Combine errors from different hooks
   useEffect(() => {
@@ -154,7 +137,6 @@ const HomePage = () => {
         lottery: selectedLottery,
         token,
         quantity: ticketQuantity,
-        recommendation
       }
     });
     
@@ -304,7 +286,6 @@ const HomePage = () => {
         <TicketPurchase
           lottery={selectedLottery}
           tokens={tokens}
-          recommendation={recommendation}
           isLoading={tokensLoading}
           quantity={ticketQuantity}
           onQuantityChange={handleTicketQuantityChange}
