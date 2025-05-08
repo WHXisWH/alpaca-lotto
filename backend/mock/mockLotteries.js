@@ -1,7 +1,7 @@
 /**
  * Static mock lottery data for development mode
  */
-export const generateMockLotteries = () => {
+const generateMockLotteries = () => {
   const currentTime = Math.floor(Date.now() / 1000);
   
   // Mock token addresses that are consistent
@@ -83,7 +83,7 @@ export const generateMockLotteries = () => {
 /**
  * Create active mock lotteries (first 3 from mock data)
  */
-export const getActiveMockLotteries = () => {
+const getActiveMockLotteries = () => {
   const currentTime = Math.floor(Date.now() / 1000);
   const mockLotteries = generateMockLotteries();
   
@@ -101,7 +101,7 @@ export const getActiveMockLotteries = () => {
  * @param {string} [userAddress='0x1234567890123456789012345678901234567890'] - Optional user address for filtering
  * @returns {Array} - Array of mock tickets
  */
-export const generateMockTickets = (lotteryId, userAddress = '0x1234567890123456789012345678901234567890') => {
+const generateMockTickets = (lotteryId, userAddress = '0x1234567890123456789012345678901234567890') => {
   const quantity = Math.floor(Math.random() * 5) + 1;
   const tickets = [];
   
@@ -118,7 +118,8 @@ export const generateMockTickets = (lotteryId, userAddress = '0x1234567890123456
   return tickets;
 };
 
-export default {
+// Use CommonJS module.exports instead of ES modules export
+module.exports = {
   generateMockLotteries,
   getActiveMockLotteries,
   generateMockTickets

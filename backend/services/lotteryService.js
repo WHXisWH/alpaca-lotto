@@ -476,3 +476,6 @@ class LotteryService {
     return mockData.generateMockTickets(lotteryId);
   }
 }
+
+// Add this line to export the class
+module.exports = LotteryService;
