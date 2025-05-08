@@ -46,7 +46,7 @@ const formatUtils = {
       console.error('Error formatting units:', error, 'Value:', value);
       return '0';
     }
-  }
+  },
   
   /**
    * Safely parses a user input value to a BigNumber compatible string
