@@ -409,17 +409,17 @@ class LotteryService {
    * @param {Object} lotteryData - コントラクトから取得したロッタリーデータ
    * @returns {Object} - フォーマットされたロッタリーオブジェクト
    */
-  _formatLottery(lotteryData) {
+  __formatLottery(lotteryData) {
     return {
       id: lotteryData.id.toNumber(),
       name: lotteryData.name,
-      ticketPrice: lotteryData.ticketPrice.toString(),
+      ticketPrice: parseFloat(ethers.utils.formatUnits(lotteryData.ticketPrice, 18)),
       startTime: lotteryData.startTime.toNumber(),
       endTime: lotteryData.endTime.toNumber(),
       drawTime: lotteryData.drawTime.toNumber(),
       supportedTokens: lotteryData.supportedTokens,
       totalTickets: lotteryData.totalTickets.toNumber(),
-      prizePool: lotteryData.prizePool.toNumber(),
+      prizePool: parseFloat(ethers.utils.formatUnits(lotteryData.prizePool, 18)),
       drawn: lotteryData.drawn,
       winners: lotteryData.winners || [],
       winningTickets: lotteryData.winningTickets ?

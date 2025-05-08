@@ -1,7 +1,5 @@
-// frontend/src/components/TicketPurchase.jsx
-
 import React from 'react';
-import TokenSelector from './TokenSelector';
+import PaymentOptimizer from './PaymentOptimizer';
 
 /**
  * Ticket purchase modal component.
@@ -113,13 +111,11 @@ const TicketPurchase = ({
             </div>
           </div>
 
-          <TokenSelector
-            tokens={tokens}
-            selectedToken={selectedToken}
-            onSelect={setSelectedToken}
-            isLoading={isLoading}
-            recommendation={recommendation}
+          <PaymentOptimizer
+           onSelect={(opt) => setSelectedToken(opt.token)}
+           autoSelectRecommended={true}
           />
+
 
           <div className="purchase-summary">
             <h3>Purchase Summary</h3>
