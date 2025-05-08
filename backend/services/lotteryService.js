@@ -40,7 +40,25 @@ class LotteryService {
   setSigner(signer) {
     this.contract = this.contract.connect(signer);
   }
+  
 
+  async init() {
+    try {
+      console.log('[lotteryService] 🛠️ Running init()');
+      this.initProvider();
+  
+      const network = await this.provider.getNetwork();
+      console.log(`[lotteryService] 🌐 Connected to network: chainId=${network.chainId}, name=${network.name}`);
+  
+      this.initialized = true;
+      return true;
+    } catch (error) {
+      console.error('[lotteryService] ❌ Failed to initialize provider:', error.message || error);
+      return false;
+    }
+  }
+
+  
   /*
    * @returns {Array} 
    */
