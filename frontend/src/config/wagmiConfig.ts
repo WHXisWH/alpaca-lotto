@@ -23,7 +23,7 @@ const neroTestnet = {
   blockExplorers: {
     default: {
       name: 'NERO Chain Testnet Explorer',
-      url: 'https://explorer-testnet.nerochain.io',
+      url: 'https://testnet.neroscan.io/',
     },
   },
   testnet: true,

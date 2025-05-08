@@ -270,7 +270,7 @@ const PaymentPage = () => {
           <div className="action-buttons">
             {!isDevelopmentMode && (
               <a 
-                href={`https://explorer-testnet.nerochain.io/tx/${txHash}`}
+                href={`https://testnet.neroscan.io/tx/${txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="explorer-link"

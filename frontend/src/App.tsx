@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import HomePage from './pages/HomePage';
+import TicketsPage from './pages/TicketsPage';
 import PaymentPage from './pages/PaymentPage';
 import Header from './components/Header';
 import WalletConnect from './components/WalletConnect';
@@ -8,6 +9,7 @@ import Footer from './components/Footer';
 import useWagmiWallet from './hooks/useWagmiWallet'; 
 import useSessionKeys from './hooks/useSessionKeys';
 import './styles/global.css';
+
 
 /**
  * Root component for the AlpacaLotto application
@@ -171,6 +173,7 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/payment" element={<PaymentPage />} />
+            <Route path="/tickets" element={<TicketsPage />} /> 
           </Routes>
         </main>
         

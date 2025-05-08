@@ -43,8 +43,12 @@ const LotteryDetails = ({ lottery, userTickets = [] }) => {
       </div>
 
       <div className="prize-section">
-        <div className="prize-amount">{prizePool} ETH</div>
-        <div className="prize-label">Total Prize Pool</div>
+       <div className="prize-amount">
+         {typeof lottery.prizePool === 'string' && lottery.prizePool.startsWith('0x')
+          ? formatUtils.formatUnits(lottery.prizePool, 18)
+          : (parseFloat(lottery.ticketPrice) * lottery.totalTickets).toFixed(2)} ETH
+        </div>
+       <div className="prize-label">Total Prize Pool</div>
       </div>
 
       <div className="details-section">

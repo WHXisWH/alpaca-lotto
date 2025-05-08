@@ -9,7 +9,6 @@ import useWagmiWallet from '../hooks/useWagmiWallet'; // Using our new wagmi wal
 import useTokens from '../hooks/useTokens';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
-import { api } from '../services/api';
 
 /**
  * Home page of the application
