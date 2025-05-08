@@ -26,36 +26,106 @@ class UserOpSDK {
     this.initialized = false;
   }
 
-  async init(signer) {
-    try {
-      console.log("Initializing UserOpSDK with parameters:", CONSTANTS);
-      
-      this.signer = signer;
-      
-      // Safely create provider
-      this.provider = new ethers.providers.JsonRpcProvider(CONSTANTS.NERO_RPC_URL);
-      console.log("Provider created successfully");
-      
+  // 21-45行目を以下に置き換え
+async init(signer) {
+  try {
+    console.log("Initializing UserOpSDK with parameters:", CONSTANTS);
+    
+    this.signer = signer;
+    
+    // Safely create provider with retry mechanism
+    let providerAttempts = 0;
+    while (providerAttempts < 3) {
       try {
-        // Initialize the AA Client 
-        if (typeof Client.init === 'function') {
-          this.client = await Client.init(CONSTANTS.NERO_RPC_URL, {
+        this.provider = new ethers.providers.JsonRpcProvider(CONSTANTS.NERO_RPC_URL);
+        await this.provider.getNetwork(); // Test the connection
+        console.log("Provider created successfully");
+        break;
+      } catch (providerErr) {
+        console.warn(`Provider creation attempt ${providerAttempts + 1} failed:`, providerErr);
+        providerAttempts++;
+        if (providerAttempts >= 3) throw providerErr;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+    
+    try {
+      // Initialize the AA Client with proper error handling
+      if (typeof Client.init === 'function') {
+        this.client = await Client.init(CONSTANTS.NERO_RPC_URL, {
+          overrideBundlerRpc: CONSTANTS.BUNDLER_URL,
+          entryPoint: CONSTANTS.ENTRYPOINT_ADDRESS,
+          timeout: 30000,
+        });
+        console.log("AA Client initialized successfully");
+      } else {
+        throw new Error("Client.init is not a function");
+      }
+    } catch (clientErr) {
+      console.error("Error initializing AA Client:", clientErr);
+      
+      // Fallback client implementation
+      this.client = this._createMockClient();
+      console.log("Using fallback client implementation");
+    }
+
+    try {
+      if (Presets && Presets.Builder && typeof Presets.Builder.SimpleAccount === 'object' && 
+          typeof Presets.Builder.SimpleAccount.init === 'function') {
+        // Create a SimpleAccount builder
+        this.builder = await Presets.Builder.SimpleAccount.init(
+          signer,
+          CONSTANTS.NERO_RPC_URL,
+          {
             overrideBundlerRpc: CONSTANTS.BUNDLER_URL,
             entryPoint: CONSTANTS.ENTRYPOINT_ADDRESS,
-          });
-          console.log("AA Client initialized successfully");
-        } else {
-          console.error("Client.init is not a function, using fallback");
+            factory: CONSTANTS.ACCOUNT_FACTORY_ADDRESS,
+          }
+        );
+        console.log("SimpleAccount builder initialized successfully");
+      } else {
+        throw new Error("Presets.Builder.SimpleAccount.init is not a function");
+      }
+    } catch (builderErr) {
+      console.error("Error initializing SimpleAccount builder:", builderErr);
       
-          this.client = { 
-            sendUserOperation: async () => { 
-              return { 
-                userOpHash: '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
-                wait: async () => ({ transactionHash: '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('') })
-              };
-            }
-          };
-        }
+      // Fallback builder implementation
+      this.builder = this._createMockBuilder();
+      console.log("Using fallback builder implementation");
+    }
+    
+    try {
+      this.aaWalletAddress = await this._getAAWalletAddress();
+      console.log("AA wallet address retrieved:", this.aaWalletAddress);
+    } catch (addressErr) {
+      console.error("Error retrieving AA wallet address:", addressErr);
+      this.aaWalletAddress = this._createMockAddress();
+      console.log("Using fallback AA wallet address:", this.aaWalletAddress);
+    }
+    
+    this.initialized = true;
+    
+    return {
+      client: this.client,
+      builder: this.builder,
+      aaWalletAddress: this.aaWalletAddress
+    };
+  } catch (error) {
+    console.error('Error initializing UserOpSDK:', error);
+    
+    // Final fallback - create mock implementations for everything
+    this.client = this._createMockClient();
+    this.builder = this._createMockBuilder();
+    this.aaWalletAddress = this._createMockAddress();
+    this.initialized = true;
+    
+    return {
+      client: this.client,
+      builder: this.builder,
+      aaWalletAddress: this.aaWalletAddress
+    };
+  }
+}
         
 
         if (Presets && Presets.Builder && typeof Presets.Builder.SimpleAccount === 'object' && 

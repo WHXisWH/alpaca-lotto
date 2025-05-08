@@ -1,6 +1,6 @@
 // frontend/src/components/TicketPurchase.tsx
 import React from 'react';
-import PaymentOptimizer from './PaymentOptimizer';
+import EnhancedPaymentUI from './PaymentOptimizer/EnhancedPaymentUI';
 import formatUtils from '../utils/formatUtils';
 
 /**
@@ -121,7 +121,7 @@ const TicketPurchase = ({
             </div>
           </div>
 
-          <PaymentOptimizer
+          <EnhancedPaymentUI
             onSelect={handlePaymentSelection}
             autoSelectRecommended={true}
           />

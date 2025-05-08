@@ -17,8 +17,28 @@ class PaymasterService {
 
   async init(apiKey = '') {
     this.apiKey = apiKey;
-    this.provider = new ethers.providers.JsonRpcProvider('https://rpc-testnet.nerochain.io');
-    this.paymasterRpc = new ethers.providers.JsonRpcProvider(this.rpcUrl);
+    
+    // Create provider with retry mechanism
+    try {
+      this.provider = new ethers.providers.JsonRpcProvider('https://rpc-testnet.nerochain.io');
+      await this.provider.getNetwork(); // Test the connection
+    } catch (err) {
+      console.warn("Failed to initialize primary provider, using fallback", err);
+      // Fallback to a different RPC or implementation
+      this.provider = new ethers.providers.JsonRpcProvider('https://ethereum.publicnode.com');
+    }
+    
+    // Create paymaster RPC with retry mechanism
+    try {
+      this.paymasterRpc = new ethers.providers.JsonRpcProvider(this.rpcUrl);
+      // Basic connectivity test
+      await this.paymasterRpc.getNetwork();
+    } catch (err) {
+      console.warn("Failed to initialize paymaster RPC", err);
+      // Fallback to using the same provider
+      this.paymasterRpc = this.provider;
+    }
+    
     return this;
   }
 

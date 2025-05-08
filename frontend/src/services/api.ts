@@ -6,42 +6,41 @@ import mockData from '../mock/mockLotteries';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
 // Create API client instance
-const apiClient = axios.create({
+// 10-18行目を以下に置き換え
+// Create API client instance with retry mechanism
+cconst apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
   timeout: 10000, // 10 second timeout
+  // Add retry logic
+  retries: 3,
+  retryDelay: 1000,
 });
 
-// Request interceptor
-apiClient.interceptors.request.use(
-  (config) => {
-    return config;
-  },
-  (error) => {
-    console.error('API Request Error:', error);
-    return Promise.reject(error);
+// Add retry interceptor
+apiClient.interceptors.response.use(undefined, async (err) => {
+  const { config } = err;
+  // Only retry on network errors or 5xx server errors
+  if (
+    !config || 
+    !config.retries || 
+    config._retryCount >= config.retries ||
+    (err.response && err.response.status < 500)
+  ) {
+    return Promise.reject(err);
   }
-);
-
-// Response interceptor
-apiClient.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  (error) => {
-    if (error.code === 'ERR_NETWORK') {
-      console.error('Network error: CORS or server not responding');
-      console.error('Using mock data for this request');
-    } else if (error.response?.status === 404) {
-      console.error('API endpoint not found:', error.config?.url);
-    } else {
-      console.error('API Response Error:', error.response || error.message || error);
-    }
-    return Promise.reject(error);
-  }
-);
+  
+  // Retry with exponential backoff
+  config._retryCount = config._retryCount || 0;
+  config._retryCount++;
+  
+  const delay = config.retryDelay * Math.pow(2, config._retryCount - 1);
+  await new Promise(resolve => setTimeout(resolve, delay));
+  
+  return apiClient(config);
+});
 
 /**
  * Service to handle communication with the backend API.

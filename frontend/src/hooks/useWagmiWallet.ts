@@ -162,77 +162,63 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
 
   // Check for MetaMask or any other injected provider
   const isMetaMaskAvailable = useCallback((): boolean => {
-    return (
-      typeof window !== 'undefined' && 
-      window.ethereum && 
-      window.ethereum.isMetaMask
-    );
+    try {
+      return (
+        typeof window !== 'undefined' && 
+        window.ethereum && 
+        window.ethereum.isMetaMask
+      );
+    } catch (err) {
+      console.warn("Error checking for MetaMask:", err);
+      return false;
+    }
   }, []);
-
-  // Auto-enable development mode if MetaMask is not available
-  useEffect(() => {
-    if (!isMetaMaskAvailable()) {
-      setIsDevelopmentMode(true);
-    }
-  }, [isMetaMaskAvailable]);
-
-  // Handle connection errors
-  useEffect(() => {
-    // Set connection error from wagmi if any
-    if (connectError) {
-      setConnectionError(connectError.message);
-      
-      // Fall back to development mode on error
-      if (!isConnected) {
-        setIsDevelopmentMode(true);
-      }
-    } else {
-      setConnectionError(null);
-    }
-  }, [connectError, isConnected]);
-
-  // Update isConnecting state
-  useEffect(() => {
-    setIsConnecting(connecting || isPending);
-  }, [connecting, isPending]);
   
-  /**
-   * Connect wallet
-   */
+  // 76-95行目を以下に置き換え
   const connectWallet = useCallback(async () => {
     setIsConnecting(true);
     setConnectionError(null);
-
+  
     try {
-      // Check for MetaMask
+      // Check for MetaMask with error handling
       if (!isMetaMaskAvailable()) {
         console.log('MetaMask not detected - activating development mode');
         setIsDevelopmentMode(true);
         setIsConnecting(false);
         
-        // Return mock data in development mode
         return {
           account: '0x1234567890123456789012345678901234567890',
           provider: null,
           signer: null
         };
       }
-
-      // Find the appropriate connector (prefer MetaMask)
-      const connector = connectors.find(c => c.name === 'MetaMask') || connectors[0];
+  
+      // Retry logic with exponential backoff
+      let attempts = 0;
+      const maxAttempts = 3;
       
-      if (connector) {
-        await connect({ connector });
-      } else {
-        throw new Error('No suitable connector found');
+      while (attempts < maxAttempts) {
+        try {
+          const connector = connectors.find(c => c.name === 'MetaMask') || connectors[0];
+          if (connector) {
+            await connect({ connector });
+            break;
+          }
+        } catch (innerErr) {
+          console.warn(`Connection attempt ${attempts + 1} failed:`, innerErr);
+          attempts++;
+          if (attempts >= maxAttempts) throw innerErr;
+          // Exponential backoff
+          await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempts)));
+        }
       }
       
       return {
         account: address || '',
-        provider: null, // No longer needed with wagmi
-        signer: null, // No longer needed with wagmi
+        provider: null,
+        signer: null,
       };
-    } catch (err: any) {
+    } catch (err) {
       console.error('Wallet connection error:', err);
       setConnectionError(err.message || 'Wallet connection error');
       

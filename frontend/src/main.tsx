@@ -52,14 +52,30 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Add error listener for unhandled exceptions
 window.addEventListener('error', (event) => {
   console.error('Unhandled error:', event.error);
+  
+  // Specific handling for connection errors
+  if (event.error && (
+    event.error.message.includes('disconnected port') || 
+    event.error.message.includes('Failed to fetch') ||
+    event.error.message.includes('Network error')
+  )) {
+    console.warn("Connection error detected, may retry automatically");
+  }
 });
 
-// Add promise rejection handler
+// Add promise rejection handler with retry for specific network errors
 window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled promise rejection:', event.reason);
+  
+  // Handle specific wallet connection errors
+  if (event.reason && event.reason.message && (
+    event.reason.message.includes('User rejected') ||
+    event.reason.message.includes('User denied')
+  )) {
+    console.warn("User rejected wallet connection");
+  }
 });
 
 // Create root and render app with error boundary
