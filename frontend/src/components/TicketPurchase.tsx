@@ -1,19 +1,10 @@
+// frontend/src/components/TicketPurchase.tsx
 import React from 'react';
 import PaymentOptimizer from './PaymentOptimizer';
 import formatUtils from '../utils/formatUtils';
 
 /**
  * Ticket purchase modal component.
- * @param {Object} props
- * @param {Object} props.lottery - Lottery object.
- * @param {Array} props.tokens - Array of available tokens.
- * @param {Object} props.recommendation - AI recommendation info.
- * @param {boolean} props.isLoading - Loading state.
- * @param {number} props.quantity - Number of tickets.
- * @param {Function} props.onQuantityChange - Handler for quantity change.
- * @param {Function} props.onPurchase - Handler for purchase execution.
- * @param {Function} props.onClose - Handler for closing the modal.
- * @param {boolean} props.hasSessionKey - Whether a session key exists.
  */
 const TicketPurchase = ({
   lottery,
@@ -27,16 +18,13 @@ const TicketPurchase = ({
   hasSessionKey = false
 }) => {
   const [selectedToken, setSelectedToken] = React.useState(null);
+  const [paymentType, setPaymentType] = React.useState(0);
 
-  // Update selected token when recommendation or tokens change
-  React.useEffect(() => {
-    if (recommendation?.recommendedToken) {
-      setSelectedToken(recommendation.recommendedToken);
-    } else if (tokens.length > 0) {
-      // Only set if no token is selected yet
-      setSelectedToken((prev) => prev ?? tokens[0]);
-    }
-  }, [recommendation, tokens]); // Removed selectedToken from dependencies to prevent infinite loops
+  // Handle payment selection from optimizer
+  const handlePaymentSelection = (selection) => {
+    setSelectedToken(selection.token);
+    setPaymentType(selection.paymentType);
+  };
 
   // Return null if lottery data is missing
   if (!lottery) {
@@ -80,7 +68,10 @@ const TicketPurchase = ({
   // Handler for executing the purchase.
   const handlePurchase = () => {
     if (selectedToken && onPurchase) {
-      onPurchase(selectedToken);
+      onPurchase({
+        token: selectedToken,
+        paymentType: paymentType
+      });
     }
   };
 
@@ -131,8 +122,8 @@ const TicketPurchase = ({
           </div>
 
           <PaymentOptimizer
-           onSelect={(opt) => setSelectedToken(opt.token)}
-           autoSelectRecommended={true}
+            onSelect={handlePaymentSelection}
+            autoSelectRecommended={true}
           />
 
           <div className="purchase-summary">
@@ -158,6 +149,16 @@ const TicketPurchase = ({
                   {recommendation && recommendation.recommendedToken.address === selectedToken.address && (
                     <span className="ai-badge">AI Recommended</span>
                   )}
+                </span>
+              </div>
+            )}
+            {paymentType !== undefined && (
+              <div className="summary--row">
+                <span>Payment Method:</span>
+                <span className="payment-method-value">
+                  {paymentType === 0 && "Sponsored (Free)"}
+                  {paymentType === 1 && "ERC20 (Prepay)"}
+                  {paymentType === 2 && "ERC20 (Postpay)"}
                 </span>
               </div>
             )}

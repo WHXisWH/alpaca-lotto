@@ -1,495 +1,168 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useAccount, useWalletClient } from 'wagmi';
-import userOpSDK from '../services/userOpSDK';
-import useWagmiWallet from './useWagmiWallet';
+// frontend/src/hooks/useUserOp.js
+import { useState, useEffect, useCallback } from 'react';
+import { useAccount } from 'wagmi';
+import { ethers } from 'ethers';
+import { Client, Presets } from 'userop';
 
-// Transaction type definitions
-interface Call {
-  to: string;
-  data: string;
-}
-
-interface TransferParams {
-  tokenAddress: string;
-  recipientAddress: string;
-  amount: string;
-  decimals: number;
-  paymentType: number;
-  paymentToken?: string;
-}
-
-interface BatchParams {
-  calls: Call[];
-  paymentType: number;
-  paymentToken?: string;
-}
-
-interface TicketPurchaseParams {
-  lotteryId: number;
-  tokenAddress: string;
-  quantity: number;
-  paymentType?: number;
-  paymentToken?: string;
-  useSessionKey?: boolean;
-}
-
-interface BatchPurchaseParams {
-  selections: {
-    lotteryId: number;
-    tokenAddress: string;
-    quantity: number;
-  }[];
-  paymentType?: number;
-  paymentToken?: string;
-}
-
-interface SessionKeyParams {
-  duration: number;
-  paymentType?: number;
-  paymentToken?: string;
-}
-
-interface UseUserOpReturn {
-  isLoading: boolean;
-  error: string | null;
-  txHash: string | null;
-  aaWalletAddress: string | null;
-  isDevelopmentMode: boolean;
-  initSDK: () => Promise<{ client: any; builder: any; aaAddress: string }>;
-  isWalletDeployed: (address: string) => Promise<boolean>;
-  executeTransfer: (params: TransferParams) => Promise<string>;
-  executeBatch: (params: BatchParams) => Promise<string>;
-  executeTicketPurchase: (params: TicketPurchaseParams) => Promise<string>;
-  executeBatchPurchase: (params: BatchPurchaseParams) => Promise<string>;
-  createSessionKey: (params: SessionKeyParams) => Promise<string>;
-  revokeSessionKey: (sessionKey: string) => Promise<string>;
-  claimPrize: (lotteryId: number) => Promise<string>;
-  getSupportedTokens: () => Promise<any[]>;
-}
+// Constants for AA setup
+const NERO_RPC_URL = "https://rpc-testnet.nerochain.io";
+const BUNDLER_URL = "https://bundler.service.nerochain.io";
+const PAYMASTER_URL = "https://paymaster-testnet.nerochain.io";
+const ENTRYPOINT_ADDRESS = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
+const ACCOUNT_FACTORY_ADDRESS = "0x9406Cc6185a346906296840746125a0E44976454";
 
 /**
- * Custom hook for managing UserOperations with NERO Chain's Account Abstraction
- * Using the UserOpSDK service
+ * Hook for Account Abstraction functionality
  */
-export const useUserOp = (): UseUserOpReturn => {
-  // Use wagmi hooks
+const useUserOp = () => {
   const { address, isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient();
-  const { isDevelopmentMode } = useWagmiWallet();
-  
-  // State
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [aaWalletAddress, setAaWalletAddress] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string | null>(null);
-  
-  // Initialize SDK
-  const initSDK = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      // Check if development mode
-      if (isDevelopmentMode || !walletClient) {
-        console.log('Using development mode for UserOp SDK');
-        
-        // Mock wallet
-        const mockWallet = {
-          getAddress: async () => address || '0x1234567890123456789012345678901234567890',
-          signMessage: async (message: string) => '0x123456'
-        };
-        
-        // Initialize with mock signer
-        const { client, builder, aaWalletAddress: aaAddress } = await userOpSDK.init(mockWallet);
-        
-        setAaWalletAddress(aaAddress);
-        setIsLoading(false);
-        
-        return { client, builder, aaAddress };
-      }
+  const [client, setClient] = useState(null);
+  const [builder, setBuilder] = useState(null);
+  const [aaWalletAddress, setAaWalletAddress] = useState('');
+  const [isDeployed, setIsDeployed] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-      // Initialize with real wallet client
-      const signer = {
-        getAddress: async () => address!,
-        signMessage: async (message: { message: string }) => {
-          return await walletClient.signMessage({
-            message: message.message
-          });
+  /**
+   * Initialize the AA SDK
+   */
+  const initSDK = useCallback(async () => {
+    if (!isConnected || !address) {
+      setError('Wallet not connected');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Create a signer from the connected wallet
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      
+      // Initialize the AA Client
+      const aaClient = await Client.init(NERO_RPC_URL, {
+        overrideBundlerRpc: BUNDLER_URL,
+        entryPoint: ENTRYPOINT_ADDRESS,
+      });
+      setClient(aaClient);
+
+      // Create a SimpleAccount builder
+      const aaBuilder = await Presets.Builder.SimpleAccount.init(
+        signer,
+        NERO_RPC_URL,
+        {
+          overrideBundlerRpc: BUNDLER_URL,
+          entryPoint: ENTRYPOINT_ADDRESS,
+          factory: ACCOUNT_FACTORY_ADDRESS,
         }
-      };
-      
-      const { client, builder, aaWalletAddress: aaAddress } = await userOpSDK.init(signer);
-      
-      setAaWalletAddress(aaAddress);
+      );
+      setBuilder(aaBuilder);
+
+      // Get the AA wallet address
+      const simpleAccountAddress = await aaBuilder.getSender();
+      setAaWalletAddress(simpleAccountAddress);
+
+      // Check if the AA wallet is deployed
+      const code = await provider.getCode(simpleAccountAddress);
+      setIsDeployed(code !== '0x');
+
       setIsLoading(false);
-      
-      return { client, builder, aaAddress };
-    } catch (err: any) {
-      console.error('Error initializing UserOp SDK:', err);
-      setError(err.message || 'Failed to initialize UserOp SDK');
-      setIsLoading(false);
-      throw err;
-    }
-  }, [address, walletClient, isDevelopmentMode]);
-  
-  // Check if AA wallet is deployed
-  const isWalletDeployed = useCallback(async (address: string): Promise<boolean> => {
-    try {
-      return await userOpSDK.isWalletDeployed(address);
     } catch (err) {
-      console.error('Error checking wallet deployment:', err);
-      return false;
-    }
-  }, []);
-  
-  // Execute token transfer
-  const executeTransfer = useCallback(async (params: TransferParams): Promise<string> => {
-    setIsLoading(true);
-    setError(null);
-    setTxHash(null);
-    
-    try {
-      // Initialize SDK if not already
-      if (!userOpSDK.initialized) {
-        await initSDK();
-      }
-      
-      // Create ERC20 transfer UserOperation
-      userOpSDK.createERC20Transfer(
-        params.tokenAddress,
-        params.recipientAddress,
-        params.amount,
-        params.decimals
-      );
-      
-      // Set paymaster options
-      userOpSDK.setPaymasterOptions(
-        params.paymentType,
-        params.paymentToken
-      );
-      
-      // Estimate and set gas parameters
-      const gasEstimation = await userOpSDK.estimateGas();
-      userOpSDK.setGasParameters(gasEstimation);
-      
-      // Send UserOperation
-      const result = await userOpSDK.sendUserOperation();
-      
-      if (result.success) {
-        setTxHash(result.transactionHash);
-        setIsLoading(false);
-        return result.transactionHash;
-      } else {
-        throw new Error('Failed to send UserOperation');
-      }
-    } catch (err: any) {
-      console.error('Error executing transfer:', err);
-      setError(err.message || 'Failed to execute transfer');
+      console.error('Error initializing AA SDK:', err);
+      setError(`Error initializing AA SDK: ${err.message}`);
       setIsLoading(false);
-      throw err;
     }
-  }, [initSDK]);
-  
-  // Execute batch operations
-  const executeBatch = useCallback(async (params: BatchParams): Promise<string> => {
-    setIsLoading(true);
-    setError(null);
-    setTxHash(null);
-    
-    try {
-      // Initialize SDK if not already
-      if (!userOpSDK.initialized) {
-        await initSDK();
-      }
-      
-      // Create batch UserOperation
-      userOpSDK.createBatchOperation(params.calls);
-      
-      // Set paymaster options
-      userOpSDK.setPaymasterOptions(
-        params.paymentType,
-        params.paymentToken
-      );
-      
-      // Estimate and set gas parameters
-      const gasEstimation = await userOpSDK.estimateGas();
-      userOpSDK.setGasParameters(gasEstimation);
-      
-      // Send UserOperation
-      const result = await userOpSDK.sendUserOperation();
-      
-      if (result.success) {
-        setTxHash(result.transactionHash);
-        setIsLoading(false);
-        return result.transactionHash;
-      } else {
-        throw new Error('Failed to send batch UserOperation');
-      }
-    } catch (err: any) {
-      console.error('Error executing batch operation:', err);
-      setError(err.message || 'Failed to execute batch operation');
-      setIsLoading(false);
-      throw err;
-    }
-  }, [initSDK]);
-  
-  // Execute ticket purchase
-  const executeTicketPurchase = useCallback(async (params: TicketPurchaseParams): Promise<string> => {
-    setIsLoading(true);
-    setError(null);
-    setTxHash(null);
-    
-    try {
-      // Initialize SDK if not already
-      if (!userOpSDK.initialized) {
-        await initSDK();
-      }
-      
-      // Create ticket purchase UserOperation
-      userOpSDK.createTicketPurchaseOp(
-        params.lotteryId,
-        params.tokenAddress,
-        params.quantity
-      );
-      
-      // Set paymaster options
-      userOpSDK.setPaymasterOptions(
-        params.paymentType || 0,
-        params.paymentToken
-      );
-      
-      // Estimate and set gas parameters
-      const gasEstimation = await userOpSDK.estimateGas();
-      userOpSDK.setGasParameters(gasEstimation);
-      
-      // Send UserOperation
-      const result = await userOpSDK.sendUserOperation();
-      
-      if (result.success) {
-        setTxHash(result.transactionHash);
-        setIsLoading(false);
-        return result.transactionHash;
-      } else {
-        throw new Error('Failed to send ticket purchase UserOperation');
-      }
-    } catch (err: any) {
-      console.error('Error executing ticket purchase:', err);
-      setError(err.message || 'Failed to execute ticket purchase');
-      setIsLoading(false);
-      throw err;
-    }
-  }, [initSDK]);
-  
-  // Execute batch ticket purchase
-  const executeBatchPurchase = useCallback(async (params: BatchPurchaseParams): Promise<string> => {
-    setIsLoading(true);
-    setError(null);
-    setTxHash(null);
-    
-    try {
-      // Initialize SDK if not already
-      if (!userOpSDK.initialized) {
-        await initSDK();
-      }
-      
-      // Create batch ticket purchase UserOperation
-      userOpSDK.createBatchTicketPurchaseOp(params.selections);
-      
-      // Set paymaster options
-      userOpSDK.setPaymasterOptions(
-        params.paymentType || 0,
-        params.paymentToken
-      );
-      
-      // Estimate and set gas parameters
-      const gasEstimation = await userOpSDK.estimateGas();
-      userOpSDK.setGasParameters(gasEstimation);
-      
-      // Send UserOperation
-      const result = await userOpSDK.sendUserOperation();
-      
-      if (result.success) {
-        setTxHash(result.transactionHash);
-        setIsLoading(false);
-        return result.transactionHash;
-      } else {
-        throw new Error('Failed to send batch ticket purchase UserOperation');
-      }
-    } catch (err: any) {
-      console.error('Error executing batch ticket purchase:', err);
-      setError(err.message || 'Failed to execute batch ticket purchase');
-      setIsLoading(false);
-      throw err;
-    }
-  }, [initSDK]);
-  
-  // Create session key
-  const createSessionKey = useCallback(async (params: SessionKeyParams): Promise<string> => {
-    setIsLoading(true);
-    setError(null);
-    setTxHash(null);
-    
-    try {
-      // Initialize SDK if not already
-      if (!userOpSDK.initialized) {
-        await initSDK();
-      }
-      
-      // Generate new session key
-      const sessionKeyAddress = '0x' + [...Array(40)].map(() => 
-        Math.floor(Math.random() * 16).toString(16)
-      ).join('');
-      
-      // Create session key UserOperation
-      userOpSDK.createSessionKeyOp(sessionKeyAddress, params.duration);
-      
-      // Set paymaster options
-      userOpSDK.setPaymasterOptions(
-        params.paymentType || 0,
-        params.paymentToken
-      );
-      
-      // Estimate and set gas parameters
-      const gasEstimation = await userOpSDK.estimateGas();
-      userOpSDK.setGasParameters(gasEstimation);
-      
-      // Send UserOperation
-      const result = await userOpSDK.sendUserOperation();
-      
-      if (result.success) {
-        setTxHash(result.transactionHash);
-        setIsLoading(false);
-        return sessionKeyAddress;
-      } else {
-        throw new Error('Failed to create session key');
-      }
-    } catch (err: any) {
-      console.error('Error creating session key:', err);
-      setError(err.message || 'Failed to create session key');
-      setIsLoading(false);
-      throw err;
-    }
-  }, [initSDK]);
-  
-  // Revoke session key
-  const revokeSessionKey = useCallback(async (sessionKey: string): Promise<string> => {
-    setIsLoading(true);
-    setError(null);
-    setTxHash(null);
-    
-    try {
-      // Initialize SDK if not already
-      if (!userOpSDK.initialized) {
-        await initSDK();
-      }
-      
-      // Create revoke session key UserOperation
-      userOpSDK.createRevokeSessionKeyOp(sessionKey);
-      
-      // Set paymaster options - Type 0 (sponsored) for better UX
-      userOpSDK.setPaymasterOptions(0);
-      
-      // Estimate and set gas parameters
-      const gasEstimation = await userOpSDK.estimateGas();
-      userOpSDK.setGasParameters(gasEstimation);
-      
-      // Send UserOperation
-      const result = await userOpSDK.sendUserOperation();
-      
-      if (result.success) {
-        setTxHash(result.transactionHash);
-        setIsLoading(false);
-        return result.transactionHash;
-      } else {
-        throw new Error('Failed to revoke session key');
-      }
-    } catch (err: any) {
-      console.error('Error revoking session key:', err);
-      setError(err.message || 'Failed to revoke session key');
-      setIsLoading(false);
-      throw err;
-    }
-  }, [initSDK]);
-  
-  // Claim lottery prize
-  const claimPrize = useCallback(async (lotteryId: number): Promise<string> => {
-    setIsLoading(true);
-    setError(null);
-    setTxHash(null);
-    
-    try {
-      // Initialize SDK if not already
-      if (!userOpSDK.initialized) {
-        await initSDK();
-      }
-      
-      // Create claim prize UserOperation
-      userOpSDK.createClaimPrizeOp(lotteryId);
-      
-      // Set paymaster options - Type 0 (sponsored) for better UX
-      userOpSDK.setPaymasterOptions(0);
-      
-      // Estimate and set gas parameters
-      const gasEstimation = await userOpSDK.estimateGas();
-      userOpSDK.setGasParameters(gasEstimation);
-      
-      // Send UserOperation
-      const result = await userOpSDK.sendUserOperation();
-      
-      if (result.success) {
-        setTxHash(result.transactionHash);
-        setIsLoading(false);
-        return result.transactionHash;
-      } else {
-        throw new Error('Failed to claim prize');
-      }
-    } catch (err: any) {
-      console.error('Error claiming prize:', err);
-      setError(err.message || 'Failed to claim prize');
-      setIsLoading(false);
-      throw err;
-    }
-  }, [initSDK]);
-  
-  // Get supported tokens from Paymaster
-  const getSupportedTokens = useCallback(async (): Promise<any[]> => {
-    try {
-      // Initialize SDK if not already
-      if (!userOpSDK.initialized) {
-        await initSDK();
-      }
-      
-      return await userOpSDK.getSupportedTokens();
-    } catch (err: any) {
-      console.error('Error getting supported tokens:', err);
-      setError(err.message || 'Failed to get supported tokens');
-      return [];
-    }
-  }, [initSDK]);
-  
-  // Initialize SDK on mount if wallet is connected
+  }, [isConnected, address]);
+
+  // Initialize SDK when wallet is connected
   useEffect(() => {
-    if (isConnected && !userOpSDK.initialized) {
-      initSDK().catch(console.error);
+    if (isConnected && !client) {
+      initSDK();
     }
-  }, [isConnected, initSDK]);
-  
+  }, [isConnected, client, initSDK]);
+
+  /**
+   * Create and send a UserOperation
+   */
+  const sendUserOp = useCallback(async (callData, to, value = 0, paymasterOptions = null) => {
+    if (!client || !builder) {
+      throw new Error('AA SDK not initialized');
+    }
+
+    try {
+      // Reset the builder to avoid stale state
+      builder.resetOp();
+      
+      // Set the execution parameters
+      builder.execute(to, value, callData);
+      
+      // Set paymaster options if provided
+      if (paymasterOptions) {
+        builder.setPaymasterOptions(paymasterOptions);
+      }
+      
+      // Send the UserOperation
+      const result = await client.sendUserOperation(builder);
+      
+      // Return the transaction result
+      return result;
+    } catch (err) {
+      console.error('Error sending UserOperation:', err);
+      throw err;
+    }
+  }, [client, builder]);
+
+  /**
+   * Create and send a batch of UserOperations
+   */
+  const sendBatchUserOp = useCallback(async (callDatas, targets, values = [], paymasterOptions = null) => {
+    if (!client || !builder) {
+      throw new Error('AA SDK not initialized');
+    }
+    
+    if (callDatas.length !== targets.length) {
+      throw new Error('CallDatas and targets length mismatch');
+    }
+    
+    // Ensure values array is populated
+    const finalValues = values.length === targets.length 
+      ? values 
+      : targets.map(() => 0);
+    
+    try {
+      // Reset the builder to avoid stale state
+      builder.resetOp();
+      
+      // Set the batch execution parameters
+      builder.executeBatch(targets, callDatas, finalValues);
+      
+      // Set paymaster options if provided
+      if (paymasterOptions) {
+        builder.setPaymasterOptions(paymasterOptions);
+      }
+      
+      // Send the UserOperation
+      const result = await client.sendUserOperation(builder);
+      
+      // Return the transaction result
+      return result;
+    } catch (err) {
+      console.error('Error sending batch UserOperation:', err);
+      throw err;
+    }
+  }, [client, builder]);
+
   return {
+    client,
+    builder,
+    aaWalletAddress,
+    isDeployed,
     isLoading,
     error,
-    txHash,
-    aaWalletAddress,
-    isDevelopmentMode,
     initSDK,
-    isWalletDeployed,
-    executeTransfer,
-    executeBatch,
-    executeTicketPurchase,
-    executeBatchPurchase,
-    createSessionKey,
-    revokeSessionKey,
-    claimPrize,
-    getSupportedTokens
+    sendUserOp,
+    sendBatchUserOp
   };
 };
 

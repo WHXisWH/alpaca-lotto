@@ -1,49 +1,67 @@
+// frontend/src/services/paymasterService.js
 import { ethers } from 'ethers';
-import axios from 'axios';
 
-// Constants
-const CONSTANTS = {
-  PAYMASTER_URL: import.meta.env.VITE_PAYMASTER_URL || 'https://paymaster-testnet.nerochain.io',
-  PAYMASTER_API_KEY: import.meta.env.VITE_PAYMASTER_API_KEY || '',
-  ENTRYPOINT_ADDRESS: import.meta.env.VITE_ENTRYPOINT_ADDRESS || '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
-};
-
-/**
- * PaymasterService - A dedicated service for NERO Chain Paymaster integration
- */
 class PaymasterService {
   constructor() {
+    this.rpcUrl = 'https://paymaster-testnet.nerochain.io';
+    this.entryPoint = '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789';
+    this.paymasterRpc = null;
     this.provider = null;
-    this.initialized = false;
+    this.apiKey = '';
+    
+    // Caches
+    this.supportedTokensCache = new Map();
+    this.gasCostEstimationCache = new Map();
+    this.cacheExpiryTime = 60 * 1000; // 1 minute cache
+  }
+
+  async init(apiKey = '') {
+    this.apiKey = apiKey;
+    this.provider = new ethers.providers.JsonRpcProvider('https://rpc-testnet.nerochain.io');
+    this.paymasterRpc = new ethers.providers.JsonRpcProvider(this.rpcUrl);
+    return this;
   }
 
   /**
-   * Initialize the Paymaster service
+   * Check if an account is deployed on-chain
+   * @param {string} address - The account address to check
+   * @returns {Promise<boolean>} - True if the account is deployed
    */
-  async init() {
+  async isAccountDeployed(address) {
+    if (!this.provider) await this.init();
+    
     try {
-      // Create JSON-RPC provider for the Paymaster
-      this.provider = new ethers.providers.JsonRpcProvider(CONSTANTS.PAYMASTER_URL);
-      this.initialized = true;
-      
-      return true;
+      const code = await this.provider.getCode(address);
+      return code !== '0x';
     } catch (error) {
-      console.error('Error initializing Paymaster service:', error);
+      console.error('Error checking account deployment:', error);
       return false;
     }
   }
 
   /**
-   * Get supported tokens from Paymaster
-   * @param {string} aaWalletAddress - AA wallet address
-   * @returns {Array} - List of supported tokens
+   * Get tokens supported by the Paymaster
+   * @param {string} aaWalletAddress - The AA wallet address
+   * @returns {Promise<Array>} - Array of supported tokens
    */
   async getSupportedTokens(aaWalletAddress) {
+    if (!this.paymasterRpc) await this.init();
+    
+    // Check cache first
+    const cacheKey = `tokens-${aaWalletAddress}`;
+    const cachedData = this.supportedTokensCache.get(cacheKey);
+    
+    if (cachedData && Date.now() - cachedData.timestamp < this.cacheExpiryTime) {
+      return cachedData.tokens;
+    }
+    
+    // Check if account is deployed before making API calls
+    const isDeployed = await this.isAccountDeployed(aaWalletAddress);
+    if (!isDeployed) {
+      return [];
+    }
+    
     try {
-      if (!this.initialized) {
-        await this.init();
-      }
-      
       // Create a minimal UserOp for the request
       const minimalUserOp = {
         sender: aaWalletAddress,
@@ -60,267 +78,102 @@ class PaymasterService {
       };
       
       // Call the pm_supported_tokens method
-      const response = await this.provider.send("pm_supported_tokens", [
+      const tokensResponse = await this.paymasterRpc.send("pm_supported_tokens", [
         minimalUserOp,
-        CONSTANTS.PAYMASTER_API_KEY,
-        CONSTANTS.ENTRYPOINT_ADDRESS
+        this.apiKey,
+        this.entryPoint
       ]);
       
-      if (!response || !response.tokens) {
-        console.warn('Unexpected response format from Paymaster:', response);
-        return this._getMockSupportedTokens();
+      // Parse the token list
+      let tokens = [];
+      
+      if (tokensResponse.tokens) {
+        tokens = tokensResponse.tokens;
+      } else if (Array.isArray(tokensResponse)) {
+        tokens = tokensResponse;
+      } else if (typeof tokensResponse === 'object') {
+        // Try to find tokens in the response object
+        const possibleTokensArray = Object.values(tokensResponse).find(val => Array.isArray(val));
+        if (possibleTokensArray && Array.isArray(possibleTokensArray)) {
+          tokens = possibleTokensArray;
+        }
       }
       
-      // Format the tokens
-      return response.tokens.map(token => ({
+      // Normalize token structure
+      const normalizedTokens = tokens.map(token => ({
         address: token.token || token.address,
-        symbol: token.symbol,
-        name: token.name || token.symbol,
         decimals: token.decimals,
+        symbol: token.symbol,
         type: token.type
       }));
+      
+      // Update cache
+      this.supportedTokensCache.set(cacheKey, {
+        tokens: normalizedTokens,
+        timestamp: Date.now()
+      });
+      
+      return normalizedTokens;
     } catch (error) {
-      console.error('Error fetching supported tokens from Paymaster:', error);
-      return this._getMockSupportedTokens();
+      console.error('Error getting supported tokens:', error);
+      return [];
     }
   }
 
   /**
-   * Get Paymaster config from AA Platform
-   * @param {string} apiKey - AA Platform API key
-   * @returns {Object} - Paymaster configuration
-   */
-  async getPaymasterConfig(apiKey = CONSTANTS.PAYMASTER_API_KEY) {
-    try {
-      // Initialize if needed
-      if (!this.initialized) {
-        await this.init();
-      }
-      
-      // Try to fetch paymaster configuration from the AA Platform
-      const response = await axios.get(
-        `${CONSTANTS.PAYMASTER_URL}/api/config`,
-        {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      if (response.data && response.data.success) {
-        return response.data.config;
-      } else {
-        console.warn('Failed to fetch Paymaster config:', response.data);
-        return this._getMockPaymasterConfig();
-      }
-    } catch (error) {
-      console.error('Error fetching Paymaster config:', error);
-      return this._getMockPaymasterConfig();
-    }
-  }
-
-  /**
-   * Get token price data
-   * @param {string} tokenAddress - Token contract address
-   * @returns {Object} - Token price data
-   */
-  async getTokenPrice(tokenAddress) {
-    try {
-      // Initialize if needed
-      if (!this.initialized) {
-        await this.init();
-      }
-      
-      // Try to fetch token price from the AA Platform
-      const response = await axios.get(
-        `${CONSTANTS.PAYMASTER_URL}/api/price/${tokenAddress}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${CONSTANTS.PAYMASTER_API_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      if (response.data && response.data.success) {
-        return response.data.price;
-      } else {
-        console.warn('Failed to fetch token price:', response.data);
-        return this._getMockTokenPrice(tokenAddress);
-      }
-    } catch (error) {
-      console.error('Error fetching token price:', error);
-      return this._getMockTokenPrice(tokenAddress);
-    }
-  }
-
-  /**
-   * Get gas cost estimation for paying with a specific token
-   * @param {string} tokenAddress - Token contract address
-   * @param {number} gasLimit - Estimated gas limit
-   * @returns {Object} - Gas cost estimation
+   * Get gas cost estimation for a token
+   * @param {string} tokenAddress - The token address
+   * @param {number} gasLimit - The gas limit
+   * @returns {Promise<Object>} - Gas cost estimation
    */
   async getGasCostEstimation(tokenAddress, gasLimit) {
-    try {
-      // Initialize if needed
-      if (!this.initialized) {
-        await this.init();
-      }
-      
-      // Get token price
-      const tokenPrice = await this.getTokenPrice(tokenAddress);
-      
-      // Get gas price
-      const gasPrice = await this.provider.getGasPrice();
-      
-      // Calculate gas cost in native token
-      const gasCostNative = gasLimit * gasPrice.toNumber();
-      
-      // Convert to token amount
-      const gasCostToken = gasCostNative * (1 / tokenPrice.price);
-      
-      return {
-        gasCostNative,
-        gasCostToken,
-        gasPrice: gasPrice.toString(),
-        tokenPrice: tokenPrice.price
-      };
-    } catch (error) {
-      console.error('Error estimating gas cost:', error);
-      
-      // Return mock estimation
-      return {
-        gasCostNative: 0.001 * 10**18, // 0.001 NERO
-        gasCostToken: 0.001 * (tokenAddress === '0x6b175474e89094c44da98b954eedeac495271d0f' ? 1 : 2), // Mock conversion based on token
-        gasPrice: '5000000000', // 5 gwei
-        tokenPrice: 1.0
-      };
+    if (!this.paymasterRpc) await this.init();
+    
+    // Check cache first
+    const cacheKey = `gas-${tokenAddress}-${gasLimit}`;
+    const cachedData = this.gasCostEstimationCache.get(cacheKey);
+    
+    if (cachedData && Date.now() - cachedData.timestamp < this.cacheExpiryTime) {
+      return cachedData.estimation;
     }
-  }
-
-  /**
-   * Generate Paymaster data for UserOperation
-   * @param {number} type - Payment type (0: sponsored, 1: prepay, 2: postpay)
-   * @param {string} token - Token address for payment (for types 1 and 2)
-   * @param {Object} userOp - UserOperation object
-   * @returns {string} - Paymaster data
-   */
-  async generatePaymasterData(type, token, userOp) {
+    
     try {
-      // Initialize if needed
-      if (!this.initialized) {
-        await this.init();
-      }
+      // For demo/prototype, return mock values to avoid excessive API calls
+      const mockEstimation = {
+        gasCostToken: Math.random() * 0.01 + 0.001,
+        gasCostUsd: Math.random() * 5 + 1
+      };
       
-      // Call the pm_sponsor method
-      const response = await this.provider.send("pm_sponsor", [
-        userOp,
-        {
-          type,
-          token,
-          apikey: CONSTANTS.PAYMASTER_API_KEY
-        },
-        CONSTANTS.ENTRYPOINT_ADDRESS
+      // Update cache
+      this.gasCostEstimationCache.set(cacheKey, {
+        estimation: mockEstimation,
+        timestamp: Date.now()
+      });
+      
+      return mockEstimation;
+      
+      // In production, you would call the actual gas estimation API:
+      /*
+      const estimation = await this.paymasterRpc.send("pm_estimate_gas_cost", [
+        tokenAddress,
+        gasLimit,
+        this.apiKey
       ]);
       
-      if (!response || !response.paymasterAndData) {
-        console.warn('Unexpected response format from Paymaster:', response);
-        return "0x"; // Empty paymaster data
-      }
+      this.gasCostEstimationCache.set(cacheKey, {
+        estimation,
+        timestamp: Date.now()
+      });
       
-      return response.paymasterAndData;
+      return estimation;
+      */
     } catch (error) {
-      console.error('Error generating Paymaster data:', error);
-      return "0x"; // Empty paymaster data
+      console.error('Error estimating gas cost:', error);
+      return { gasCostToken: 0.001 };
     }
-  }
-
-  /**
-   * Get mock supported tokens (for development/testing)
-   * @returns {Array} - Mock supported tokens
-   * @private
-   */
-  _getMockSupportedTokens() {
-    return [
-      {
-        address: '0x6b175474e89094c44da98b954eedeac495271d0f',
-        symbol: 'DAI',
-        name: 'Dai Stablecoin',
-        decimals: 18,
-        type: 1
-      },
-      {
-        address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-        symbol: 'USDC',
-        name: 'USD Coin',
-        decimals: 6,
-        type: 1
-      },
-      {
-        address: '0xdac17f958d2ee523a2206206994597c13d831ec7',
-        symbol: 'USDT',
-        name: 'Tether USD',
-        decimals: 6,
-        type: 1
-      },
-      {
-        address: '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599',
-        symbol: 'WBTC',
-        name: 'Wrapped Bitcoin',
-        decimals: 8,
-        type: 1
-      },
-      {
-        address: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
-        symbol: 'WETH',
-        name: 'Wrapped Ether',
-        decimals: 18,
-        type: 1
-      }
-    ];
-  }
-
-  /**
-   * Get mock Paymaster configuration (for development/testing)
-   * @returns {Object} - Mock Paymaster configuration
-   * @private
-   */
-  _getMockPaymasterConfig() {
-    return {
-      paymasterAddress: '0x9406Cc6185a346906296840746125a0E44976454',
-      supportedPaymentTypes: [0, 1, 2],
-      defaultType: 0,
-      gasLimitOverhead: 55000,
-      defaultGasPrice: '5000000000', // 5 gwei
-      maxGasPrice: '50000000000', // 50 gwei
-      dailyQuota: 1000,
-      dailyUserQuota: 10,
-      dailyTokenQuota: 100
-    };
-  }
-
-  /**
-   * Get mock token price (for development/testing)
-   * @param {string} tokenAddress - Token address
-   * @returns {Object} - Mock token price data
-   * @private
-   */
-  _getMockTokenPrice(tokenAddress) {
-    const priceMap = {
-      '0x6b175474e89094c44da98b954eedeac495271d0f': 1.0, // DAI
-      '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 1.0, // USDC
-      '0xdac17f958d2ee523a2206206994597c13d831ec7': 1.0, // USDT
-      '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 65000, // WBTC
-      '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 3800 // WETH
-    };
-    
-    return {
-      price: priceMap[tokenAddress.toLowerCase()] || 1.0,
-      timestamp: Math.floor(Date.now() / 1000),
-      source: 'mock'
-    };
   }
 }
 
-export default new PaymasterService();
+// Export as singleton
+const paymasterService = new PaymasterService();
+export default paymasterService;

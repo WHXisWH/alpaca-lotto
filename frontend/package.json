@@ -11,9 +11,14 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.18.0",
-    "userop": "^0.3.3",
+    "userop": "^0.4.0-beta.6",
+    "@zerodev/sdk": "^0.4.2",
     "viem": "^2.0.0",
     "wagmi": "^2.0.0"
+  },
+  "resolutions": {
+    "userop": "^0.3.3",
+    "@zerodev/sdk": "^0.4.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.5",
