@@ -1,4 +1,6 @@
 import React from 'react';
+import { ethers } from 'ethers';
+
 
 /**
  * Component to display the details of a lottery.
@@ -40,7 +42,9 @@ const LotteryDetails = ({ lottery, userTickets = [] }) => {
         <h3>Lottery Information</h3>
         <div className="detail-row">
           <span className="detail-label">Ticket Price:</span>
-          <span className="detail-value">${lottery.ticketPrice || 0}</span>
+          <span className="detail-value">
+            {ethers.utils.formatUnits(lottery.ticketPrice.toString(), 18)} ETH
+          </span>
         </div>
         <div className="detail-row">
           <span className="detail-label">Total Tickets:</span>

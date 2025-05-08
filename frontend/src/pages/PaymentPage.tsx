@@ -5,6 +5,7 @@ import useWagmiWallet from '../hooks/useWagmiWallet'; // Using wagmi wallet hook
 import useUserOp from '../hooks/useUserOp';
 import useTokens from '../hooks/useTokens';
 import useSessionKeys from '../hooks/useSessionKeys';
+import { ethers } from 'ethers'; 
 
 /**
  * Payment processing page
@@ -316,7 +317,9 @@ const PaymentPage = () => {
             
             <div className="summary-row">
               <span className="summary-label">Ticket Price:</span>
-              <span className="summary-value">${lottery.ticketPrice}</span>
+              <span className="summary-value">
+                {ethers.utils.formatUnits(lottery.ticketPrice.toString(), 18)} ETH
+              </span>
             </div>
             
             <div className="summary-row">

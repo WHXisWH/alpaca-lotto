@@ -1,4 +1,5 @@
 import React from 'react';
+import { ethers } from 'ethers';
 
 /**
  * Component to display the list of active lotteries.
@@ -64,15 +65,21 @@ const ActiveLotteries = ({ lotteries = [], isLoading = false, onSelect, selected
             <div className="lottery-details">
               <div className="detail-row">
                 <span className="detail-label">Ticket Price:</span>
-                <span className="detail-value">${lottery.ticketPrice || 0}</span>
+                <span className="detail-value">
+                  {ethers.utils.formatUnits(lottery.ticketPrice.toString(), 18)} ETH
+                </span>
               </div>
               <div className="detail-row">
                 <span className="detail-label">Prize Pool:</span>
-                <span className="prize-amount">${lottery.prizePool || 0}</span>
+                <span className="prize-amount">
+                  {ethers.utils.formatUnits(lottery.prizePool.toString(), 18)} ETH
+                </span>
               </div>
               <div className="detail-row">
                 <span className="detail-label">Tickets Sold:</span>
-                <span className="detail-value">{lottery.totalTickets || 0}</span>
+                <span className="detail-value">
+                  {lottery.totalTickets.toString()}
+                </span>
               </div>
               <div className="detail-row">
                 <span className="detail-label">Ends At:</span>

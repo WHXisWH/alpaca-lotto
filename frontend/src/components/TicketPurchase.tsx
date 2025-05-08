@@ -78,7 +78,8 @@ const TicketPurchase = ({
         <div className="modal-content">
           <div className="lottery-info">
             <h3>{lottery.name}</h3>
-            <div className="ticket-price">Ticket Price: ${lottery.ticketPrice}</div>
+            <div className="ticket-price">
+              Ticket Price: {ethers.utils.formatUnits(lottery.ticketPrice.toString(), 18)} ETH</div>
           </div>
 
           <div className="quantity-section">

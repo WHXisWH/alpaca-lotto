@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { debounce } from 'lodash';
 import { useAccount } from 'wagmi';
 import useTokens from '../hooks/useTokens';
 import useUserOp from '../hooks/useUserOp';
@@ -23,6 +22,9 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
   });
   const hasSelectedRef = useRef(false);
   const [gasCostEstimates, setGasCostEstimates] = useState({});
+  useEffect(() => {
+    hasSelectedRef.current = false;
+  }, [paymentOptions]);
 
   useEffect(() => {
     const initServices = async () => {
@@ -116,12 +118,15 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
           const recommended = sortedTokens[0];
           setRecommendedToken(recommended);
 
-          if (!hasSelectedRef.current && recommended) {
+          if (
+            !hasSelectedRef.current &&
+            recommended &&
+            (!selectedToken || selectedToken.address !== recommended.address)
+          ) {
             setSelectedToken(recommended);
             onSelect?.({ token: recommended, paymentType: selectedPaymentType });
             hasSelectedRef.current = true;
           }
-        }
 
         if (!cancelled) setIsLoading(false);
       } catch (err) {
