@@ -205,7 +205,7 @@ const EnhancedPaymentUI = ({ onSelect, autoSelectRecommended = true }) => {
                   className={`token-option ${selectedToken?.address === token.address ? 'selected' : ''} ${recommendation?.recommendedToken?.address === token.address ? 'recommended' : ''}`}
                   onClick={() => handleTokenSelect(token)}
                 >
-                  <div className="token-icon">{${1}.symbol?.charAt(0) ?? '？'}</div>
+                  <div className="token-icon">{token?.symbol?.charAt(0) ?? '？'}</div>
                   <div className="token-details">
                     <div className="token-name-row">
                       <span className="token-symbol">{token.symbol}</span>

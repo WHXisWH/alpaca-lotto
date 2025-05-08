@@ -372,7 +372,7 @@ const PaymentPage = () => {
             <div className="summary-row">
               <span className="summary-label">Payment Token:</span>
               <span className="summary-value token-value">
-                <span className="token-icon">{${1}.symbol?.charAt(0) ?? '？'}</span>
+                <span className="token-icon">{token?.symbol?.charAt(0) ?? '？'}</span>
                 {token.symbol}
                 {recommendation && recommendation.recommendedToken.address === token.address && (
                   <span className="ai-badge">AI Recommended</span>
@@ -446,7 +446,7 @@ const PaymentPage = () => {
                     className={`token-option ${paymentToken?.address === token.address ? 'selected' : ''}`}
                     onClick={() => handlePaymentTokenChange(token)}
                   >
-                    <div className="token-icon">{${1}.symbol?.charAt(0) ?? '？'}</div>
+                    <div className="token-icon">{token?.symbol?.charAt(0) ?? '？'}</div>
                     <div className="token-details">
                       <div className="token-name">{token.symbol}</div>
                       <div className="token-balance">
@@ -462,7 +462,7 @@ const PaymentPage = () => {
                       className={`token-option ${paymentToken?.address === recommendation.recommendedToken.address ? 'selected' : ''}`}
                       onClick={() => handlePaymentTokenChange(recommendation.recommendedToken)}
                     >
-                      <div className="token-icon">{${1}.symbol?.charAt(0) ?? '？'}</div>
+                      <div className="token-icon">{recommendation?.recommendedToken?.symbol?.charAt(0) ?? '？'}</div>
                       <div className="token-details">
                         <div className="token-name">{recommendation.recommendedToken.symbol}</div>
                         <div className="token-balance">

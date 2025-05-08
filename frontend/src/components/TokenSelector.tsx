@@ -56,7 +56,7 @@ const TokenSelector = ({
             onClick={() => onSelect(token)}
           >
             <div className="token-icon">
-              {token.symbol ? ${1}.symbol?.charAt(0) ?? '？' : '?'}
+              {token.symbol ? token?.symbol?.charAt(0) : '?'}
             </div>
             <div className="token-details">
               <div className="token-name-row">
