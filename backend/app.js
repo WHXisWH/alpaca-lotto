@@ -1,4 +1,4 @@
-// backend/app.js
+import cors from 'cors';
 
 require('dotenv').config();
 const express = require('express');
