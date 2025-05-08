@@ -1,29 +1,29 @@
 const { ethers } = require('ethers');
 const AlpacaLottoABI = require('../abis/AlpacaLotto.json');
 
-
 class LotteryService {
   constructor(config = {}) {
-
     this.rpcUrl = config.rpcUrl || 'https://rpc-testnet.nerochain.io';
-    this.contractAddress = config.contractAddress || '0x1234567890123456789012345678901234567890'; // ダミーアドレス
+    this.contractAddress = config.contractAddress || '0x1234567890123456789012345678901234567890'; // Dummy address
     this.cacheExpiryTime = config.cacheExpiryTime || 60 * 1000; 
     
-   
+    // Try to initialize provider
     this.provider = new ethers.providers.JsonRpcProvider(this.rpcUrl, {
       name: 'nero-testnet',
       chainId: 689
     });
     this.contract = new ethers.Contract(this.contractAddress, AlpacaLottoABI, this.provider);
     
-   
+    // Cache
     this.lotteriesCache = {
       data: null,
       timestamp: 0
     };
   }
 
-  
+  /**
+   * Initialize provider if not already done
+   */
   initProvider() {
     if (!this.provider) {
       this.provider = new ethers.providers.JsonRpcProvider(this.rpcUrl, {
@@ -34,19 +34,21 @@ class LotteryService {
     }
   }
 
-  /*
+  /**
+   * Set signer for contract
    * @param {ethers.Signer} signer 
    */
   setSigner(signer) {
     this.contract = this.contract.connect(signer);
   }
 
-  /*
-   * @returns {Array} 
+  /**
+   * Get all lotteries
+   * @returns {Array} - Array of lottery objects
    */
   async getAllLotteries() {
     try {
-  
+      // Use cache if available and not expired
       if (
         this.lotteriesCache.data &&
         Date.now() - this.lotteriesCache.timestamp < this.cacheExpiryTime
@@ -54,13 +56,13 @@ class LotteryService {
         return this.lotteriesCache.data;
       }
 
-
+      // Ensure provider is initialized
       this.initProvider();
 
-
+      // Get lottery count from contract
       const lotteryCounter = await this.contract.lotteryCounter();
       
-
+      // Fetch all lotteries
       const lotteries = [];
       for (let i = 1; i <= lotteryCounter.toNumber(); i++) {
         try {
@@ -73,132 +75,129 @@ class LotteryService {
           console.warn(`Error fetching lottery #${i}:`, err);
         }
       }
+      
+      // Update cache
       this.lotteriesCache = {
         data: lotteries,
         timestamp: Date.now()
       };
       
       return lotteries;
-      } catch (error) {
-        console.error('ロッタリー取得エラー:', error);
-        return [];
-      }
+    } catch (error) {
+      console.error('Error fetching lotteries:', error);
+      return [];
     }
+  }
     
- /**
-   * アクティブなロッタリーを取得
-   * @returns {Array} - アクティブなロッタリーオブジェクトの配列
+  /**
+   * Get active lotteries
+   * @returns {Array} - Array of active lottery objects
    */
   async getActiveLotteries() {
     try {
       const allLotteries = await this.getAllLotteries();
       const currentTime = Math.floor(Date.now() / 1000);
       
-      // 開始時間が過去で、終了時間が未来のロッタリーをフィルタリング
+      // Filter active lotteries (start time in past, end time in future)
       return allLotteries.filter(lottery => 
         lottery.startTime <= currentTime && lottery.endTime > currentTime
       );
     } catch (error) {
-      console.error('アクティブなロッタリー取得エラー:', error);  
+      console.error('Error fetching active lotteries:', error);  
       return [];
     }
   }
 
   /**
-   * 特定のロッタリーを取得
-   * @param {number} lotteryId - ロッタリーID
-   * @returns {Object} - ロッタリーオブジェクト
+   * Get specific lottery details
+   * @param {number} lotteryId - Lottery ID
+   * @returns {Object} - Lottery object
    */
   async getLottery(lotteryId) {
     try {
-      // プロバイダを確認
+      // Ensure provider is initialized
       this.initProvider();
       
       const lottery = await this.contract.getLottery(lotteryId);
       return this._formatLottery(lottery);
     } catch (error) {
-      console.error(`ロッタリー取得エラー (ID: ${lotteryId}):`, error);
+      console.error(`Error fetching lottery details (ID: ${lotteryId}):`, error);
       return null;
     }
   }
 
   /**
-   * ユーザーのチケットを取得
-   * @param {string} userAddress - ユーザーのウォレットアドレス
-   * @param {number} lotteryId - ロッタリーID
-   * @returns {Array} - チケットオブジェクトの配列
+   * Get user tickets for a lottery
+   * @param {string} userAddress - User wallet address
+   * @param {number} lotteryId - Lottery ID
+   * @returns {Array} - Array of ticket objects
    */
   async getUserTickets(userAddress, lotteryId) {
     try {
-      // プロバイダを確認
+      // Ensure provider is initialized
       this.initProvider();
       
-      // ユーザーのチケット番号を取得
+      // Get user's ticket numbers from contract
       const ticketNumbers = await this.contract.getUserTickets(userAddress, lotteryId);
       
-      // 各チケットの詳細を取得
+      // Get details for each ticket
       const tickets = [];
       for (const ticketNumber of ticketNumbers) {
         try {
-          // コントラクトの構造に応じて適切なメソッドが必要
-          // このAPIは実装によっては異なる可能性があります
           const ticket = await this.contract.tickets(lotteryId, ticketNumber);
           tickets.push(this._formatTicket(ticket, ticketNumber));
         } catch (err) {
-          console.warn(`チケット取得エラー (ID: ${ticketNumber}):`, err);
+          console.warn(`Error fetching ticket (ID: ${ticketNumber}):`, err);
         }
       }
       
       return tickets;
     } catch (error) {
-      console.error(`ユーザーチケット取得エラー (User: ${userAddress}, Lottery: ${lotteryId}):`, error);
+      console.error(`Error fetching user tickets (User: ${userAddress}, Lottery: ${lotteryId}):`, error);
       return [];
     }
   }
 
   /**
-   * ユーザーがロッタリーの当選者かどうかを確認
-   * @param {string} userAddress - ユーザーのウォレットアドレス
-   * @param {number} lotteryId - ロッタリーID
-   * @returns {boolean} - 当選者かどうか
+   * Check if user is a winner
+   * @param {string} userAddress - User wallet address
+   * @param {number} lotteryId - Lottery ID
+   * @returns {boolean} - Winner status
    */
   async isWinner(userAddress, lotteryId) {
     try {
-      // プロバイダを確認
+      // Ensure provider is initialized
       this.initProvider();
       
       return await this.contract.isWinner(userAddress, lotteryId);
     } catch (error) {
-      console.error(`当選確認エラー (User: ${userAddress}, Lottery: ${lotteryId}):`, error);
+      console.error(`Error checking winner status (User: ${userAddress}, Lottery: ${lotteryId}):`, error);
       return false;
     }
   }
 
   /**
-   * ロッタリーチケットを購入
-   * @param {number} lotteryId - ロッタリーID
-   * @param {string} tokenAddress - 支払いトークンのアドレス
-   * @param {number} quantity - チケット数量
-   * @returns {Object} - トランザクション結果
+   * Purchase lottery tickets
+   * @param {number} lotteryId - Lottery ID
+   * @param {string} tokenAddress - Payment token address
+   * @param {number} quantity - Number of tickets
+   * @returns {Object} - Transaction result
    */
   async purchaseTickets(lotteryId, tokenAddress, quantity) {
     try {
-      // 署名者が設定されているか確認
+      // Check for signer
       if (!this.contract.signer) {
-        throw new Error('署名者が設定されていません');
+        throw new Error('No signer set');
       }
       
-      // トークンコントラクトからの支払い承認が必要
-      // この処理は呼び出し側で行う必要があります
-      
-      // チケット購入トランザクションを送信
+      // Send transaction to contract
       const tx = await this.contract.purchaseTickets(
         lotteryId,
         tokenAddress,
         quantity
       );
       
-      // トランザクションの確認を待つ
+      // Wait for transaction to be confirmed
       const receipt = await tx.wait();
       
       return {
@@ -207,7 +206,7 @@ class LotteryService {
         tickets: quantity
       };
     } catch (error) {
-      console.error(`チケット購入エラー (Lottery: ${lotteryId}, Token: ${tokenAddress}):`, error);
+      console.error(`Error purchasing tickets (Lottery: ${lotteryId}, Token: ${tokenAddress}):`, error);
       return {
         success: false,
         error: error.message
@@ -216,30 +215,30 @@ class LotteryService {
   }
 
   /**
-   * 複数のロッタリーに一括でチケットを購入
-   * @param {Array} selections - 購入選択の配列 [{lotteryId, tokenAddress, quantity}]
-   * @returns {Object} - トランザクション結果
+   * Purchase tickets in batch
+   * @param {Array} selections - Array of purchase selections (lotteryId, tokenAddress, quantity)
+   * @returns {Object} - Transaction result
    */
   async batchPurchaseTickets(selections) {
     try {
-      // 署名者が設定されているか確認
+      // Check for signer
       if (!this.contract.signer) {
-        throw new Error('署名者が設定されていません');
+        throw new Error('No signer set');
       }
       
-      // バッチ購入用のパラメータを準備
+      // Prepare batch parameters
       const lotteryIds = selections.map(s => s.lotteryId);
       const tokenAddresses = selections.map(s => s.tokenAddress);
       const quantities = selections.map(s => s.quantity);
       
-      // バッチ購入トランザクションを送信
+      // Send batch transaction
       const tx = await this.contract.batchPurchaseTickets(
         lotteryIds,
         tokenAddresses,
         quantities
       );
       
-      // トランザクションの確認を待つ
+      // Wait for transaction to be confirmed
       const receipt = await tx.wait();
       
       return {
@@ -248,7 +247,7 @@ class LotteryService {
         selections
       };
     } catch (error) {
-      console.error('バッチチケット購入エラー:', error);
+      console.error('Error batch purchasing tickets:', error);
       return {
         success: false,
         error: error.message
@@ -257,21 +256,21 @@ class LotteryService {
   }
 
   /**
-   * セッションキーを使用してチケットを購入
-   * @param {string} userAddress - ユーザーのウォレットアドレス
-   * @param {number} lotteryId - ロッタリーID
-   * @param {string} tokenAddress - 支払いトークンのアドレス
-   * @param {number} quantity - チケット数量
-   * @returns {Object} - トランザクション結果
+   * Purchase tickets using session key
+   * @param {string} userAddress - User wallet address
+   * @param {number} lotteryId - Lottery ID
+   * @param {string} tokenAddress - Payment token address
+   * @param {number} quantity - Number of tickets
+   * @returns {Object} - Transaction result
    */
   async purchaseTicketsWithSessionKey(userAddress, lotteryId, tokenAddress, quantity) {
     try {
-      // 署名者が設定されているか確認
+      // Check for signer
       if (!this.contract.signer) {
-        throw new Error('署名者が設定されていません');
+        throw new Error('No signer set');
       }
       
-      // セッションキーを使用した購入のトランザクションを送信
+      // Send transaction using session key
       const tx = await this.contract.purchaseTicketsFor(
         userAddress,
         lotteryId,
@@ -279,7 +278,7 @@ class LotteryService {
         quantity
       );
       
-      // トランザクションの確認を待つ
+      // Wait for transaction to be confirmed
       const receipt = await tx.wait();
       
       return {
@@ -288,7 +287,7 @@ class LotteryService {
         tickets: quantity
       };
     } catch (error) {
-      console.error(`セッションキーでのチケット購入エラー (User: ${userAddress}, Lottery: ${lotteryId}):`, error);
+      console.error(`Error purchasing tickets with session key (User: ${userAddress}, Lottery: ${lotteryId}):`, error);
       return {
         success: false,
         error: error.message
@@ -297,31 +296,31 @@ class LotteryService {
   }
 
   /**
-   * セッションキーを作成
-   * @param {string} sessionKeyAddress - セッションキーのアドレス
-   * @param {number} validDuration - 有効期間（秒）
-   * @param {string} operationsHash - 許可された操作のハッシュ
-   * @returns {Object} - トランザクション結果
+   * Create session key
+   * @param {string} sessionKeyAddress - Session key address
+   * @param {number} validDuration - Valid duration in seconds
+   * @param {string} operationsHash - Operations hash
+   * @returns {Object} - Transaction result
    */
   async createSessionKey(sessionKeyAddress, validDuration, operationsHash) {
     try {
-      // 署名者が設定されているか確認
+      // Check for signer
       if (!this.contract.signer) {
-        throw new Error('署名者が設定されていません');
+        throw new Error('No signer set');
       }
       
-      // 現在のタイムスタンプを取得
+      // Calculate expiration time
       const currentTime = Math.floor(Date.now() / 1000);
       const validUntil = currentTime + validDuration;
       
-      // セッションキー作成のトランザクションを送信
+      // Send transaction to create session key
       const tx = await this.contract.createSessionKey(
         sessionKeyAddress,
         validUntil,
         operationsHash
       );
       
-      // トランザクションの確認を待つ
+      // Wait for transaction to be confirmed
       const receipt = await tx.wait();
       
       return {
@@ -331,7 +330,7 @@ class LotteryService {
         validUntil
       };
     } catch (error) {
-      console.error(`セッションキー作成エラー:`, error);
+      console.error(`Error creating session key:`, error);
       return {
         success: false,
         error: error.message
@@ -340,23 +339,23 @@ class LotteryService {
   }
 
   /**
-   * セッションキーを無効化
-   * @param {string} sessionKeyAddress 
-   * @returns {Object} 
+   * Revoke session key
+   * @param {string} sessionKeyAddress - Session key address
+   * @returns {Object} - Transaction result
    */
   async revokeSessionKey(sessionKeyAddress) {
     try {
-      
+      // Check for signer
       if (!this.contract.signer) {
-        throw new Error('署名者が設定されていません');
+        throw new Error('No signer set');
       }
       
-  
+      // Send transaction to revoke session key
       const tx = await this.contract.revokeSessionKey(
         sessionKeyAddress
       );
       
- 
+      // Wait for transaction to be confirmed
       const receipt = await tx.wait();
       
       return {
@@ -365,7 +364,7 @@ class LotteryService {
         sessionKey: sessionKeyAddress
       };
     } catch (error) {
-      console.error(`セッションキー無効化エラー:`, error);
+      console.error(`Error revoking session key:`, error);
       return {
         success: false,
         error: error.message
@@ -374,20 +373,21 @@ class LotteryService {
   }
 
   /**
-   * @param {number} lotteryId - ロッタリーID
-   * @returns {Object} - トランザクション結果
+   * Claim prize
+   * @param {number} lotteryId - Lottery ID
+   * @returns {Object} - Transaction result
    */
   async claimPrize(lotteryId) {
     try {
-      // 署名者が設定されているか確認
+      // Check for signer
       if (!this.contract.signer) {
-        throw new Error('署名者が設定されていません');
+        throw new Error('No signer set');
       }
       
-
+      // Send transaction to claim prize
       const tx = await this.contract.claimPrize(lotteryId);
       
-
+      // Wait for transaction to be confirmed
       const receipt = await tx.wait();
       
       return {
@@ -396,7 +396,7 @@ class LotteryService {
         lotteryId
       };
     } catch (error) {
-      console.error(`賞金請求エラー (Lottery: ${lotteryId}):`, error);
+      console.error(`Error claiming prize (Lottery: ${lotteryId}):`, error);
       return {
         success: false,
         error: error.message
@@ -405,32 +405,38 @@ class LotteryService {
   }
 
   /**
-   * コントラクトからのロッタリーデータをフォーマット
-   * @param {Object} lotteryData - コントラクトから取得したロッタリーデータ
-   * @returns {Object} - フォーマットされたロッタリーオブジェクト
+   * Format lottery data from contract
+   * @param {Object} lotteryData - Contract lottery data
+   * @returns {Object} - Formatted lottery object
+   * @private
    */
   _formatLottery(lotteryData) {
-  return {
-    id: lotteryData.id.toNumber(),
-    name: lotteryData.name,
-    ticketPrice: parseFloat(ethers.utils.formatUnits(lotteryData.ticketPrice, 18)),
-    startTime: lotteryData.startTime.toNumber(),
-    endTime: lotteryData.endTime.toNumber(),
-    drawTime: lotteryData.drawTime.toNumber(),
-    supportedTokens: lotteryData.supportedTokens,
-    totalTickets: lotteryData.totalTickets.toNumber(),
-    prizePool: parseFloat(ethers.utils.formatUnits(lotteryData.prizePool, 18)),
-    drawn: lotteryData.drawn,
-    winners: lotteryData.winners || [],
-    winningTickets: lotteryData.winningTickets ?
-      lotteryData.winningTickets.map(t => t.toNumber()) : []
-  };
-}
+    // Ensure we handle BigNumber values properly and avoid conversion to floating point
+    return {
+      id: lotteryData.id.toNumber(),
+      name: lotteryData.name,
+      // Keep as BigNumber or string to prevent float conversion issues
+      ticketPrice: lotteryData.ticketPrice.toString(),
+      startTime: lotteryData.startTime.toNumber(),
+      endTime: lotteryData.endTime.toNumber(),
+      drawTime: lotteryData.drawTime.toNumber(),
+      supportedTokens: lotteryData.supportedTokens,
+      totalTickets: lotteryData.totalTickets.toNumber(),
+      // Keep as BigNumber or string to prevent float conversion issues
+      prizePool: lotteryData.prizePool.toString(),
+      drawn: lotteryData.drawn,
+      winners: lotteryData.winners || [],
+      winningTickets: lotteryData.winningTickets ?
+        lotteryData.winningTickets.map(t => t.toNumber()) : []
+    };
+  }
 
-  /* 
-   * @param {Object} ticketData 
-   * @param {number} ticketNumber 
-   * @returns {Object} 
+  /**
+   * Format ticket data from contract
+   * @param {Object} ticketData - Contract ticket data
+   * @param {BigNumber} ticketNumber - Ticket number
+   * @returns {Object} - Formatted ticket object
+   * @private
    */
   _formatTicket(ticketData, ticketNumber) {
     return {
@@ -442,20 +448,31 @@ class LotteryService {
     };
   }
 
+  /**
+   * Generate mock lotteries for development
+   * @returns {Array} - Mock lottery objects
+   */
   _generateMockLotteries() {
     const mockData = require('../mock/mockLotteries');
     return mockData.generateMockLotteries();
   }
 
+  /**
+   * Get active mock lotteries for development
+   * @returns {Array} - Mock active lottery objects
+   */
   _getActiveMockLotteries() {
     const mockData = require('../mock/mockLotteries');
     return mockData.getActiveMockLotteries();
   }
 
+  /**
+   * Generate mock tickets for development
+   * @param {number} lotteryId - Lottery ID
+   * @returns {Array} - Mock ticket objects
+   */
   _generateMockTickets(lotteryId) {
     const mockData = require('../mock/mockLotteries');
     return mockData.generateMockTickets(lotteryId);
   }
 }
-
-module.exports = LotteryService;

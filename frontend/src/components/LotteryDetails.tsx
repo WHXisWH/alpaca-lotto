@@ -1,6 +1,5 @@
 import React from 'react';
-import { ethers } from 'ethers';
-
+import formatUtils from '../utils/formatUtils';
 
 /**
  * Component to display the details of a lottery.
@@ -18,13 +17,19 @@ const LotteryDetails = ({ lottery, userTickets = [] }) => {
   }
 
   const formatDateTime = (timestamp) => {
+    if (!timestamp) return '';
     return new Date(timestamp * 1000).toLocaleString();
   };
 
   const formatTokenAddress = (address) => {
-    if (!address) return '';
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+    return formatUtils.formatAddress(address);
   };
+
+  // Calculate ticket price as ethers using the utility function
+  const ticketPrice = formatUtils.formatUnits(lottery.ticketPrice, 18);
+  
+  // Calculate prize pool using the utility function
+  const prizePool = formatUtils.formatUnits(lottery.prizePool, 18);
 
   return (
     <div className="lottery-details">
@@ -34,7 +39,7 @@ const LotteryDetails = ({ lottery, userTickets = [] }) => {
       </div>
 
       <div className="prize-section">
-        <div className="prize-amount">${lottery.prizePool || 0}</div>
+        <div className="prize-amount">{prizePool} ETH</div>
         <div className="prize-label">Total Prize Pool</div>
       </div>
 
@@ -43,7 +48,7 @@ const LotteryDetails = ({ lottery, userTickets = [] }) => {
         <div className="detail-row">
           <span className="detail-label">Ticket Price:</span>
           <span className="detail-value">
-            {ethers.utils.formatUnits(lottery.ticketPrice.toString(), 18)} ETH
+            {ticketPrice} ETH
           </span>
         </div>
         <div className="detail-row">

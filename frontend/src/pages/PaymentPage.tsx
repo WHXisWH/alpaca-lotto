@@ -9,7 +9,7 @@ import { ethers } from 'ethers';
 
 /**
  * Payment processing page
- * Updated to use wagmi hooks
+ * Updated to use wagmi hooks and properly handle BigNumber values
  */
 const PaymentPage = () => {
   const location = useLocation();
@@ -150,14 +150,33 @@ const PaymentPage = () => {
   const calculateTotalCost = () => {
     if (!lottery || !token) return '0';
     
-    // Ticket total
-    const ticketTotal = lottery.ticketPrice * quantity;
-    
-    // Calculate payment amount in tokens
-    const tokenPrice = token.usdPrice || 1;
-    const totalTokens = ticketTotal / tokenPrice;
-    
-    return totalTokens.toFixed(6);
+    try {
+      // Convert the ticketPrice from string to BigNumber for proper math operations
+      const ticketPriceBN = ethers.BigNumber.from(lottery.ticketPrice);
+      
+      // Convert quantity to BigNumber
+      const quantityBN = ethers.BigNumber.from(quantity);
+      
+      // Calculate ticket total as BigNumber (ticketPrice * quantity)
+      const ticketTotalBN = ticketPriceBN.mul(quantityBN);
+      
+      // For display purposes, convert to ethers and then to a more readable format
+      const ticketTotalEth = ethers.utils.formatEther(ticketTotalBN);
+      
+      // If token has USD price available, calculate the payment in tokens
+      if (token.usdPrice) {
+        // Convert USD amount to token amount (this is simplified and would normally use proper price oracles)
+        const usdAmount = parseFloat(ticketTotalEth) * 1800; // Assuming 1 ETH = $1800 USD for this example
+        const tokenAmount = usdAmount / token.usdPrice;
+        return tokenAmount.toFixed(6);
+      }
+      
+      // If no USD price available, just return the ETH amount
+      return ticketTotalEth;
+    } catch (error) {
+      console.error('Error calculating total cost:', error);
+      return '0';
+    }
   };
   
   // Loading state
@@ -305,7 +324,9 @@ const PaymentPage = () => {
           <div className="lottery-summary">
             <h3>{lottery.name}</h3>
             <div className="ticket-price">
-              ${lottery.ticketPrice} / ticket
+              ${typeof lottery.ticketPrice === 'string' ? 
+                parseFloat(ethers.utils.formatEther(lottery.ticketPrice)).toFixed(2) : 
+                lottery.ticketPrice.toFixed(2)} / ticket
             </div>
           </div>
           
@@ -318,14 +339,33 @@ const PaymentPage = () => {
             <div className="summary-row">
               <span className="summary-label">Ticket Price:</span>
               <span className="summary-value">
-                {ethers.utils.formatUnits(lottery.ticketPrice.toString(), 18)} ETH
+                {typeof lottery.ticketPrice === 'string' ? 
+                  ethers.utils.formatEther(lottery.ticketPrice) : 
+                  lottery.ticketPrice} ETH
               </span>
             </div>
             
             <div className="summary-row">
               <span className="summary-label">Total USD:</span>
               <span className="summary-value">
-                ${(lottery.ticketPrice * quantity).toFixed(2)}
+                ${(() => {
+                  // Calculate total USD price with BigNumber support
+                  try {
+                    const ticketPriceBN = ethers.BigNumber.from(lottery.ticketPrice);
+                    const quantityBN = ethers.BigNumber.from(quantity);
+                    const totalBN = ticketPriceBN.mul(quantityBN);
+                    
+                    // Convert to ETH for display
+                    const totalEth = ethers.utils.formatEther(totalBN);
+                    
+                    // Convert to USD assuming 1 ETH = $1800
+                    const usdAmount = parseFloat(totalEth) * 1800;
+                    return usdAmount.toFixed(2);
+                  } catch (error) {
+                    console.error('Error calculating USD price:', error);
+                    return '0.00';
+                  }
+                })()}
               </span>
             </div>
             
@@ -409,7 +449,11 @@ const PaymentPage = () => {
                     <div className="token-icon">{token.symbol.charAt(0)}</div>
                     <div className="token-details">
                       <div className="token-name">{token.symbol}</div>
-                      <div className="token-balance">{parseFloat(token.balance).toFixed(4)}</div>
+                      <div className="token-balance">
+                        {typeof token.balance === 'string' && token.balance.startsWith('0x') ? 
+                          parseFloat(ethers.utils.formatEther(token.balance)).toFixed(4) : 
+                          parseFloat(token.balance).toFixed(4)}
+                      </div>
                     </div>
                   </div>
                   
@@ -421,7 +465,11 @@ const PaymentPage = () => {
                       <div className="token-icon">{recommendation.recommendedToken.symbol.charAt(0)}</div>
                       <div className="token-details">
                         <div className="token-name">{recommendation.recommendedToken.symbol}</div>
-                        <div className="token-balance">{parseFloat(recommendation.recommendedToken.balance).toFixed(4)}</div>
+                        <div className="token-balance">
+                          {typeof recommendation.recommendedToken.balance === 'string' && recommendation.recommendedToken.balance.startsWith('0x') ? 
+                            parseFloat(ethers.utils.formatEther(recommendation.recommendedToken.balance)).toFixed(4) : 
+                            parseFloat(recommendation.recommendedToken.balance).toFixed(4)}
+                        </div>
                       </div>
                       <div className="ai-badge">AI Recommended</div>
                     </div>

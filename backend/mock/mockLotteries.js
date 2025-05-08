@@ -1,7 +1,7 @@
 /**
  * Static mock lottery data for development mode
  */
-const generateMockLotteries = () => {
+export const generateMockLotteries = () => {
   const currentTime = Math.floor(Date.now() / 1000);
   
   // Mock token addresses that are consistent
@@ -11,18 +11,20 @@ const generateMockLotteries = () => {
     '0xdac17f958d2ee523a2206206994597c13d831ec7'  // USDT
   ];
   
-  // Always create consistent mock lotteries
+  // Always create consistent mock lotteries with BigNumber-friendly values
   return [
     {
       id: 1,
       name: 'Weekly Jackpot',
-      ticketPrice: 10,
+      // Store as string to avoid BigNumber conversion issues
+      ticketPrice: '10000000000000000000', // 10 ETH in wei
       startTime: currentTime - 86400, // yesterday
       endTime: currentTime + 518400,   // 6 days later
       drawTime: currentTime + 604800,  // 7 days later
       supportedTokens: mockTokens,
       totalTickets: 120,
-      prizePool: 1200,
+      // Store as string to avoid BigNumber conversion issues
+      prizePool: '1200000000000000000000', // 1200 ETH in wei
       drawn: false,
       winners: [],
       winningTickets: []
@@ -30,13 +32,15 @@ const generateMockLotteries = () => {
     {
       id: 2,
       name: 'Daily Draw',
-      ticketPrice: 5,
+      // Store as string to avoid BigNumber conversion issues
+      ticketPrice: '5000000000000000000', // 5 ETH in wei
       startTime: currentTime - 3600,   // 1 hour ago
       endTime: currentTime + 82800,    // 23 hours later
       drawTime: currentTime + 86400,   // 24 hours later
       supportedTokens: mockTokens,
       totalTickets: 75,
-      prizePool: 375,
+      // Store as string to avoid BigNumber conversion issues
+      prizePool: '375000000000000000000', // 375 ETH in wei
       drawn: false,
       winners: [],
       winningTickets: []
@@ -44,13 +48,15 @@ const generateMockLotteries = () => {
     {
       id: 3,
       name: 'Flash Lottery',
-      ticketPrice: 2,
-      startTime: currentTime - 1800,   // 30 min ago
+      // Store as string to avoid BigNumber conversion issues
+      ticketPrice: '2000000000000000000', // 2 ETH in wei
+      startTime: currentTime - 1800,   // 30 min ago (ALWAYS ACTIVE)
       endTime: currentTime + 1800,     // 30 min later
       drawTime: currentTime + 3600,    // 1 hour later
       supportedTokens: mockTokens,
       totalTickets: 30,
-      prizePool: 60,
+      // Store as string to avoid BigNumber conversion issues
+      prizePool: '60000000000000000000', // 60 ETH in wei
       drawn: false,
       winners: [],
       winningTickets: []
@@ -58,13 +64,15 @@ const generateMockLotteries = () => {
     {
       id: 4,
       name: 'Past Lottery',
-      ticketPrice: 5,
+      // Store as string to avoid BigNumber conversion issues
+      ticketPrice: '5000000000000000000', // 5 ETH in wei
       startTime: currentTime - 172800, // 2 days ago
-      endTime: currentTime - 86400,    // 1 day ago
+      endTime: currentTime - 86400,    // 1 day ago (ALWAYS INACTIVE)
       drawTime: currentTime - 82800,   // 23 hours ago
       supportedTokens: mockTokens,
       totalTickets: 100,
-      prizePool: 500,
+      // Store as string to avoid BigNumber conversion issues
+      prizePool: '500000000000000000000', // 500 ETH in wei
       drawn: true,
       winners: ['0x1234567890123456789012345678901234567890'],
       winningTickets: [42]
@@ -75,7 +83,7 @@ const generateMockLotteries = () => {
 /**
  * Create active mock lotteries (first 3 from mock data)
  */
-const getActiveMockLotteries = () => {
+export const getActiveMockLotteries = () => {
   const currentTime = Math.floor(Date.now() / 1000);
   const mockLotteries = generateMockLotteries();
   
@@ -89,28 +97,28 @@ const getActiveMockLotteries = () => {
 
 /**
  * Generate mock tickets for a lottery
- * @param {number} lotteryId - The lottery ID
- * @param {string} userAddress - Optional user address for filtering
+ * @param {number} lotteryId - Lottery ID
+ * @param {string} [userAddress='0x1234567890123456789012345678901234567890'] - Optional user address for filtering
  * @returns {Array} - Array of mock tickets
  */
-const generateMockTickets = (lotteryId, userAddress = '0x1234567890123456789012345678901234567890') => {
+export const generateMockTickets = (lotteryId, userAddress = '0x1234567890123456789012345678901234567890') => {
   const quantity = Math.floor(Math.random() * 5) + 1;
   const tickets = [];
-
+  
   for (let i = 0; i < quantity; i++) {
     tickets.push({
       lotteryId: lotteryId,
       ticketNumber: Math.floor(Math.random() * 100) + 1,
       user: userAddress,
       paymentToken: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
-      amountPaid: '5000000' // 5 USDC (with 6 decimals)
+      amountPaid: '5000000' // 5 USDC with 6 decimals as string to avoid BigNumber issues
     });
   }
-
+  
   return tickets;
 };
 
-module.exports = {
+export default {
   generateMockLotteries,
   getActiveMockLotteries,
   generateMockTickets

@@ -1,5 +1,6 @@
 import React from 'react';
 import PaymentOptimizer from './PaymentOptimizer';
+import formatUtils from '../utils/formatUtils';
 
 /**
  * Ticket purchase modal component.
@@ -42,9 +43,25 @@ const TicketPurchase = ({
     return null;
   }
 
+  // Format ticket price using the utility function
+  const ticketPrice = formatUtils.formatUnits(lottery.ticketPrice, 18);
+
   // Calculate the total amount.
   const calculateTotal = () => {
-    return lottery.ticketPrice * quantity;
+    // Parse ticket price and handle BigNumber
+    let price;
+    try {
+      // Try to convert to a number safely
+      price = parseFloat(ticketPrice);
+      if (isNaN(price)) {
+        price = 0;
+      }
+    } catch (e) {
+      console.error("Error parsing ticket price:", e);
+      price = 0;
+    }
+    
+    return (price * quantity).toFixed(2);
   };
 
   // Handlers for increasing/decreasing quantity.
@@ -79,7 +96,8 @@ const TicketPurchase = ({
           <div className="lottery-info">
             <h3>{lottery.name}</h3>
             <div className="ticket-price">
-              Ticket Price: {ethers.utils.formatUnits(lottery.ticketPrice.toString(), 18)} ETH</div>
+              Ticket Price: {ticketPrice} ETH
+            </div>
           </div>
 
           <div className="quantity-section">
@@ -117,7 +135,6 @@ const TicketPurchase = ({
            autoSelectRecommended={true}
           />
 
-
           <div className="purchase-summary">
             <h3>Purchase Summary</h3>
             <div className="summary-row">
@@ -126,16 +143,22 @@ const TicketPurchase = ({
             </div>
             <div className="summary-row">
               <span>Price per ticket:</span>
-              <span>${lottery.ticketPrice}</span>
+              <span>{ticketPrice} ETH</span>
             </div>
             <div className="summary-row total">
               <span>Total:</span>
-              <span>${calculateTotal()}</span>
+              <span>{calculateTotal()} ETH</span>
             </div>
             {selectedToken && (
               <div className="summary-row">
-                <span>Token:</span>
-                <span>{selectedToken.symbol}</span>
+                <span>Payment Token:</span>
+                <span className="token-value">
+                  <span className="token-icon">{selectedToken.symbol.charAt(0)}</span>
+                  {selectedToken.symbol}
+                  {recommendation && recommendation.recommendedToken.address === selectedToken.address && (
+                    <span className="ai-badge">AI Recommended</span>
+                  )}
+                </span>
               </div>
             )}
           </div>
