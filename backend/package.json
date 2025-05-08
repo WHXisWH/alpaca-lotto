@@ -24,12 +24,7 @@
         "dotenv": "^16.3.1",
         "ethers": "^5.7.2",
         "express": "^4.18.2",
-        "userop": "^0.3.3",
-        "@zerodev/sdk": "^0.4.2"
-    },
-    "resolutions": {
-        "userop": "^0.4.0-beta.6",
-        "@zerodev/sdk": "^0.4.2"
+        "userop": "^0.3.3"
     },
     "devDependencies": {
         "nodemon": "^3.0.1"
