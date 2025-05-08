@@ -409,23 +409,23 @@ class LotteryService {
    * @param {Object} lotteryData - コントラクトから取得したロッタリーデータ
    * @returns {Object} - フォーマットされたロッタリーオブジェクト
    */
-  __formatLottery(lotteryData) {
-    return {
-      id: lotteryData.id.toNumber(),
-      name: lotteryData.name,
-      ticketPrice: parseFloat(ethers.utils.formatUnits(lotteryData.ticketPrice, 18)),
-      startTime: lotteryData.startTime.toNumber(),
-      endTime: lotteryData.endTime.toNumber(),
-      drawTime: lotteryData.drawTime.toNumber(),
-      supportedTokens: lotteryData.supportedTokens,
-      totalTickets: lotteryData.totalTickets.toNumber(),
-      prizePool: parseFloat(ethers.utils.formatUnits(lotteryData.prizePool, 18)),
-      drawn: lotteryData.drawn,
-      winners: lotteryData.winners || [],
-      winningTickets: lotteryData.winningTickets ?
-        lotteryData.winningTickets.map(t => t.toNumber()) : []
-    };
-  }
+  _formatLottery(lotteryData) {
+  return {
+    id: lotteryData.id.toNumber(),
+    name: lotteryData.name,
+    ticketPrice: parseFloat(ethers.utils.formatUnits(lotteryData.ticketPrice, 18)),
+    startTime: lotteryData.startTime.toNumber(),
+    endTime: lotteryData.endTime.toNumber(),
+    drawTime: lotteryData.drawTime.toNumber(),
+    supportedTokens: lotteryData.supportedTokens,
+    totalTickets: lotteryData.totalTickets.toNumber(),
+    prizePool: parseFloat(ethers.utils.formatUnits(lotteryData.prizePool, 18)),
+    drawn: lotteryData.drawn,
+    winners: lotteryData.winners || [],
+    winningTickets: lotteryData.winningTickets ?
+      lotteryData.winningTickets.map(t => t.toNumber()) : []
+  };
+}
 
   /* 
    * @param {Object} ticketData 
