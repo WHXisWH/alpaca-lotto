@@ -413,7 +413,7 @@ class LotteryService {
     return {
       id: lotteryData.id.toNumber(),
       name: lotteryData.name,
-      ticketPrice: lotteryData.ticketPrice.toNumber(),
+      ticketPrice: lotteryData.ticketPrice.toString(),
       startTime: lotteryData.startTime.toNumber(),
       endTime: lotteryData.endTime.toNumber(),
       drawTime: lotteryData.drawTime.toNumber(),

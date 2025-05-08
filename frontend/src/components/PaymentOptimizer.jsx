@@ -5,26 +5,16 @@ import useTokens from '../hooks/useTokens';
 import useUserOp from '../hooks/useUserOp';
 import paymasterService from '../services/paymasterService';
 
-/**
- * PaymentOptimizer Component
- * 
- * This component demonstrates NERO Chain's Account Abstraction Paymaster capabilities
- * by analyzing user tokens and suggesting the optimal token to use for gas payments.
- * 
- * @param {Object} props
- * @param {Function} props.onSelect - Callback when token is selected
- * @param {boolean} props.autoSelectRecommended - Automatically select recommended token
- */
 const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
   const { address, isConnected } = useAccount();
   const { tokens, isLoading: tokensLoading } = useTokens();
   const { aaWalletAddress, initSDK, isLoading: userOpLoading } = useUserOp();
-  
+
   const [paymentOptions, setPaymentOptions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [recommendedToken, setRecommendedToken] = useState(null);
-  const [selectedPaymentType, setSelectedPaymentType] = useState(0); // Default: Sponsored
+  const [selectedPaymentType, setSelectedPaymentType] = useState(0);
   const [selectedToken, setSelectedToken] = useState(null);
   const [optimizationFactors, setOptimizationFactors] = useState({
     balanceWeight: 40,
@@ -32,8 +22,7 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
     slippageWeight: 30
   });
   const [gasCostEstimates, setGasCostEstimates] = useState({});
-  
-  // Initialize services on component mount
+
   useEffect(() => {
     const initServices = async () => {
       try {
@@ -46,26 +35,20 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
         setError('Failed to initialize payment services');
       }
     };
-    
+
     initServices();
   }, [isConnected, initSDK]);
-  
-  // Get supported tokens from Paymaster when AA wallet address is available
+
   useEffect(() => {
     const getSupportedTokens = async () => {
       if (!aaWalletAddress) return;
-      
+
       setIsLoading(true);
-      
       try {
         const supportedTokens = await paymasterService.getSupportedTokens(aaWalletAddress);
-        
-        // Filter user tokens to only include supported tokens
         const supportedAddresses = supportedTokens.map(token => token.address.toLowerCase());
-        const filteredTokens = tokens.filter(token => 
-          supportedAddresses.includes(token.address.toLowerCase())
-        );
-        
+        const filteredTokens = tokens.filter(token => supportedAddresses.includes(token.address.toLowerCase()));
+
         setPaymentOptions(filteredTokens);
         setIsLoading(false);
       } catch (err) {
@@ -74,52 +57,49 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
         setIsLoading(false);
       }
     };
-    
+
     if (tokens.length > 0 && aaWalletAddress) {
       getSupportedTokens();
     }
   }, [tokens, aaWalletAddress]);
-  
-  // Calculate token scores and pick recommended token
+
   useEffect(() => {
+    if (!autoSelectRecommended || !paymentOptions.length) return;
+
+    let cancelled = false;
+    setIsLoading(true);
+
     const optimizeTokens = async () => {
-      if (!autoSelectRecommended || !paymentOptions.length || recommendedToken) return;
-  
-      setIsLoading(true);
-  
       try {
         const gasEstimates = {};
-  
+
         for (const token of paymentOptions) {
-          const estimate = await paymasterService.getGasCostEstimation(
-            token.address,
-            300000
-          );
-          gasEstimates[token.address] = estimate;
+          const estimate = await paymasterService.getGasCostEstimation(token.address, 300000);
+          gasEstimates[token.address] = estimate || { gasCostToken: 1 };
         }
-  
+
         setGasCostEstimates(gasEstimates);
-  
+
         const scoredTokens = paymentOptions.map(token => {
           const balance = parseFloat(token.balance);
           const maxBalance = Math.max(...paymentOptions.map(t => parseFloat(t.balance)));
           const balanceScore = maxBalance > 0 ? (balance / maxBalance) : 0;
-  
+
           const isStablecoin = ['DAI', 'USDC', 'USDT'].includes(token.symbol);
           const volatility = isStablecoin ? 0 : (token.symbol === 'WETH' ? 0.05 : (token.symbol === 'WBTC' ? 0.08 : 0.15));
           const volatilityScore = 1 - volatility;
-  
-          const gasEstimate = gasEstimates[token.address]?.gasCostToken || 0;
-          const gasScores = Object.values(gasEstimates).map(est => est.gasCostToken || 0);
-          const maxGasCost = Math.max(...gasScores.filter(score => score > 0)) || 1;
+
+          const gasEstimate = gasEstimates[token.address]?.gasCostToken || 1;
+          const gasScores = Object.values(gasEstimates).map(est => est.gasCostToken || 1);
+          const maxGasCost = Math.max(...gasScores);
           const slippageScore = maxGasCost > 0 ? (1 - (gasEstimate / maxGasCost)) : 0;
-  
+
           const totalScore = (
             (balanceScore * (optimizationFactors.balanceWeight / 100)) +
             (volatilityScore * (optimizationFactors.volatilityWeight / 100)) +
             (slippageScore * (optimizationFactors.slippageWeight / 100))
           );
-  
+
           return {
             ...token,
             balanceScore,
@@ -128,41 +108,33 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
             totalScore
           };
         });
-  
-        const sortedTokens = [...scoredTokens].sort((a, b) => b.totalScore - a.totalScore);
-  
+
+        const sortedTokens = scoredTokens.sort((a, b) => b.totalScore - a.totalScore);
+
         if (sortedTokens.length > 0) {
           const recommended = sortedTokens[0];
           setRecommendedToken(recommended);
-  
-          if (autoSelectRecommended && !selectedToken) {
+
+          if (!selectedToken) {
             setSelectedToken(recommended);
-            if (onSelect) {
-              onSelect({
-                token: recommended,
-                paymentType: selectedPaymentType
-              });
-            }
+            onSelect?.({ token: recommended, paymentType: selectedPaymentType });
           }
         }
-  
-        setIsLoading(false);
+
+        if (!cancelled) setIsLoading(false);
       } catch (err) {
-        console.error('Failed to optimize tokens:', err);
-        setError('Failed to run token optimization');
-        setIsLoading(false);
+        if (!cancelled) {
+          console.error('Failed to optimize tokens:', err);
+          setError('Failed to run token optimization');
+          setIsLoading(false);
+        }
       }
     };
-  
-    const debouncedOptimize = debounce(() => {
-      optimizeTokens();
-    }, 1000); // 1秒間隔
-  
-    debouncedOptimize();
-  
-    return () => debouncedOptimize.cancel();
-  }, [paymentOptions, optimizationFactors]);
-  
+
+    optimizeTokens();
+    return () => { cancelled = true; };
+  }, [autoSelectRecommended, paymentOptions, optimizationFactors]);
+
   // Handle token selection
   const handleTokenSelect = (token) => {
     setSelectedToken(token);
