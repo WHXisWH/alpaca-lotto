@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAccount } from 'wagmi'; // Using wagmi's useAccount hook
 import useWagmiWallet from '../hooks/useWagmiWallet'; // Using wagmi wallet hook
 import useUserOp from '../hooks/useUserOp';
-import useTokens from '../hooks/useTokens';
+import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
 import { ethers } from 'ethers'; 
 
@@ -19,6 +19,12 @@ const PaymentPage = () => {
   // Using wagmi hooks
   const { address, isConnected } = useAccount();
   const { connectWallet, isDevelopmentMode } = useWagmiWallet();
+  
+  const { 
+    fetchUserTickets,
+    fetchLotteryDetails,
+    fetchAllUserTickets
+  } = useLotteries();
   
   // Custom hooks
   const { 
@@ -131,7 +137,17 @@ const PaymentPage = () => {
   };
   
   // Navigate back to home
-  const handleGoBack = () => {
+  const handleGoBack = async () => {
+    if (transactionStatus === 'success' && lottery) {
+      // Refresh ticket data and lottery information after successful purchase
+      try {
+        await fetchUserTickets(lottery.id);
+        await fetchLotteryDetails(lottery.id);
+        await fetchAllUserTickets(); // Refresh all user tickets for complete update
+      } catch (err) {
+        console.error('Error refreshing data after purchase:', err);
+      }
+    }
     navigate('/');
   };
   

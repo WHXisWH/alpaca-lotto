@@ -26,10 +26,14 @@ const LotteryDetails = ({ lottery, userTickets = [] }) => {
   };
 
   // Calculate ticket price as ethers using the utility function
-  const ticketPrice = formatUtils.formatUnits(lottery.ticketPrice, 18);
+  const ticketPrice = lottery?.ticketPrice ? formatUtils.formatUnits(lottery.ticketPrice, 18) : '0';
   
   // Calculate prize pool using the utility function
-  const prizePool = formatUtils.formatUnits(lottery.prizePool, 18);
+  const prizePool = lottery.prizePool ? 
+  (typeof lottery.prizePool === 'string' ? 
+    formatUtils.formatUnits(lottery.prizePool, 18) : 
+    lottery.prizePool.toString()) : 
+  '0';
 
   return (
     <div className="lottery-details">

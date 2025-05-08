@@ -21,11 +21,16 @@ const formatUtils = {
         return ethers.utils.formatUnits(value, decimals);
       }
       
-      // Handle string values that may be decimal or hex
+      // Handle string values
       if (typeof value === 'string') {
         // Check if it's already a decimal string with a decimal point
         if (value.includes('.')) {
           return value;
+        }
+        
+        // Handle empty or '0x' strings
+        if (value === '' || value === '0x') {
+          return '0';
         }
         
         return ethers.utils.formatUnits(value, decimals);
@@ -38,10 +43,10 @@ const formatUtils = {
       
       return '0';
     } catch (error) {
-      console.error('Error formatting units:', error);
+      console.error('Error formatting units:', error, 'Value:', value);
       return '0';
     }
-  },
+  }
   
   /**
    * Safely parses a user input value to a BigNumber compatible string

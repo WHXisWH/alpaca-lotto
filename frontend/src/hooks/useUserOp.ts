@@ -202,6 +202,21 @@ const useUserOp = () => {
       // Set transaction hash for later reference
       setTxHash(receipt.transactionHash);
       
+      try {
+        const apiModule = await import('../services/api');
+        const api = apiModule.default || apiModule.api;
+        if (api && lotteryId) {
+          console.log('Refreshing lottery and ticket data after purchase');
+          await api.getLotteryDetails(lotteryId);
+          if (address) {
+            await api.getUserTickets(lotteryId, address);
+          }
+        }
+      } catch (refreshErr) {
+        console.warn('Error refreshing data after purchase:', refreshErr);
+        // Don't fail the transaction if refresh fails
+      }
+
       setIsLoading(false);
       return receipt.transactionHash;
     } catch (err) {
