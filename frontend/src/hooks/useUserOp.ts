@@ -31,23 +31,22 @@ const useUserOp = () => {
       setError('Wallet not connected');
       return;
     }
-
+  
     setIsLoading(true);
     setError(null);
-
+  
     try {
-      // Create a signer from the connected wallet
+    
       const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-      
-      // Initialize the AA Client
+      const signer   = provider.getSigner();
+  
       const aaClient = await Client.init(NERO_RPC_URL, {
         overrideBundlerRpc: BUNDLER_URL,
         entryPoint: ENTRYPOINT_ADDRESS,
       });
       setClient(aaClient);
-
-      // Create a SimpleAccount builder
+  
+     
       const aaBuilder = await Presets.Builder.SimpleAccount.init(
         signer,
         NERO_RPC_URL,
@@ -58,29 +57,27 @@ const useUserOp = () => {
         }
       );
       setBuilder(aaBuilder);
-
-      // Get the AA wallet address
-      const simpleAccountAddress = await aaBuilder.getSender();
-      setAaWalletAddress(simpleAccountAddress);
-
-      // Check if the AA wallet is deployed
-      const code = await provider.getCode(simpleAccountAddress);
-      setIsDeployed(code !== '0x');
-
+  
+      
+      const aaAddress = await aaBuilder.getSender();
+      setAaWalletAddress(aaAddress);
+  
+      
+      const code = await provider.getCode(aaAddress);
+      if (code === '0x') {
+        console.log('AA wallet not deployed — deploying…');
+        await aaBuilder.deploy();
+        await aaClient.waitForDeployment(aaAddress); 
+      }
+      setIsDeployed(true);
+  
       setIsLoading(false);
     } catch (err) {
       console.error('Error initializing AA SDK:', err);
       setError(`Error initializing AA SDK: ${err.message}`);
       setIsLoading(false);
     }
-  }, [isConnected, address]);
-
-  // Initialize SDK when wallet is connected
-  useEffect(() => {
-    if (isConnected && !client) {
-      initSDK();
-    }
-  }, [isConnected, client, initSDK]);
+  }, [isConnected, address]);  
 
   /**
    * Create and send a UserOperation
