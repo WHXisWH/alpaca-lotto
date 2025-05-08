@@ -75,34 +75,34 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
     const optimizeTokens = async () => {
       try {
         const gasEstimates = {};
-
+    
         for (const token of paymentOptions) {
           const estimate = await paymasterService.getGasCostEstimation(token.address, 300000);
           gasEstimates[token.address] = estimate || { gasCostToken: 1 };
         }
-
+    
         setGasCostEstimates(gasEstimates);
-
+    
         const scoredTokens = paymentOptions.map(token => {
           const balance = parseFloat(token.balance);
           const maxBalance = Math.max(...paymentOptions.map(t => parseFloat(t.balance)));
           const balanceScore = maxBalance > 0 ? (balance / maxBalance) : 0;
-
+    
           const isStablecoin = ['DAI', 'USDC', 'USDT'].includes(token.symbol);
           const volatility = isStablecoin ? 0 : (token.symbol === 'WETH' ? 0.05 : (token.symbol === 'WBTC' ? 0.08 : 0.15));
           const volatilityScore = 1 - volatility;
-
+    
           const gasEstimate = gasEstimates[token.address]?.gasCostToken || 1;
           const gasScores = Object.values(gasEstimates).map(est => est.gasCostToken || 1);
           const maxGasCost = Math.max(...gasScores);
           const slippageScore = maxGasCost > 0 ? (1 - (gasEstimate / maxGasCost)) : 0;
-
+    
           const totalScore = (
             (balanceScore * (optimizationFactors.balanceWeight / 100)) +
             (volatilityScore * (optimizationFactors.volatilityWeight / 100)) +
             (slippageScore * (optimizationFactors.slippageWeight / 100))
           );
-
+    
           return {
             ...token,
             balanceScore,
@@ -111,13 +111,13 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
             totalScore
           };
         });
-
+    
         const sortedTokens = scoredTokens.sort((a, b) => b.totalScore - a.totalScore);
-
+    
         if (sortedTokens.length > 0) {
           const recommended = sortedTokens[0];
           setRecommendedToken(recommended);
-
+    
           if (
             !hasSelectedRef.current &&
             recommended &&
@@ -127,8 +127,10 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
             onSelect?.({ token: recommended, paymentType: selectedPaymentType });
             hasSelectedRef.current = true;
           }
-
+        }
+    
         if (!cancelled) setIsLoading(false);
+    
       } catch (err) {
         if (!cancelled) {
           console.error('Failed to optimize tokens:', err);
@@ -137,6 +139,7 @@ const PaymentOptimizer = ({ onSelect, autoSelectRecommended = false }) => {
         }
       }
     };
+    
 
     optimizeTokens();
     return () => { cancelled = true; };
