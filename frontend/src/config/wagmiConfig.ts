@@ -1,3 +1,4 @@
+// frontend/src/config/wagmiConfig.ts
 import { createConfig, http } from 'wagmi'
 import { mainnet, sepolia } from 'wagmi/chains'
 import { injected, metaMask, walletConnect } from 'wagmi/connectors'
