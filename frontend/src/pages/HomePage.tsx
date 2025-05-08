@@ -130,17 +130,15 @@ const HomePage = () => {
    * Purchase tickets
    * @param {Object} token - Token to use for payment
    */
-  const handlePurchaseTickets = async (token) => {
-    // Navigate to PaymentPage to start ticket purchase flow
+  const handlePurchaseTickets = async ({ token, paymentType }) => {
     navigate('/payment', {
       state: {
         lottery: selectedLottery,
-        token,
+        token,         
+        paymentType,   
         quantity: ticketQuantity,
-      }
+      },
     });
-    
-    // Close the modal
     handleCloseTicketModal();
   };
   
