@@ -144,7 +144,7 @@ const TicketPurchase = ({
               <div className="summary-row">
                 <span>Payment Token:</span>
                 <span className="token-value">
-                  <span className="token-icon">{selectedToken.symbol.charAt(0)}</span>
+                  <span className="token-icon">{${1}.symbol?.charAt(0) ?? '？'}</span>
                   {selectedToken.symbol}
                   {recommendation && recommendation.recommendedToken.address === selectedToken.address && (
                     <span className="ai-badge">AI Recommended</span>
