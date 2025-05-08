@@ -46,44 +46,58 @@ class LotteryService {
    */
   async getAllLotteries() {
     try {
-  
       if (
         this.lotteriesCache.data &&
         Date.now() - this.lotteriesCache.timestamp < this.cacheExpiryTime
       ) {
+        console.log('[lotteryService] ✅ Using cached lottery data');
         return this.lotteriesCache.data;
       }
-
-
-      this.initProvider();
-
-
-      const lotteryCounter = await this.contract.lotteryCounter();
-      
-
-      const lotteries = [];
-      for (let i = 1; i <= lotteryCounter.toNumber(); i++) {
-        try {
-          console.log(`Fetching lottery ID: ${i}`);
-          const lottery = await this.contract.getLottery(i);
-          console.log(`Lottery raw:`, lottery);
-          console.log(`ID: ${lottery.id}, Name: ${lottery.name}`);
-          lotteries.push(this._formatLottery(lottery));
-        } catch (err) {
-          console.warn(`Error fetching lottery #${i}:`, err);
+  
+      if (!this.initialized) {
+        console.log('[lotteryService] ⚠️ Not initialized. Initializing...');
+        const initResult = await this.init();
+        if (!initResult) {
+          console.warn('[lotteryService] ❌ Initialization failed. Returning mock data');
+          return this._generateMockLotteries();
         }
       }
+  
+      console.log('[lotteryService] 📦 Fetching lotteryCounter from contract...');
+      const lotteryCounter = await this.contract.lotteryCounter();
+      const counterValue = lotteryCounter.toNumber();
+      console.log(`[lotteryService] 🎯 Lottery counter: ${counterValue}`);
+  
+      if (counterValue === 0) {
+        console.warn('[lotteryService] ⚠️ Lottery counter is 0. No lotteries available.');
+        return [];
+      }
+  
+      const lotteries = [];
+      for (let i = 1; i <= counterValue; i++) {
+        try {
+          console.log(`[lotteryService] 🔍 Fetching lottery #${i}`);
+          const rawLottery = await this.contract.getLottery(i);
+          console.log(`[lotteryService] ✅ Lottery #${i} fetched`, rawLottery);
+          lotteries.push(this._formatLottery(rawLottery));
+        } catch (err) {
+          console.warn(`[lotteryService] ❌ Error fetching lottery #${i}:`, err.message || err);
+        }
+      }
+  
+      console.log(`[lotteryService] ✅ Successfully fetched ${lotteries.length} lotteries`);
       this.lotteriesCache = {
         data: lotteries,
         timestamp: Date.now()
       };
-      
+  
       return lotteries;
-      } catch (error) {
-        console.error('ロッタリー取得エラー:', error);
-        return [];
-      }
+    } catch (error) {
+      console.error('[lotteryService] 💥 Error in getAllLotteries():', error);
+      return this._generateMockLotteries();
     }
+  }
+  
     
  /**
    * アクティブなロッタリーを取得
