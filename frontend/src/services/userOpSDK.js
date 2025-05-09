@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { Client, Presets } from 'userop';
+import paymasterService from './paymasterService';
 
 // Constants
 const CONSTANTS = {
@@ -10,6 +11,7 @@ const CONSTANTS = {
   ENTRYPOINT_ADDRESS: import.meta.env.VITE_ENTRYPOINT_ADDRESS || '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
   ACCOUNT_FACTORY_ADDRESS: import.meta.env.VITE_ACCOUNT_FACTORY_ADDRESS || '0x9406Cc6185a346906296840746125a0E44976454',
   LOTTERY_CONTRACT_ADDRESS: import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS || '',
+  TOKEN_PAYMASTER_ADDRESS: import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || '0xB24a30A3971e4d9bf771BDc81735e8cbEc95D578',
 };
 
 /**
@@ -26,108 +28,49 @@ class UserOpSDK {
     this.initialized = false;
   }
 
-  // 21-45行目を以下に置き換え
-async init(signer) {
-  try {
-    console.log("Initializing UserOpSDK with parameters:", CONSTANTS);
-    
-    this.signer = signer;
-    
-    // Safely create provider with retry mechanism
-    let providerAttempts = 0;
-    while (providerAttempts < 3) {
-      try {
-        this.provider = new ethers.providers.JsonRpcProvider(CONSTANTS.NERO_RPC_URL);
-        await this.provider.getNetwork(); // Test the connection
-        console.log("Provider created successfully");
-        break;
-      } catch (providerErr) {
-        console.warn(`Provider creation attempt ${providerAttempts + 1} failed:`, providerErr);
-        providerAttempts++;
-        if (providerAttempts >= 3) throw providerErr;
-        await new Promise(r => setTimeout(r, 1000));
-      }
-    }
-    
+  async init(signer) {
     try {
-      // Initialize the AA Client with proper error handling
-      if (typeof Client.init === 'function') {
-        this.client = await Client.init(CONSTANTS.NERO_RPC_URL, {
-          overrideBundlerRpc: CONSTANTS.BUNDLER_URL,
-          entryPoint: CONSTANTS.ENTRYPOINT_ADDRESS,
-          timeout: 30000,
-        });
-        console.log("AA Client initialized successfully");
-      } else {
-        throw new Error("Client.init is not a function");
-      }
-    } catch (clientErr) {
-      console.error("Error initializing AA Client:", clientErr);
+      console.log("Initializing UserOpSDK with parameters:", CONSTANTS);
       
-      // Fallback client implementation
-      this.client = this._createMockClient();
-      console.log("Using fallback client implementation");
-    }
-
-    try {
-      if (Presets && Presets.Builder && typeof Presets.Builder.SimpleAccount === 'object' && 
-          typeof Presets.Builder.SimpleAccount.init === 'function') {
-        // Create a SimpleAccount builder
-        this.builder = await Presets.Builder.SimpleAccount.init(
-          signer,
-          CONSTANTS.NERO_RPC_URL,
-          {
+      this.signer = signer;
+      
+      // Safely create provider with retry mechanism
+      let providerAttempts = 0;
+      while (providerAttempts < 3) {
+        try {
+          this.provider = new ethers.providers.JsonRpcProvider(CONSTANTS.NERO_RPC_URL);
+          await this.provider.getNetwork(); // Test the connection
+          console.log("Provider created successfully");
+          break;
+        } catch (providerErr) {
+          console.warn(`Provider creation attempt ${providerAttempts + 1} failed:`, providerErr);
+          providerAttempts++;
+          if (providerAttempts >= 3) throw providerErr;
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+      
+      try {
+        // Initialize the AA Client with proper error handling
+        if (typeof Client.init === 'function') {
+          this.client = await Client.init(CONSTANTS.NERO_RPC_URL, {
             overrideBundlerRpc: CONSTANTS.BUNDLER_URL,
             entryPoint: CONSTANTS.ENTRYPOINT_ADDRESS,
-            factory: CONSTANTS.ACCOUNT_FACTORY_ADDRESS,
-          }
-        );
-        console.log("SimpleAccount builder initialized successfully");
-      } else {
-        throw new Error("Presets.Builder.SimpleAccount.init is not a function");
-      }
-    } catch (builderErr) {
-      console.error("Error initializing SimpleAccount builder:", builderErr);
-      
-      // Fallback builder implementation
-      this.builder = this._createMockBuilder();
-      console.log("Using fallback builder implementation");
-    }
-    
-    try {
-      this.aaWalletAddress = await this._getAAWalletAddress();
-      console.log("AA wallet address retrieved:", this.aaWalletAddress);
-    } catch (addressErr) {
-      console.error("Error retrieving AA wallet address:", addressErr);
-      this.aaWalletAddress = this._createMockAddress();
-      console.log("Using fallback AA wallet address:", this.aaWalletAddress);
-    }
-    
-    this.initialized = true;
-    
-    return {
-      client: this.client,
-      builder: this.builder,
-      aaWalletAddress: this.aaWalletAddress
-    };
-  } catch (error) {
-    console.error('Error initializing UserOpSDK:', error);
-    
-    // Final fallback - create mock implementations for everything
-    this.client = this._createMockClient();
-    this.builder = this._createMockBuilder();
-    this.aaWalletAddress = this._createMockAddress();
-    this.initialized = true;
-    
-    return {
-      client: this.client,
-      builder: this.builder,
-      aaWalletAddress: this.aaWalletAddress
-    };
-  }
-}
+            timeout: 30000,
+          });
+          console.log("AA Client initialized successfully");
+        } else {
+          throw new Error("Client.init is not a function");
+        }
+      } catch (clientErr) {
+        console.error("Error initializing AA Client:", clientErr);
         
+        // Fallback client implementation
+        this.client = this._createMockClient();
+        console.log("Using fallback client implementation");
+      }
 
+      try {
         if (Presets && Presets.Builder && typeof Presets.Builder.SimpleAccount === 'object' && 
             typeof Presets.Builder.SimpleAccount.init === 'function') {
           // Create a SimpleAccount builder
@@ -142,38 +85,46 @@ async init(signer) {
           );
           console.log("SimpleAccount builder initialized successfully");
         } else {
-          console.error("Presets.Builder.SimpleAccount.init is not a function, using fallback");
- 
-          this.builder = this._createMockBuilder();
+          throw new Error("Presets.Builder.SimpleAccount.init is not a function");
         }
+      } catch (builderErr) {
+        console.error("Error initializing SimpleAccount builder:", builderErr);
         
+        // Fallback builder implementation
+        this.builder = this._createMockBuilder();
+        console.log("Using fallback builder implementation");
+      }
+      
+      try {
         this.aaWalletAddress = await this._getAAWalletAddress();
         console.log("AA wallet address retrieved:", this.aaWalletAddress);
-        
-        this.initialized = true;
-        
-        return {
-          client: this.client,
-          builder: this.builder,
-          aaWalletAddress: this.aaWalletAddress
-        };
-      } catch (innerError) {
-        console.error("Inner error initializing UserOpSDK:", innerError);
-        
-        this.client = this._createMockClient();
-        this.builder = this._createMockBuilder();
+      } catch (addressErr) {
+        console.error("Error retrieving AA wallet address:", addressErr);
         this.aaWalletAddress = this._createMockAddress();
-        this.initialized = true;
-        
-        return {
-          client: this.client,
-          builder: this.builder,
-          aaWalletAddress: this.aaWalletAddress
-        };
+        console.log("Using fallback AA wallet address:", this.aaWalletAddress);
       }
+      
+      this.initialized = true;
+      
+      return {
+        client: this.client,
+        builder: this.builder,
+        aaWalletAddress: this.aaWalletAddress
+      };
     } catch (error) {
       console.error('Error initializing UserOpSDK:', error);
-      throw error;
+      
+      // Final fallback - create mock implementations for everything
+      this.client = this._createMockClient();
+      this.builder = this._createMockBuilder();
+      this.aaWalletAddress = this._createMockAddress();
+      this.initialized = true;
+      
+      return {
+        client: this.client,
+        builder: this.builder,
+        aaWalletAddress: this.aaWalletAddress
+      };
     }
   }
   
@@ -193,7 +144,11 @@ async init(signer) {
         callGasLimit: '0x88b8',
         verificationGasLimit: '0x33450',
         preVerificationGas: '0xc350'
-      })
+      }),
+      getSupportedTokens: async () => {
+        await paymasterService.init();
+        return paymasterService.getSupportedTokens('0x1234567890123456789012345678901234567890');
+      }
     };
   }
   
@@ -203,6 +158,7 @@ async init(signer) {
       execute: () => {},
       executeBatch: () => {},
       setPaymasterOptions: () => {},
+      resetOp: () => {},
       setCallGasLimit: () => {},
       setVerificationGasLimit: () => {},
       setPreVerificationGas: () => {},
@@ -222,6 +178,76 @@ async init(signer) {
     }
     return this._createMockAddress();
   }
+  
+  /**
+   * Ensure token approval for Paymaster
+   * @param {string} tokenAddress - Token address for payment 
+   * @returns {Promise<boolean>} - Whether approval was successful
+   */
+  async ensureTokenApproval(tokenAddress) {
+    try {
+      if (!this.initialized) {
+        await this.init(this.signer);
+      }
+      
+      if (!this.aaWalletAddress || !tokenAddress) {
+        return false;
+      }
+      
+      // Check if token is already approved
+      const isApproved = await paymasterService.isTokenApproved(
+        tokenAddress,
+        this.aaWalletAddress
+      );
+      
+      if (isApproved) {
+        return true;
+      }
+      
+      // Token is not approved, create approval transaction
+      // Create ERC20 interface
+      const erc20Interface = new ethers.utils.Interface([
+        'function approve(address spender, uint256 amount) returns (bool)'
+      ]);
+      
+      // Encode approve function call for TOKEN_PAYMASTER_ADDRESS
+      const callData = erc20Interface.encodeFunctionData(
+        'approve',
+        [CONSTANTS.TOKEN_PAYMASTER_ADDRESS, ethers.constants.MaxUint256]
+      );
+      
+      // Reset the builder
+      this.builder.resetOp && this.builder.resetOp();
+      
+      // Configure approval operation with Type 0 (free gas)
+      const approvalOptions = {
+        type: 0, // Try with free gas for approval
+        apikey: CONSTANTS.PAYMASTER_API_KEY,
+        rpc: CONSTANTS.PAYMASTER_URL
+      };
+      
+      this.builder.setPaymasterOptions(approvalOptions);
+      
+      // Add approval call to the builder
+      this.builder.execute(tokenAddress, 0, callData);
+      
+      // Send the approval UserOperation
+      const result = await this.client.sendUserOperation(this.builder);
+      const receipt = await result.wait();
+      
+      // Check if approval was successful
+      const newApproval = await paymasterService.isTokenApproved(
+        tokenAddress,
+        this.aaWalletAddress
+      );
+      
+      return newApproval;
+    } catch (error) {
+      console.error('Error ensuring token approval:', error);
+      return false;
+    }
+  }
+
   /**
    * Check if AA wallet is deployed
    * @param {string} address - AA wallet address
@@ -249,11 +275,13 @@ async init(signer) {
    * @param {number} decimals - Token decimals
    * @returns {Object} - Builder with the transfer operation
    */
-  createERC20Transfer(tokenAddress, recipientAddress, amount, decimals) {
+  async createERC20Transfer(tokenAddress, recipientAddress, amount, decimals) {
     if (!this.initialized) {
-      this.init(this.signer).catch(console.error);
-      return this.builder;
+      await this.init(this.signer);
     }
+    
+    // Reset any previous operations
+    this.builder.resetOp && this.builder.resetOp();
     
     // Create ERC20 interface
     const erc20Interface = new ethers.utils.Interface([
@@ -277,11 +305,13 @@ async init(signer) {
    * @param {Array} calls - Array of contract calls [{to, data}]
    * @returns {Object} - Builder with the batch operation
    */
-  createBatchOperation(calls) {
+  async createBatchOperation(calls) {
     if (!this.initialized) {
-      this.init(this.signer).catch(console.error);
-      return this.builder;
+      await this.init(this.signer);
     }
+    
+    // Reset any previous operations
+    this.builder.resetOp && this.builder.resetOp();
     
     const callAddresses = calls.map(call => call.to);
     const callData = calls.map(call => call.data);
@@ -298,10 +328,18 @@ async init(signer) {
    * @param {string} token - Token address for payment (for types 1 and 2)
    * @returns {Object} - Updated builder
    */
-  setPaymasterOptions(type, token = null) {
+  async setPaymasterOptions(type, token = null) {
     if (!this.initialized) {
-      this.init(this.signer).catch(console.error);
-      return this.builder;
+      await this.init(this.signer);
+    }
+    
+    // Check if Type 0 (free gas) is selected
+    if (type === 0) {
+      console.warn('Free gas model is not supported, switching to ERC20 prepayment.');
+      type = 1;
+      
+      // Store preference for future use
+      localStorage.setItem('sponsoredPaymentsDisabled', 'true');
     }
     
     const options = {
@@ -312,7 +350,16 @@ async init(signer) {
     
     // Add token address for ERC20 payment types
     if ((type === 1 || type === 2) && token) {
+      // Check if token is supported
+      const isSupported = await paymasterService.isTokenSupported(token);
+      if (!isSupported) {
+        throw new Error('Token is not supported by the Paymaster service');
+      }
+      
       options.token = token;
+      
+      // Ensure token is approved for Paymaster
+      await this.ensureTokenApproval(token);
     }
     
     // Set options in builder
@@ -335,71 +382,14 @@ async init(signer) {
         throw new Error('AA wallet address not available. Initialize first.');
       }
       
-      // Create minimal UserOp for the request
-      const minimalUserOp = {
-        sender: this.aaWalletAddress,
-        nonce: "0x0",
-        initCode: "0x",
-        callData: "0x",
-        callGasLimit: "0x0",
-        verificationGasLimit: "0x0",
-        preVerificationGas: "0x0",
-        maxFeePerGas: "0x0",
-        maxPriorityFeePerGas: "0x0",
-        paymasterAndData: "0x",
-        signature: "0x"
-      };
-      
-      // Create provider for Paymaster RPC
-      const provider = new ethers.providers.JsonRpcProvider(CONSTANTS.PAYMASTER_URL);
-      
-      // Call the pm_supported_tokens method
-      const response = await provider.send("pm_supported_tokens", [
-        minimalUserOp,
-        CONSTANTS.PAYMASTER_API_KEY,
-        CONSTANTS.ENTRYPOINT_ADDRESS
-      ]);
-      
-      if (!response || !response.tokens) {
-        console.warn('Unexpected response format from Paymaster:', response);
-        return [];
-      }
-      
-      // Format the tokens
-      return response.tokens.map(token => ({
-        address: token.token || token.address,
-        symbol: token.symbol,
-        name: token.name || token.symbol,
-        decimals: token.decimals,
-        type: token.type
-      }));
+      // Use the paymasterService to get supported tokens
+      await paymasterService.init();
+      return paymasterService.getSupportedTokens(this.aaWalletAddress);
     } catch (error) {
-      console.error('Error fetching supported tokens from Paymaster:', error);
+      console.error('Error fetching supported tokens:', error);
       
-      // Return mock data for development
-      return [
-        {
-          address: '0x6b175474e89094c44da98b954eedeac495271d0f',
-          symbol: 'DAI',
-          name: 'Dai Stablecoin',
-          decimals: 18,
-          type: 1
-        },
-        {
-          address: '0xC86Fed58edF0981e927160C50ecB8a8B05B32fed',
-          symbol: 'USDC',
-          name: 'USD Coin',
-          decimals: 6,
-          type: 1
-        },
-        {
-          address: '0xdac17f958d2ee523a2206206994597c13d831ec7',
-          symbol: 'USDT',
-          name: 'Tether USD',
-          decimals: 6,
-          type: 1
-        }
-      ];
+      // Let paymasterService handle fallback token list
+      return paymasterService.getSupportedTokens('0x1234567890123456789012345678901234567890');
     }
   }
 
@@ -499,6 +489,12 @@ async init(signer) {
       }
     } catch (error) {
       console.error("Error sending UserOperation:", error);
+      
+      // Better error handling for specific cases
+      if (error.message && error.message.includes('token not supported')) {
+        throw new Error('The selected token is not supported by the Paymaster service. Please try a different token.');
+      }
+      
       throw error;
     }
   }
@@ -510,11 +506,13 @@ async init(signer) {
    * @param {number} quantity - Number of tickets
    * @returns {Object} - Builder with the purchase operation
    */
-  createTicketPurchaseOp(lotteryId, tokenAddress, quantity) {
+  async createTicketPurchaseOp(lotteryId, tokenAddress, quantity) {
     if (!this.initialized || !this.builder) {
-      this.init(this.signer).catch(console.error);
-      return this.builder;
+      await this.init(this.signer);
     }
+    
+    // Reset any previous operations
+    this.builder.resetOp && this.builder.resetOp();
     
     const contractAddress = CONSTANTS.LOTTERY_CONTRACT_ADDRESS;
     console.log(`Creating ticket purchase operation for lottery ${lotteryId} with contract ${contractAddress}`);
@@ -541,11 +539,13 @@ async init(signer) {
    * @param {Array} selections - Array of selections [{lotteryId, tokenAddress, quantity}]
    * @returns {Object} - Builder with the batch purchase operation
    */
-  createBatchTicketPurchaseOp(selections) {
+  async createBatchTicketPurchaseOp(selections) {
     if (!this.initialized || !this.builder) {
-      this.init(this.signer).catch(console.error);
-      return this.builder;
+      await this.init(this.signer);
     }
+    
+    // Reset any previous operations
+    this.builder.resetOp && this.builder.resetOp();
     
     const contractAddress = CONSTANTS.LOTTERY_CONTRACT_ADDRESS;
     console.log(`Creating batch ticket purchase operation for ${selections.length} selections`);
@@ -564,112 +564,6 @@ async init(signer) {
     const callData = contractInterface.encodeFunctionData(
       'batchPurchaseTickets',
       [lotteryIds, tokenAddresses, quantities]
-    );
-    
-    // Add call to builder
-    this.builder.execute(contractAddress, 0, callData);
-    
-    return this.builder;
-  }
-
-  /**
-   * Create session key operation
-   * @param {string} sessionKey - Session key address
-   * @param {number} validDuration - Valid duration in seconds
-   * @returns {Object} - Builder with the session key operation
-   */
-  createSessionKeyOp(sessionKey, validDuration) {
-    if (!this.initialized || !this.builder) {
-      this.init(this.signer).catch(console.error);
-      return this.builder;
-    }
-    
-    const contractAddress = CONSTANTS.LOTTERY_CONTRACT_ADDRESS;
-    console.log(`Creating session key operation for key ${sessionKey} with duration ${validDuration}s`);
-    
-    // Current timestamp
-    const currentTime = Math.floor(Date.now() / 1000);
-    const validUntil = currentTime + validDuration;
-    
-    // Create contract interface
-    const contractInterface = new ethers.utils.Interface([
-      'function createSessionKey(address _sessionKey, uint256 _validUntil, bytes32 _operationsHash) returns (bool)'
-    ]);
-    
-    // Create operations hash (simplified for demo)
-    const operationsHash = ethers.utils.keccak256(
-      ethers.utils.defaultAbiCoder.encode(
-        ['string', 'uint256'],
-        ['AlpacaLotto', validUntil]
-      )
-    );
-    
-    // Encode function call
-    const callData = contractInterface.encodeFunctionData(
-      'createSessionKey',
-      [sessionKey, validUntil, operationsHash]
-    );
-    
-    // Add call to builder
-    this.builder.execute(contractAddress, 0, callData);
-    
-    return this.builder;
-  }
-
-  /**
-   * Create revoke session key operation
-   * @param {string} sessionKey - Session key to revoke
-   * @returns {Object} - Builder with the revoke operation
-   */
-  createRevokeSessionKeyOp(sessionKey) {
-    if (!this.initialized || !this.builder) {
-      this.init(this.signer).catch(console.error);
-      return this.builder;
-    }
-    
-    const contractAddress = CONSTANTS.LOTTERY_CONTRACT_ADDRESS;
-    console.log(`Creating revoke session key operation for key ${sessionKey}`);
-    
-    // Create contract interface
-    const contractInterface = new ethers.utils.Interface([
-      'function revokeSessionKey(address _sessionKey) returns (bool)'
-    ]);
-    
-    // Encode function call
-    const callData = contractInterface.encodeFunctionData(
-      'revokeSessionKey',
-      [sessionKey]
-    );
-    
-    // Add call to builder
-    this.builder.execute(contractAddress, 0, callData);
-    
-    return this.builder;
-  }
-
-  /**
-   * Create claim prize operation
-   * @param {number} lotteryId - Lottery ID
-   * @returns {Object} - Builder with the claim operation
-   */
-  createClaimPrizeOp(lotteryId) {
-    if (!this.initialized || !this.builder) {
-      this.init(this.signer).catch(console.error);
-      return this.builder;
-    }
-    
-    const contractAddress = CONSTANTS.LOTTERY_CONTRACT_ADDRESS;
-    console.log(`Creating claim prize operation for lottery ${lotteryId}`);
-    
-    // Create contract interface
-    const contractInterface = new ethers.utils.Interface([
-      'function claimPrize(uint256 _lotteryId) returns (bool)'
-    ]);
-    
-    // Encode function call
-    const callData = contractInterface.encodeFunctionData(
-      'claimPrize',
-      [lotteryId]
     );
     
     // Add call to builder

@@ -1,3 +1,5 @@
+// frontend/src/hooks/useUserOp.ts
+
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
@@ -11,6 +13,7 @@ const PAYMASTER_URL = import.meta.env.VITE_PAYMASTER_URL || "https://paymaster-t
 const ENTRYPOINT_ADDRESS = import.meta.env.VITE_ENTRYPOINT_ADDRESS || "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
 const ACCOUNT_FACTORY_ADDRESS = import.meta.env.VITE_ACCOUNT_FACTORY_ADDRESS || "0x9406Cc6185a346906296840746125a0E44976454";
 const LOTTERY_CONTRACT_ADDRESS = import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS || "";
+const TOKEN_PAYMASTER_ADDRESS = import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0xB24a30A3971e4d9bf771BDc81735e8cbEc95D578";
 
 /**
  * Custom hook for NERO Chain's Account Abstraction functionality
@@ -27,11 +30,101 @@ const useUserOp = () => {
   const [isDevelopmentMode, setIsDevelopmentMode] = useState(false);
 
   /**
+   * Ensure token approval for Paymaster
+   * @param {string} tokenAddress - The token address for payment
+   * @param {Object} builder - The current builder
+   * @returns {Promise<boolean>} - Whether approval was successful
+   */
+  const ensurePaymasterApproval = async (tokenAddress, builder) => {
+    if (!tokenAddress || !builder || isDevelopmentMode) return true;
+    
+    try {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      
+      // Create token contract interface
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        ['function allowance(address owner, address spender) view returns (uint256)',
+         'function approve(address spender, uint256 amount) returns (bool)'],
+        signer
+      );
+      
+      console.log(`Checking allowance for token ${tokenAddress} to paymaster ${TOKEN_PAYMASTER_ADDRESS}`);
+      
+      // Check if AA wallet address has already approved tokens for Paymaster
+      const allowance = await tokenContract.allowance(aaWalletAddress, TOKEN_PAYMASTER_ADDRESS);
+      
+      // If allowance is sufficient, no need to approve
+      if (allowance.gte(ethers.constants.MaxUint256.div(2))) {
+        console.log('Token already approved for Paymaster');
+        return true;
+      }
+      
+      console.log('Insufficient allowance, approving token for Paymaster...');
+      
+      // Reset any previous operations to create a clean builder
+      builder.resetOp && builder.resetOp();
+      
+      // Encode approve function call
+      const approveData = tokenContract.interface.encodeFunctionData(
+        'approve',
+        [TOKEN_PAYMASTER_ADDRESS, ethers.constants.MaxUint256]
+      );
+      
+      // Create approval operation using FREE_GAS (type 0) temporarily
+      // This is the key part - we need to use Type 0 for the approval operation
+      // even if the user will use Type 1 or 2 for the actual transaction
+      const approvalOptions = {
+        type: 0, // Use sponsored gas for approval (this works for approval)
+        apikey: import.meta.env.VITE_PAYMASTER_API_KEY || '',
+        rpc: PAYMASTER_URL
+      };
+      
+      builder.setPaymasterOptions(approvalOptions);
+      
+      // Execute the approval transaction
+      builder.execute(tokenAddress, 0, approveData);
+      
+      // Send approval operation
+      console.log('Sending approval UserOperation...');
+      const approvalResult = await client.sendUserOperation(builder);
+      console.log('Approval UserOp hash:', approvalResult.userOpHash);
+      
+      // Wait for transaction confirmation
+      const approvalReceipt = await approvalResult.wait();
+      console.log('Approval transaction complete:', approvalReceipt);
+      
+      // Verify approval was successful
+      const newAllowance = await tokenContract.allowance(aaWalletAddress, TOKEN_PAYMASTER_ADDRESS);
+      return newAllowance.gt(allowance);
+    } catch (error) {
+      console.error('Error ensuring token approval for Paymaster:', error);
+      
+      // If in development mode, assume approval success
+      if (isDevelopmentMode) {
+        return true;
+      }
+      
+      // Check if error is due to approval being rejected or other issues
+      if (error.message && (
+          error.message.includes('User denied') || 
+          error.message.includes('user rejected') ||
+          error.message.includes('rejected the request'))) {
+        throw new Error('Approval transaction was rejected by user');
+      }
+      
+      // For any other errors, assume the approval failed but allow the operation to continue
+      return false;
+    }
+  };
+
+  /**
    * Initialize the Account Abstraction SDK
    */
   const initSDK = useCallback(async () => {
     // Check for proper wallet connection
-    if (!isConnected || !address) {
+    if (!isConnected) {
       // Check if we should use development mode
       if (localStorage.getItem('devModeEnabled') === 'true' || 
           window.location.search.includes('devMode=true')) {
@@ -120,7 +213,7 @@ const useUserOp = () => {
       setIsLoading(false);
       return { success: false, error: err.message };
     }
-  }, [isConnected, address]);  
+  }, [isConnected]);  
 
   /**
    * Execute a ticket purchase operation
@@ -189,10 +282,7 @@ const useUserOp = () => {
       );
       
       // Reset the builder operation
-      builder.resetOp();
-      
-      // Configure the execution
-      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
+      builder.resetOp && builder.resetOp();
       
       // Configure Paymaster options
       const paymasterOptions = {
@@ -204,12 +294,18 @@ const useUserOp = () => {
       // Add token when using ERC20 payment (Type 1 or 2)
       if ((paymentType === 1 || paymentType === 2) && paymentToken) {
         paymasterOptions.token = paymentToken;
+        
+        // This is a crucial step - ensure token is approved for Paymaster
+        await ensurePaymasterApproval(paymentToken, builder);
       } else if (paymentType !== 0 && paymentType !== undefined) {
         throw new Error("Payment token required for ERC20 gas payment");
       }
       
-      // Set paymaster options
+      // Set paymaster options after approval check
       builder.setPaymasterOptions(paymasterOptions);
+      
+      // Configure the execution
+      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
       // If using session key, set specific options here
       // This would need to be implemented based on your session key implementation
@@ -254,10 +350,10 @@ const useUserOp = () => {
         
         // Store this information for future reference
         localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-      } else if (errorMsg.includes('token not supported or price error')) {
+      } else if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
         errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
       } else if (errorMsg.includes('insufficient allowance')) {
-        errorMsg = 'Insufficient token allowance for gas payment.';
+        errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
       } else if (errorMsg.includes('insufficient balance')) {
         errorMsg = 'Insufficient token balance for gas payment.';
       }
@@ -266,7 +362,7 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, initSDK, isDevelopmentMode, address]);
+  }, [client, builder, initSDK, isDevelopmentMode, address, ensurePaymasterApproval]);
 
   /**
    * Execute a batch ticket purchase operation
@@ -338,10 +434,7 @@ const useUserOp = () => {
       );
       
       // Reset the builder operation
-      builder.resetOp();
-      
-      // Configure the execution
-      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
+      builder.resetOp && builder.resetOp();
       
       // Configure Paymaster options with improved validation
       const paymasterOptions = {
@@ -353,9 +446,15 @@ const useUserOp = () => {
       // Add token when using ERC20 payment (Type 1 or 2)
       if ((paymentType === 1 || paymentType === 2) && paymentToken) {
         paymasterOptions.token = paymentToken;
+        
+        // Ensure token is approved for Paymaster
+        await ensurePaymasterApproval(paymentToken, builder);
       } else if (paymentType !== 0 && paymentType !== undefined) {
         throw new Error("Payment token required for ERC20 gas payment");
       }
+      
+      // Configure the execution
+      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
       // Set paymaster options with proper structure
       builder.setPaymasterOptions(paymasterOptions);
@@ -388,10 +487,10 @@ const useUserOp = () => {
         
         // Store this information for future reference
         localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-      } else if (errorMsg.includes('token not supported or price error')) {
+      } else if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
         errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
       } else if (errorMsg.includes('insufficient allowance')) {
-        errorMsg = 'Insufficient token allowance for gas payment.';
+        errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
       } else if (errorMsg.includes('insufficient balance')) {
         errorMsg = 'Insufficient token balance for gas payment.';
       }
@@ -400,18 +499,7 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, initSDK, isDevelopmentMode]);
-
-  // Remaining methods remain the same...
-
-  // Automatically initialize SDK when wallet is connected
-  useEffect(() => {
-    if ((isConnected && address) || 
-        localStorage.getItem('devModeEnabled') === 'true' || 
-        window.location.search.includes('devMode=true')) {
-      initSDK().catch(console.error);
-    }
-  }, [isConnected, address, initSDK]);
+  }, [client, builder, initSDK, isDevelopmentMode, ensurePaymasterApproval]);
 
   /**
    * Create session key operation
@@ -468,10 +556,7 @@ const useUserOp = () => {
       );
       
       // Reset the builder operation
-      builder.resetOp();
-      
-      // Configure the execution
-      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
+      builder.resetOp && builder.resetOp();
       
       // Configure Paymaster options - remember Type 0 is not supported
       const paymasterOptions = {
@@ -483,8 +568,15 @@ const useUserOp = () => {
       // Add token for Type 1 or 2 payments
       if ((paymasterOptions.type === 1 || paymasterOptions.type === 2)) {
         // Default to USDC as the payment token
-        paymasterOptions.token = SUPPORTED_TOKENS.USDC.address;
+        const paymentToken = SUPPORTED_TOKENS.USDC.address;
+        paymasterOptions.token = paymentToken;
+        
+        // Ensure token is approved for Paymaster
+        await ensurePaymasterApproval(paymentToken, builder);
       }
+      
+      // Configure the execution
+      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
       // Set paymaster options
       builder.setPaymasterOptions(paymasterOptions);
@@ -514,7 +606,7 @@ const useUserOp = () => {
         
         // Store this information for future reference
         localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-      } else if (errorMsg.includes('token not supported or price error')) {
+      } else if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
         errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
       }
       
@@ -522,7 +614,7 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, initSDK, isDevelopmentMode]);
+  }, [client, builder, initSDK, isDevelopmentMode, ensurePaymasterApproval]);
 
   /**
    * Revoke session key operation
@@ -561,10 +653,7 @@ const useUserOp = () => {
       );
       
       // Reset the builder operation
-      builder.resetOp();
-      
-      // Configure the execution
-      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
+      builder.resetOp && builder.resetOp();
       
       // Configure Paymaster options - Type 0 is not supported
       const paymasterOptions = {
@@ -573,6 +662,12 @@ const useUserOp = () => {
         rpc: PAYMASTER_URL,
         token: SUPPORTED_TOKENS.USDC.address // Default to USDC
       };
+      
+      // Ensure token is approved for Paymaster
+      await ensurePaymasterApproval(SUPPORTED_TOKENS.USDC.address, builder);
+      
+      // Configure the execution
+      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
       // Set paymaster options
       builder.setPaymasterOptions(paymasterOptions);
@@ -596,16 +691,16 @@ const useUserOp = () => {
       setIsLoading(false);
       throw err;
     }
-  }, [client, builder, initSDK, isDevelopmentMode]);
+  }, [client, builder, initSDK, isDevelopmentMode, ensurePaymasterApproval]);
 
   // Automatically initialize SDK when wallet is connected
   useEffect(() => {
-    if ((isConnected && address) || 
+    if ((isConnected) || 
         localStorage.getItem('devModeEnabled') === 'true' || 
         window.location.search.includes('devMode=true')) {
       initSDK().catch(console.error);
     }
-  }, [isConnected, address, initSDK]);
+  }, [isConnected, initSDK]);
 
   return {
     client,

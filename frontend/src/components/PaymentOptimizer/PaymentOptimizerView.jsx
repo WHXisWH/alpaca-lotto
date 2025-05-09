@@ -10,7 +10,7 @@ const PaymentOptimizerView = ({
   optimizationFactors,
   gasCostEstimates,
   handleTokenSelect,
-  handlePaymentTypeSelect,
+  handlePaymentTypeChange,
   handleFactorChange
 }) => {
   // Set disableSponsoredPayments to true by default since it's not supported
@@ -22,9 +22,9 @@ const PaymentOptimizerView = ({
     
     // Default to Type 1 payment if Type 0 was selected
     if (selectedPaymentType === 0) {
-      handlePaymentTypeSelect(1);
+      handlePaymentTypeChange(1);
     }
-  }, [selectedPaymentType, handlePaymentTypeSelect]);
+  }, [selectedPaymentType, handlePaymentTypeChange]);
 
   // Loading state
   if (isLoading) {
@@ -75,7 +75,7 @@ const PaymentOptimizerView = ({
           {!disableSponsoredPayments && (
             <div
               className={`payment-type-option ${selectedPaymentType === 0 ? 'selected' : ''}`}
-              onClick={() => handlePaymentTypeSelect(0)}
+              onClick={() => handlePaymentTypeChange(0)}
             >
               <div className="option-radio">
                 <div className={`radio-inner ${selectedPaymentType === 0 ? 'selected' : ''}`}></div>
@@ -89,7 +89,7 @@ const PaymentOptimizerView = ({
           
           <div
             className={`payment-type-option ${selectedPaymentType === 1 ? 'selected' : ''}`}
-            onClick={() => handlePaymentTypeSelect(1)}
+            onClick={() => handlePaymentTypeChange(1)}
           >
             <div className="option-radio">
               <div className={`radio-inner ${selectedPaymentType === 1 ? 'selected' : ''}`}></div>
@@ -102,7 +102,7 @@ const PaymentOptimizerView = ({
           
           <div
             className={`payment-type-option ${selectedPaymentType === 2 ? 'selected' : ''}`}
-            onClick={() => handlePaymentTypeSelect(2)}
+            onClick={() => handlePaymentTypeChange(2)}
           >
             <div className="option-radio">
               <div className={`radio-inner ${selectedPaymentType === 2 ? 'selected' : ''}`}></div>

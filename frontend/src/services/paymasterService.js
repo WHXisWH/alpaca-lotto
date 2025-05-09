@@ -1,26 +1,34 @@
 import { ethers } from 'ethers';
 import SUPPORTED_TOKENS from '../constants/tokens';
 
+// Token Paymaster address
+const TOKEN_PAYMASTER_ADDRESS = import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0xB24a30A3971e4d9bf771BDc81735e8cbEc95D578";
+
 class PaymasterService {
   constructor() {
-    this.rpcUrl = 'https://paymaster-testnet.nerochain.io';
-    this.entryPoint = '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789';
+    this.rpcUrl = import.meta.env.VITE_PAYMASTER_URL || 'https://paymaster-testnet.nerochain.io';
+    this.entryPoint = import.meta.env.VITE_ENTRYPOINT_ADDRESS || '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789';
     this.paymasterRpc = null;
     this.provider = null;
-    this.apiKey = '';
+    this.apiKey = import.meta.env.VITE_PAYMASTER_API_KEY || '';
     
     // Caches
     this.supportedTokensCache = new Map();
     this.gasCostEstimationCache = new Map();
     this.cacheExpiryTime = 60 * 1000; // 1 minute cache
+    
+    // Known valid tokens - prefill with our constants
+    this.validatedTokens = new Set(Object.values(SUPPORTED_TOKENS).map(t => t.address.toLowerCase()));
   }
 
   async init(apiKey = '') {
-    this.apiKey = apiKey;
+    this.apiKey = apiKey || this.apiKey;
     
     // Create provider with retry mechanism
     try {
-      this.provider = new ethers.providers.JsonRpcProvider('https://rpc-testnet.nerochain.io');
+      this.provider = new ethers.providers.JsonRpcProvider(
+        import.meta.env.VITE_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io'
+      );
       await this.provider.getNetwork(); // Test the connection
     } catch (err) {
       console.warn("Failed to initialize primary provider, using fallback", err);
@@ -55,6 +63,70 @@ class PaymasterService {
       return code !== '0x';
     } catch (error) {
       console.error('Error checking account deployment:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Check if a token is currently supported by the Paymaster
+   * @param {string} tokenAddress - Token address to check
+   * @returns {Promise<boolean>} - Whether the token is supported
+   */
+  async isTokenSupported(tokenAddress) {
+    if (!tokenAddress) return false;
+    
+    const normalizedAddress = tokenAddress.toLowerCase();
+    
+    // Check our validated set first (cache)
+    if (this.validatedTokens.has(normalizedAddress)) {
+      return true;
+    }
+    
+    // Fall back to checking against known supported tokens
+    const knownTokens = Object.values(SUPPORTED_TOKENS).map(t => t.address.toLowerCase());
+    if (knownTokens.includes(normalizedAddress)) {
+      this.validatedTokens.add(normalizedAddress);
+      return true;
+    }
+    
+    // If not in our known list, try to check with the API
+    try {
+      const tokens = await this.getSupportedTokens('0x1234567890123456789012345678901234567890');
+      const isSupported = tokens.some(token => 
+        token.address.toLowerCase() === normalizedAddress
+      );
+      
+      if (isSupported) {
+        this.validatedTokens.add(normalizedAddress);
+      }
+      
+      return isSupported;
+    } catch (error) {
+      console.error('Error checking token support:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Check if a token is approved for the Paymaster
+   * @param {string} tokenAddress - Token address
+   * @param {string} ownerAddress - Token owner address
+   * @returns {Promise<boolean>} - Whether token is approved
+   */
+  async isTokenApproved(tokenAddress, ownerAddress) {
+    if (!this.provider) await this.init();
+    
+    try {
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        ['function allowance(address owner, address spender) view returns (uint256)'],
+        this.provider
+      );
+      
+      const allowance = await tokenContract.allowance(ownerAddress, TOKEN_PAYMASTER_ADDRESS);
+      return allowance.gt(ethers.BigNumber.from(0));
+    } catch (error) {
+      console.error('Error checking token approval:', error);
       return false;
     }
   }
@@ -130,6 +202,13 @@ class PaymasterService {
         }));
         
         if (normalizedTokens.length > 0) {
+          // Update our validated tokens set
+          normalizedTokens.forEach(token => {
+            if (token.address) {
+              this.validatedTokens.add(token.address.toLowerCase());
+            }
+          });
+          
           // Update cache
           this.supportedTokensCache.set(cacheKey, {
             tokens: normalizedTokens,
@@ -207,6 +286,13 @@ class PaymasterService {
   async getGasCostEstimation(tokenAddress, gasLimit) {
     if (!this.paymasterRpc) await this.init();
     
+    // Check if token is supported first
+    const isSupported = await this.isTokenSupported(tokenAddress);
+    if (!isSupported) {
+      console.warn(`Token ${tokenAddress} is not supported by the Paymaster`);
+      throw new Error('Token is not supported by the Paymaster');
+    }
+    
     // Check cache first
     const cacheKey = `gas-${tokenAddress}-${gasLimit}`;
     const cachedData = this.gasCostEstimationCache.get(cacheKey);
@@ -216,7 +302,50 @@ class PaymasterService {
     }
     
     try {
-      // For demo/prototype, return mock values to avoid excessive API calls
+      // Try to get a real estimation if possible
+      // Create a minimal UserOp for the request
+      const minimalUserOp = {
+        sender: '0x1234567890123456789012345678901234567890',
+        nonce: "0x0",
+        initCode: "0x",
+        callData: "0x",
+        callGasLimit: gasLimit.toString(16),
+        verificationGasLimit: "0x0",
+        preVerificationGas: "0x0",
+        maxFeePerGas: "0x0",
+        maxPriorityFeePerGas: "0x0",
+        paymasterAndData: "0x",
+        signature: "0x"
+      };
+      
+      try {
+        // Call the pm_estimate_price method if it exists
+        const priceResponse = await this.paymasterRpc.send("pm_estimate_price", [
+          minimalUserOp,
+          this.apiKey,
+          this.entryPoint,
+          tokenAddress
+        ]);
+        
+        if (priceResponse && priceResponse.price) {
+          const estimation = {
+            gasCostToken: parseFloat(priceResponse.price),
+            gasCostUsd: parseFloat(priceResponse.priceUsd || '0')
+          };
+          
+          // Update cache
+          this.gasCostEstimationCache.set(cacheKey, {
+            estimation,
+            timestamp: Date.now()
+          });
+          
+          return estimation;
+        }
+      } catch (apiError) {
+        console.warn("Error estimating price from Paymaster API, falling back to mock values", apiError);
+      }
+      
+      // For demo/prototype, return mock values if API call failed
       const mockEstimation = {
         gasCostToken: Math.random() * 0.01 + 0.001,
         gasCostUsd: Math.random() * 5 + 1
