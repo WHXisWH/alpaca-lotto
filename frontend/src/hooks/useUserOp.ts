@@ -31,21 +31,35 @@ const useUserOp = () => {
   /**
    * Method to deploy AA wallet
    */
-  const deployAAWallet = async (builder, client) => {
-    if (!builder || !client) return false;
-    
+  const deployAAWallet = async (signer, builder, client) => {
+    if (!signer || !builder || !client) return false;
+  
     try {
-      console.log("Deploying AA wallet...");
-      
-      const aaBuilder = await Presets.Builder.SimpleAccount.init(
-        signer,
-        NERO_RPC_URL,
-        {
-          overrideBundlerRpc: BUNDLER_URL,
-          entryPoint: ENTRYPOINT_ADDRESS,
-          factory: ACCOUNT_FACTORY_ADDRESS,
-        }
-      );
+      const newBuilder = await Presets.Builder.SimpleAccount.init(signer, NERO_RPC_URL, {
+        overrideBundlerRpc: BUNDLER_URL,
+        entryPoint: ENTRYPOINT_ADDRESS,
+        factory: ACCOUNT_FACTORY_ADDRESS,
+      });
+  
+      // Use Paymaster with dummy op (approve or 0-call)
+      newBuilder.setPaymasterOptions({
+        type: 1,
+        apikey: import.meta.env.VITE_PAYMASTER_API_KEY || '',
+        rpc: PAYMASTER_URL,
+        token: SUPPORTED_TOKENS.USDC.address,
+      });
+  
+      // Dummy execution (e.g., empty call)
+      newBuilder.execute(ethers.constants.AddressZero, 0, "0x");
+  
+      const result = await client.sendUserOperation(newBuilder);
+      await result.wait();
+      return true;
+    } catch (err) {
+      console.error("Error deploying AA wallet:", err);
+      return false;
+    }
+  };
      
       
       // Configure Paymaster options (sponsored transaction)
@@ -118,7 +132,7 @@ const useUserOp = () => {
       const code = await provider.getCode(normalizedAAWalletAddress);
       if (code === '0x') {
         console.log('AA wallet not deployed yet, deploying first...');
-        const deploySuccess = await deployAAWallet(builder, client);
+        const deploySuccess = await deployAAWallet(signer, builder, client);
         if (!deploySuccess) {
           console.warn('Failed to deploy AA wallet, proceeding with approval attempt anyway');
         }
