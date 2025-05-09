@@ -61,33 +61,6 @@ const useUserOp = () => {
     }
   };
      
-      
-      // Configure Paymaster options (sponsored transaction)
-      builder.setPaymasterOptions({
-        type: 1, // Type 1: Try prepay method
-        apikey: import.meta.env.VITE_PAYMASTER_API_KEY || '',
-        rpc: PAYMASTER_URL,
-        token: SUPPORTED_TOKENS.USDC.address // Use USDC
-      });
-      
-      // Set empty execution function (for wallet deployment only)
-      builder.execute(ethers.constants.AddressZero, 0, "0x");
-      
-      // Send UserOperation
-      const result = await client.sendUserOperation(builder);
-      console.log("Deployment UserOp hash:", result.userOpHash);
-      
-      // Wait for transaction to complete
-      const receipt = await result.wait();
-      console.log("Deployment transaction receipt:", receipt);
-      
-      return true;
-    } catch (err) {
-      console.error("Error deploying AA wallet:", err);
-      return false;
-    }
-  };
-
   /**
    * Ensure token approval for Paymaster
    * @param {string} tokenAddress - The token address for payment
