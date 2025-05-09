@@ -548,7 +548,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   // Batch execution button component with prefund/deploy options
   const renderExecuteButton = () => {
     // If wallet is not deployed, show prefund and deploy buttons
-    if (aaWalletAddress && !isDeployed && !isDevelopmentMode) {
+    if (aaWalletAddress && (!isDeployed || needsNeroTokens)) {
       return (
         <div className="deploy-wallet-section">
           <div className="warning-message">
