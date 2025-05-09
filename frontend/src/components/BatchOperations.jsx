@@ -11,7 +11,7 @@ import useSessionKeys from '../hooks/useSessionKeys';
  * This component demonstrates NERO Chain's Account Abstraction batch operation capabilities,
  * allowing users to execute multiple transactions in a single UserOperation.
  * 
- * Updated to show all payment types with appropriate guidance
+ * Updated with EntryPoint prefunding capability to handle wallet deployment
  */
 const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   const { address, isConnected } = useAccount();
@@ -21,8 +21,13 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   const {
     aaWalletAddress,
     isDeployed,
+    needsNeroTokens,
     executeBatchPurchase,
     deployAAWallet,
+    prefundAAWallet,
+    checkAAWalletPrefunding,
+    checkTokenApproval,
+    isPrefundingWallet,
     isLoading: userOpLoading,
     error: userOpError
   } = useUserOp();
@@ -37,6 +42,8 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   const [totalCost, setTotalCost] = useState(0);
   const [isDeployingWallet, setIsDeployingWallet] = useState(false);
   const [showSponsoredWarning, setShowSponsoredWarning] = useState(false);
+  const [skipTokenApproval, setSkipTokenApproval] = useState(false);
+  const [prefundAmount, setPrefundAmount] = useState("0.05");
   
   // Update total cost when selections change
   useEffect(() => {
@@ -68,7 +75,24 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   // Update warning when payment type changes
   useEffect(() => {
     setShowSponsoredWarning(paymentType === 0);
-  }, [paymentType]);
+    
+    // Check if token approval should be skipped based on wallet deployment
+    const checkApprovalRequirement = async () => {
+      if (selectedToken && !isDeployed && (paymentType === 1 || paymentType === 2)) {
+        try {
+          const isApproved = await checkTokenApproval(selectedToken.address);
+          setSkipTokenApproval(!isApproved && !isDeployed);
+        } catch (err) {
+          console.warn("Error checking token approval:", err);
+          setSkipTokenApproval(true);
+        }
+      } else {
+        setSkipTokenApproval(false);
+      }
+    };
+    
+    checkApprovalRequirement();
+  }, [paymentType, isDeployed, selectedToken, checkTokenApproval]);
   
   // Handle adding a lottery selection
   const handleAddSelection = (lotteryId, quantity = 1) => {
@@ -135,6 +159,33 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
     setPaymentType(type);
   };
 
+  // Handle prefunding the AA wallet
+  const handlePrefundWallet = async () => {
+    if (!isConnected && !isDevelopmentMode) {
+      setError('Wallet not connected');
+      return;
+    }
+
+    try {
+      setError(null);
+      
+      // Check if wallet is already prefunded
+      const isPrefunded = await checkAAWalletPrefunding();
+      if (isPrefunded) {
+        setError('Wallet is already prefunded. You can now deploy it.');
+        return;
+      }
+      
+      // Prefund the wallet
+      await prefundAAWallet(prefundAmount);
+      
+      setError('Wallet has been successfully prefunded! You can now deploy it or continue with your transaction.');
+    } catch (err) {
+      console.error('Error prefunding wallet:', err);
+      setError(err.message || 'Failed to prefund wallet. Please make sure you have enough NERO tokens.');
+    }
+  };
+
   // Handle wallet deployment
   const handleDeployWallet = async () => {
     if (!isConnected && !isDevelopmentMode) {
@@ -146,14 +197,27 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
       setIsDeployingWallet(true);
       setError(null);
 
-      // This function will be implemented in your useUserOp hook
-      // It should handle the deployment of the AA wallet
+      // Check if wallet is already prefunded
+      const isPrefunded = await checkAAWalletPrefunding();
+      if (!isPrefunded) {
+        setError('Wallet needs to be prefunded first. Please use the "Prefund Wallet" button.');
+        setIsDeployingWallet(false);
+        return;
+      }
+      
+      // Deploy the wallet
       await deployAAWallet();
       
       setError('Smart contract wallet deployed successfully! You can now proceed with your batch purchase.');
     } catch (err) {
       console.error('Error deploying wallet:', err);
-      setError(err.message || 'Failed to deploy wallet. Please try again later.');
+      
+      // Check for NERO token errors
+      if (err.message?.includes('NERO tokens') || err.message?.includes('prefund')) {
+        setError('Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract. Please use the "Prefund Wallet" button first.');
+      } else {
+        setError(err.message || 'Failed to deploy wallet. Please try again later.');
+      }
     } finally {
       setIsDeployingWallet(false);
     }
@@ -180,42 +244,21 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
     setError(null);
     
     try {
-      // If not deployed and trying to use Type 0, warn and encourage wallet deployment
-      if (!isDeployed && !isDevelopmentMode && paymentType === 0) {
-        // Try with Type 1 instead but inform the user
-        setError('Sponsored transactions require a deployed wallet. Trying with token payment instead.');
-        
-        // Execute with Type 1 instead
-        const txHash = await executeBatchPurchase({
-          selections,
-          paymentType: 1,
-          paymentToken: selectedToken.address,
-          useSessionKey: hasActiveSessionKey
-        });
-        
-        // Handle successful transaction
-        if (txHash) {
-          // Success notification
-          setError(null);
-          
-          // Clear selections after successful purchase
-          setSelections([]);
-          
-          // Trigger callback
-          if (onBatchComplete) {
-            onBatchComplete(txHash);
-          }
+      // Check if wallet is deployed and prefunded
+      if (!isDeployed) {
+        const isPrefunded = await checkAAWalletPrefunding();
+        if (!isPrefunded) {
+          throw new Error("Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract. Please use the 'Prefund Wallet' button first.");
         }
-        
-        return;
       }
-    
-      // Execute batch purchase with selected payment options
+      
+      // Execute batch purchase with properly configured payment options
       const txHash = await executeBatchPurchase({
         selections,
         paymentType,
         paymentToken: (paymentType === 1 || paymentType === 2) ? selectedToken.address : null,
-        useSessionKey: hasActiveSessionKey
+        useSessionKey: hasActiveSessionKey,
+        skipApprovalCheck: skipTokenApproval // Skip approval if wallet not deployed
       });
       
       // Handle successful transaction
@@ -236,16 +279,14 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
       
       let errorMsg = err.message || 'Error executing batch operation';
       
-      // Show specific error message if wallet is not deployed
-      if (errorMsg.includes('account not deployed') || 
-          errorMsg.includes('AA20') || 
-          errorMsg.includes('deploy')) {
+      // If error has prefund or NERO token messages
+      if (errorMsg.includes('prefund') || 
+          errorMsg.includes('NERO tokens') || 
+          errorMsg.includes('deploy') ||
+          errorMsg.includes('AA21') ||
+          errorMsg.includes('AA20')) {
         
-        // If wallet not deployed, suggest deploying first
-        if (!isDeployed && !isDevelopmentMode) {
-          setError('Your smart contract wallet is not deployed yet. Please deploy it first using the button below.');
-          return;
-        }
+        errorMsg = 'Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract. Please use the "Prefund Wallet" button first.';
       }
       
       // Check for specific paymaster errors
@@ -262,7 +303,8 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
               selections,
               paymentType: 1,
               paymentToken: selectedToken.address,
-              useSessionKey: hasActiveSessionKey
+              useSessionKey: hasActiveSessionKey,
+              skipApprovalCheck: true // Skip approval since we're in fallback mode
             });
             
             if (txHash) {
@@ -280,6 +322,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
                 onBatchComplete(txHash);
               }
               
+              setIsProcessing(false);
               return;
             }
           } catch (fallbackErr) {
@@ -290,9 +333,6 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
         } else {
           errorMsg = 'Sponsored transactions are currently disabled. Please select a token payment type.';
         }
-        
-        // Store this information for future reference
-        localStorage.setItem('sponsoredPaymentsDisabled', 'true');
       } else if (errorMsg.includes('insufficient allowance')) {
         errorMsg = 'Insufficient token allowance for the selected token.';
       } else if (errorMsg.includes('insufficient balance')) {
@@ -505,35 +545,71 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
     );
   };
   
-  // Batch execution button component
+  // Batch execution button component with prefund/deploy options
   const renderExecuteButton = () => {
-    // If wallet is not deployed, show deploy button
+    // If wallet is not deployed, show prefund and deploy buttons
     if (aaWalletAddress && !isDeployed && !isDevelopmentMode) {
       return (
         <div className="deploy-wallet-section">
           <div className="warning-message">
-            Your smart contract wallet needs to be deployed for the best experience. This is a one-time setup.
+            <strong>Smart Contract Wallet Setup</strong>
+            <p>Your smart contract wallet needs to be set up before transactions. This is a one-time process with two steps:</p>
           </div>
-          <button 
-            className="deploy-button"
-            onClick={handleDeployWallet}
-            disabled={isDeployingWallet}
-          >
-            {isDeployingWallet ? 'Deploying Wallet...' : 'Deploy Wallet First'}
-          </button>
-          <div className="deploy-note">
-            <div className="note-icon">ℹ️</div>
-            <div className="note-text">
-              This one-time setup requires a small amount of NERO tokens.
+          
+          <div className="setup-steps">
+            <div className="step">
+              <div className="step-number">1</div>
+              <div className="step-content">
+                <h4>Prefund Wallet</h4>
+                <p>Deposit NERO tokens to the EntryPoint contract for your smart contract wallet.</p>
+                <div className="prefund-controls">
+                  <input 
+                    type="text" 
+                    value={prefundAmount} 
+                    onChange={(e) => setPrefundAmount(e.target.value)}
+                    placeholder="Amount in NERO"
+                    className="prefund-input"
+                  />
+                  <button 
+                    className="prefund-button"
+                    onClick={handlePrefundWallet}
+                    disabled={isPrefundingWallet}
+                  >
+                    {isPrefundingWallet ? 'Prefunding...' : 'Prefund Wallet'}
+                  </button>
+                </div>
+                <div className="prefund-note">Recommended: 0.05 NERO</div>
+              </div>
+            </div>
+            
+            <div className="step">
+              <div className="step-number">2</div>
+              <div className="step-content">
+                <h4>Deploy Wallet</h4>
+                <p>After prefunding, deploy your smart contract wallet to the blockchain.</p>
+                <button 
+                  className="deploy-button"
+                  onClick={handleDeployWallet}
+                  disabled={isDeployingWallet}
+                >
+                  {isDeployingWallet ? 'Deploying Wallet...' : 'Deploy Wallet'}
+                </button>
+              </div>
             </div>
           </div>
           
+          {error && (
+            <div className="error-message">
+              {error}
+            </div>
+          )}
+          
           <button 
-            className="execute-button continue-anyway"
+            className="execute-button"
             onClick={handleExecuteBatch}
             disabled={isProcessing || selections.length === 0}
           >
-            Continue Without Deploying
+            Execute Batch (May Fail Without Setup)
           </button>
         </div>
       );
