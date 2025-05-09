@@ -78,7 +78,7 @@ class PaymasterService {
     // Check if account is deployed before making API calls
     const isDeployed = await this.isAccountDeployed(aaWalletAddress);
     if (!isDeployed) {
-      return [];
+      console.log("Account not deployed yet, using counterfactual address");
     }
     
     try {
@@ -104,10 +104,10 @@ class PaymasterService {
         this.entryPoint
       ]);
       
-      // Parse the token list
+      // Enhanced parsing to handle multiple response formats
       let tokens = [];
       
-      if (tokensResponse.tokens) {
+      if (tokensResponse?.tokens) {
         tokens = tokensResponse.tokens;
       } else if (Array.isArray(tokensResponse)) {
         tokens = tokensResponse;
@@ -122,9 +122,9 @@ class PaymasterService {
       // Normalize token structure
       const normalizedTokens = tokens.map(token => ({
         address: token.token || token.address,
-        decimals: token.decimals,
-        symbol: token.symbol,
-        type: token.type
+        decimals: token.decimals || 18, // Default to 18 if not specified
+        symbol: token.symbol || 'Unknown',
+        type: token.type || 'erc20'
       }));
       
       // Update cache
@@ -136,6 +136,11 @@ class PaymasterService {
       return normalizedTokens;
     } catch (error) {
       console.error('Error getting supported tokens:', error);
+      // Log the error details for debugging
+      if (error.response) {
+        console.error('Response data:', error.response.data);
+        console.error('Response status:', error.response.status);
+      }
       return [];
     }
   }

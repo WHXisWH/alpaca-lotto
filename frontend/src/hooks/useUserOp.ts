@@ -180,10 +180,13 @@ const useUserOp = () => {
         rpc: PAYMASTER_URL
       };
       
-      // Add token address for token-based payment
+      // Only add token when using ERC20 payment (Type 1 or 2)
       if ((paymentType === 1 || paymentType === 2) && paymentToken) {
         paymasterOptions.token = paymentToken;
+      } else if (paymentType !== 0 && paymentType !== undefined) {
+        throw new Error("Payment token required for ERC20 gas payment");
       }
+      
       
       // Set paymaster options
       builder.setPaymasterOptions(paymasterOptions);
@@ -282,19 +285,21 @@ const useUserOp = () => {
       // Configure the execution
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
-      // Configure Paymaster options
+      // Configure Paymaster options with improved validation
       const paymasterOptions = {
         type: paymentType,
         apikey: import.meta.env.VITE_PAYMASTER_API_KEY || '',
         rpc: PAYMASTER_URL
       };
       
-      // Add token address for token-based payment
+      // Only add token when using ERC20 payment (Type 1 or 2)
       if ((paymentType === 1 || paymentType === 2) && paymentToken) {
         paymasterOptions.token = paymentToken;
+      } else if (paymentType !== 0 && paymentType !== undefined) {
+        throw new Error("Payment token required for ERC20 gas payment");
       }
       
-      // Set paymaster options
+      // Set paymaster options with proper structure
       builder.setPaymasterOptions(paymasterOptions);
       
       // If using session key, set specific options here

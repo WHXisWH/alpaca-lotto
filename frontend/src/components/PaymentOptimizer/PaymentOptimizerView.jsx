@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 const PaymentOptimizerView = ({
   isLoading,
@@ -13,6 +13,20 @@ const PaymentOptimizerView = ({
   handlePaymentTypeSelect,
   handleFactorChange
 }) => {
+  const [disableSponsoredPayments, setDisableSponsoredPayments] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sponsoredError = localStorage.getItem('sponsoredPaymentsDisabled');
+      if (sponsoredError === 'true') {
+        setDisableSponsoredPayments(true);
+        if (selectedPaymentType === 0) {
+          handlePaymentTypeSelect(1);
+        }
+      }
+    }
+  }, [selectedPaymentType, handlePaymentTypeSelect]);
+
   // Loading state
   if (isLoading) {
     return (
@@ -58,18 +72,20 @@ const PaymentOptimizerView = ({
       <div className="payment-types">
         <div className="section-title">Payment Method</div>
         <div className="payment-type-options">
-          <div
-            className={`payment-type-option ${selectedPaymentType === 0 ? 'selected' : ''}`}
-            onClick={() => handlePaymentTypeSelect(0)}
-          >
-            <div className="option-radio">
-              <div className={`radio-inner ${selectedPaymentType === 0 ? 'selected' : ''}`}></div>
+          {!disableSponsoredPayments && (
+            <div
+              className={`payment-type-option ${selectedPaymentType === 0 ? 'selected' : ''}`}
+              onClick={() => handlePaymentTypeSelect(0)}
+            >
+              <div className="option-radio">
+                <div className={`radio-inner ${selectedPaymentType === 0 ? 'selected' : ''}`}></div>
+              </div>
+              <div className="option-content">
+                <div className="option-title">Sponsored (Free)</div>
+                <div className="option-description">Developer pays gas fees for you</div>
+              </div>
             </div>
-            <div className="option-content">
-              <div className="option-title">Sponsored (Free)</div>
-              <div className="option-description">Developer pays gas fees for you</div>
-            </div>
-          </div>
+          )}
           
           <div
             className={`payment-type-option ${selectedPaymentType === 1 ? 'selected' : ''}`}

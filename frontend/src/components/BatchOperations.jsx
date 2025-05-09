@@ -148,30 +148,42 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
     setError(null);
     
     try {
-      // Execute batch purchase
+      // Execute batch purchase with properly configured payment options
       const txHash = await executeBatchPurchase({
         selections,
         paymentType,
-        paymentToken: selectedToken?.address,
+        paymentToken: (paymentType === 1 || paymentType === 2) ? selectedToken.address : null,
         useSessionKey: hasActiveSessionKey
       });
       
-      // Reset selections after successful batch
-      setSelections([]);
+    } catch (err) {
+      // Enhanced error handling
+      console.error('Batch operation error:', err);
       
-      // Callback if provided
-      if (onBatchComplete) {
-        onBatchComplete(txHash);
+      let errorMsg = err.message || 'Error executing batch operation';
+      
+      // Check for specific paymaster errors
+      if (errorMsg.includes('Gas-free model is not supported')) {
+        errorMsg = 'Sponsored transactions are currently disabled. Please select a token payment type.';
+        
+        // Store this information for future reference
+        localStorage.setItem('sponsoredPaymentsDisabled', 'true');
+        
+        // Auto-switch to Type 1 if Type 0 was selected
+        if (paymentType === 0) {
+          setPaymentType(1);
+        }
+      } else if (errorMsg.includes('insufficient allowance')) {
+        errorMsg = 'Insufficient token allowance for the selected token.';
+      } else if (errorMsg.includes('insufficient balance')) {
+        errorMsg = 'Insufficient token balance for gas payment.';
       }
       
-      // Success notification
-      console.log('Batch operation successful:', txHash);
-    } catch (err) {
-      console.error('Batch operation error:', err);
-      setError(err.message || 'Error executing batch operation');
+      setError(errorMsg);
     } finally {
       setIsProcessing(false);
     }
+      
   };
   
   // Batch summary component
