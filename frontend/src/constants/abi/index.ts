@@ -3,6 +3,7 @@ export { default as SessionKeyManagerAbi } from './SessionKeyManager.json';
 export { default as SocialRecoveryModuleAbi } from './SocialRecoveryModule.json';
 export { default as TestToken1Abi } from './TestToken1.json';
 export { default as TestToken2Abi } from './TestToken2.json';
+export { default as EntryPointAbi } from './EntryPoint.json';
 
 // Ensure all exports have proper typing for wagmi v2
 export const ERC20Abi = [
