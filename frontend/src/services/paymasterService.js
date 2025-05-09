@@ -3,7 +3,7 @@ import SUPPORTED_TOKENS from '../constants/tokens';
 
 // Token Paymaster address - normalize to checksum format
 const TOKEN_PAYMASTER_ADDRESS = ethers.utils.getAddress(
-  import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0x5a6680dFd4a77FEea0A7be291147768EaA2414ad"
+  import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0xB24a30A3971e4d9bf771BDc81735e8cbEc95D578"
 );
 
 class PaymasterService {

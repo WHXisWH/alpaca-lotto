@@ -12,7 +12,7 @@ const ENTRYPOINT_ADDRESS = import.meta.env.VITE_ENTRYPOINT_ADDRESS || "0x5FF137D
 const ACCOUNT_FACTORY_ADDRESS = import.meta.env.VITE_ACCOUNT_FACTORY_ADDRESS || "0x9406Cc6185a346906296840746125a0E44976454";
 const LOTTERY_CONTRACT_ADDRESS = import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS || "";
 // Normalize address to checksum format
-const TOKEN_PAYMASTER_ADDRESS = ethers.utils.getAddress(import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0x5a6680dFd4a77FEea0A7be291147768EaA2414ad");
+const TOKEN_PAYMASTER_ADDRESS = ethers.utils.getAddress(import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0xB24a30A3971e4d9bf771BDc81735e8cbEc95D578");
 
 /**
  * Custom hook for NERO Chain's Account Abstraction functionality
@@ -242,6 +242,13 @@ const useUserOp = () => {
             // Normalize address
             const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
             setAaWalletAddress(normalizedAAAddress);
+            
+            if (aaBuilder.initCode === "0x") {
+              aaBuilder.initCode = Presets.Builder.SimpleAccount.getInitCode(
+                ACCOUNT_FACTORY_ADDRESS,
+                normalizedAAAddress
+              );
+            }
             
             // Check if wallet is deployed
             const code = await provider.getCode(normalizedAAAddress);
