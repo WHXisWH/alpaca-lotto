@@ -37,14 +37,16 @@ const useUserOp = () => {
     try {
       console.log("Deploying AA wallet...");
       
-      // Set up initialization code before deploying AA wallet
-      // This typically uses SimpleAccount Factory
-      const initCode = await builder.getInitCode();
-      
-      // Check if initialization code is already set
-      if (!builder.initCode || builder.initCode === "0x") {
-        builder.initCode = initCode;
-      }
+      const aaBuilder = await Presets.Builder.SimpleAccount.init(
+        signer,
+        NERO_RPC_URL,
+        {
+          overrideBundlerRpc: BUNDLER_URL,
+          entryPoint: ENTRYPOINT_ADDRESS,
+          factory: ACCOUNT_FACTORY_ADDRESS,
+        }
+      );
+     
       
       // Configure Paymaster options (sponsored transaction)
       builder.setPaymasterOptions({
@@ -240,11 +242,7 @@ const useUserOp = () => {
             const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
             setAaWalletAddress(normalizedAAAddress);
             
-            if (!aaBuilder.initCode || aaBuilder.initCode === "0x") {
-              aaBuilder.initCode = await aaBuilder.getInitCode();
-            }
-            
-            // Check if wallet is deployed
+           // Check if wallet is deployed
             const code = await provider.getCode(normalizedAAAddress);
             const deployed = code !== '0x';
             setIsDeployed(deployed);
