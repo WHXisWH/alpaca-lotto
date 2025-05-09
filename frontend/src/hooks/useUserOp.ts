@@ -372,10 +372,7 @@ const useUserOp = () => {
             signature:             rawOp.signature
          };
 
-      const paymasterOpts: any = { type: paymentType };
-      if (paymentType === 1) {
-        paymasterOpts.token = paymentToken; 
-      }
+
       const paymasterOpts: any = { type: paymentType };
       if (paymentType === 1) paymasterOpts.token = paymentToken;
       const pmData = await paymasterService.sponsorUserOp(userOp, paymasterOpts);
