@@ -413,6 +413,200 @@ const useUserOp = () => {
     }
   }, [isConnected, address, initSDK]);
 
+  /**
+   * Create session key operation
+   */
+  const createSessionKey = useCallback(async ({ duration, paymentType = 1 }) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // In development mode, simulate success
+      if (isDevelopmentMode) {
+        console.log('Development mode: Simulating session key creation');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Generate mock address for the session key
+        const mockAddress = '0x' + [...Array(40)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+        setIsLoading(false);
+        return mockAddress;
+      }
+      
+      // Initialize SDK if not already initialized
+      if (!client || !builder) {
+        const initResult = await initSDK();
+        if (!initResult.success) {
+          throw new Error(initResult.error || 'Failed to initialize SDK');
+        }
+      }
+      
+      // Generate a new session key
+      // This is a simplified implementation
+      const sessionKeyAddress = '0x' + [...Array(40)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+      
+      // Current timestamp
+      const currentTime = Math.floor(Date.now() / 1000);
+      const validUntil = currentTime + duration;
+      
+      // Create contract interface
+      const contractInterface = new ethers.utils.Interface([
+        'function createSessionKey(address _sessionKey, uint256 _validUntil, bytes32 _operationsHash) returns (bool)'
+      ]);
+      
+      // Create operations hash (simplified for demo)
+      const operationsHash = ethers.utils.keccak256(
+        ethers.utils.defaultAbiCoder.encode(
+          ['string', 'uint256'],
+          ['AlpacaLotto', validUntil]
+        )
+      );
+      
+      // Encode function call
+      const callData = contractInterface.encodeFunctionData(
+        'createSessionKey',
+        [sessionKeyAddress, validUntil, operationsHash]
+      );
+      
+      // Reset the builder operation
+      builder.resetOp();
+      
+      // Configure the execution
+      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
+      
+      // Configure Paymaster options - remember Type 0 is not supported
+      const paymasterOptions = {
+        type: paymentType === 0 ? 1 : paymentType, // Convert Type 0 to Type 1
+        apikey: import.meta.env.VITE_PAYMASTER_API_KEY || '',
+        rpc: PAYMASTER_URL
+      };
+      
+      // Add token for Type 1 or 2 payments
+      if ((paymasterOptions.type === 1 || paymasterOptions.type === 2)) {
+        // Default to USDC as the payment token
+        paymasterOptions.token = SUPPORTED_TOKENS.USDC.address;
+      }
+      
+      // Set paymaster options
+      builder.setPaymasterOptions(paymasterOptions);
+      
+      // Send the UserOperation
+      const result = await client.sendUserOperation(builder);
+      console.log('Session key UserOperation result:', result);
+      
+      // Wait for transaction confirmation
+      const receipt = await result.wait();
+      console.log('Session key transaction receipt:', receipt);
+      
+      // Set transaction hash for later reference
+      setTxHash(receipt.transactionHash);
+      
+      setIsLoading(false);
+      return sessionKeyAddress;
+    } catch (err) {
+      console.error('Error creating session key:', err);
+      
+      // Enhanced error handling
+      let errorMsg = err.message || 'Failed to create session key';
+      
+      // Check for specific error messages
+      if (errorMsg.includes('Gas-free model is not supported')) {
+        errorMsg = 'Sponsored transactions are currently disabled. Please select a token payment type.';
+        
+        // Store this information for future reference
+        localStorage.setItem('sponsoredPaymentsDisabled', 'true');
+      } else if (errorMsg.includes('token not supported or price error')) {
+        errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
+      }
+      
+      setError(errorMsg);
+      setIsLoading(false);
+      throw new Error(errorMsg);
+    }
+  }, [client, builder, initSDK, isDevelopmentMode]);
+
+  /**
+   * Revoke session key operation
+   */
+  const revokeSessionKey = useCallback(async (sessionKeyAddress) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // In development mode, simulate success
+      if (isDevelopmentMode) {
+        console.log('Development mode: Simulating session key revocation');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        setIsLoading(false);
+        return true;
+      }
+      
+      // Initialize SDK if not already initialized
+      if (!client || !builder) {
+        const initResult = await initSDK();
+        if (!initResult.success) {
+          throw new Error(initResult.error || 'Failed to initialize SDK');
+        }
+      }
+      
+      // Create contract interface
+      const contractInterface = new ethers.utils.Interface([
+        'function revokeSessionKey(address _sessionKey) returns (bool)'
+      ]);
+      
+      // Encode function call
+      const callData = contractInterface.encodeFunctionData(
+        'revokeSessionKey',
+        [sessionKeyAddress]
+      );
+      
+      // Reset the builder operation
+      builder.resetOp();
+      
+      // Configure the execution
+      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
+      
+      // Configure Paymaster options - Type 0 is not supported
+      const paymasterOptions = {
+        type: 1, // Use Type 1 (prepay) as default
+        apikey: import.meta.env.VITE_PAYMASTER_API_KEY || '',
+        rpc: PAYMASTER_URL,
+        token: SUPPORTED_TOKENS.USDC.address // Default to USDC
+      };
+      
+      // Set paymaster options
+      builder.setPaymasterOptions(paymasterOptions);
+      
+      // Send the UserOperation
+      const result = await client.sendUserOperation(builder);
+      console.log('Revoke session key UserOperation result:', result);
+      
+      // Wait for transaction confirmation
+      const receipt = await result.wait();
+      console.log('Revoke session key transaction receipt:', receipt);
+      
+      // Set transaction hash for later reference
+      setTxHash(receipt.transactionHash);
+      
+      setIsLoading(false);
+      return true;
+    } catch (err) {
+      console.error('Error revoking session key:', err);
+      setError(err.message || 'Failed to revoke session key');
+      setIsLoading(false);
+      throw err;
+    }
+  }, [client, builder, initSDK, isDevelopmentMode]);
+
+  // Automatically initialize SDK when wallet is connected
+  useEffect(() => {
+    if ((isConnected && address) || 
+        localStorage.getItem('devModeEnabled') === 'true' || 
+        window.location.search.includes('devMode=true')) {
+      initSDK().catch(console.error);
+    }
+  }, [isConnected, address, initSDK]);
+
   return {
     client,
     builder,
@@ -426,7 +620,7 @@ const useUserOp = () => {
     executeTicketPurchase,
     executeBatchPurchase,
     createSessionKey,
-    revokeSessionKey: () => {} // simplified for this example
+    revokeSessionKey
   };
 };
 
