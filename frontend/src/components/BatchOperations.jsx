@@ -11,9 +11,7 @@ import useSessionKeys from '../hooks/useSessionKeys';
  * This component demonstrates NERO Chain's Account Abstraction batch operation capabilities,
  * allowing users to execute multiple transactions in a single UserOperation.
  * 
- * @param {Object} props
- * @param {Array} props.lotteries - Available lotteries
- * @param {Function} props.onBatchComplete - Callback after batch operation
+ * Updated to show all payment types with appropriate guidance
  */
 const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   const { address, isConnected } = useAccount();
@@ -21,7 +19,10 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   const { hasActiveSessionKey } = useSessionKeys();
   
   const {
+    aaWalletAddress,
+    isDeployed,
     executeBatchPurchase,
+    deployAAWallet,
     isLoading: userOpLoading,
     error: userOpError
   } = useUserOp();
@@ -30,10 +31,12 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   
   const [selections, setSelections] = useState([]);
   const [selectedToken, setSelectedToken] = useState(null);
-  const [paymentType, setPaymentType] = useState(0); // Default: Sponsored
+  const [paymentType, setPaymentType] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
   const [totalCost, setTotalCost] = useState(0);
+  const [isDeployingWallet, setIsDeployingWallet] = useState(false);
+  const [showSponsoredWarning, setShowSponsoredWarning] = useState(false);
   
   // Update total cost when selections change
   useEffect(() => {
@@ -61,6 +64,11 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
       setSelectedToken(stablecoin || tokens[0]);
     }
   }, [tokens, selectedToken]);
+  
+  // Update warning when payment type changes
+  useEffect(() => {
+    setShowSponsoredWarning(paymentType === 0);
+  }, [paymentType]);
   
   // Handle adding a lottery selection
   const handleAddSelection = (lotteryId, quantity = 1) => {
@@ -126,6 +134,30 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   const handlePaymentTypeChange = (type) => {
     setPaymentType(type);
   };
+
+  // Handle wallet deployment
+  const handleDeployWallet = async () => {
+    if (!isConnected && !isDevelopmentMode) {
+      setError('Wallet not connected');
+      return;
+    }
+
+    try {
+      setIsDeployingWallet(true);
+      setError(null);
+
+      // This function will be implemented in your useUserOp hook
+      // It should handle the deployment of the AA wallet
+      await deployAAWallet();
+      
+      setError('Smart contract wallet deployed successfully! You can now proceed with your batch purchase.');
+    } catch (err) {
+      console.error('Error deploying wallet:', err);
+      setError(err.message || 'Failed to deploy wallet. Please try again later.');
+    } finally {
+      setIsDeployingWallet(false);
+    }
+  };
   
   // Execute batch operation
   const handleExecuteBatch = async () => {
@@ -139,7 +171,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
       return;
     }
     
-    if (paymentType !== 0 && !selectedToken) {
+    if ((paymentType === 1 || paymentType === 2) && !selectedToken) {
       setError('Please select a token for gas payment');
       return;
     }
@@ -148,7 +180,37 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
     setError(null);
     
     try {
-      // Execute batch purchase with properly configured payment options
+      // If not deployed and trying to use Type 0, warn and encourage wallet deployment
+      if (!isDeployed && !isDevelopmentMode && paymentType === 0) {
+        // Try with Type 1 instead but inform the user
+        setError('Sponsored transactions require a deployed wallet. Trying with token payment instead.');
+        
+        // Execute with Type 1 instead
+        const txHash = await executeBatchPurchase({
+          selections,
+          paymentType: 1,
+          paymentToken: selectedToken.address,
+          useSessionKey: hasActiveSessionKey
+        });
+        
+        // Handle successful transaction
+        if (txHash) {
+          // Success notification
+          setError(null);
+          
+          // Clear selections after successful purchase
+          setSelections([]);
+          
+          // Trigger callback
+          if (onBatchComplete) {
+            onBatchComplete(txHash);
+          }
+        }
+        
+        return;
+      }
+    
+      // Execute batch purchase with selected payment options
       const txHash = await executeBatchPurchase({
         selections,
         paymentType,
@@ -156,23 +218,81 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
         useSessionKey: hasActiveSessionKey
       });
       
+      // Handle successful transaction
+      if (txHash) {
+        // Success notification
+        setError(null);
+        
+        // Clear selections after successful purchase
+        setSelections([]);
+        
+        // Trigger callback
+        if (onBatchComplete) {
+          onBatchComplete(txHash);
+        }
+      }
     } catch (err) {
-      // Enhanced error handling
       console.error('Batch operation error:', err);
       
       let errorMsg = err.message || 'Error executing batch operation';
       
+      // Show specific error message if wallet is not deployed
+      if (errorMsg.includes('account not deployed') || 
+          errorMsg.includes('AA20') || 
+          errorMsg.includes('deploy')) {
+        
+        // If wallet not deployed, suggest deploying first
+        if (!isDeployed && !isDevelopmentMode) {
+          setError('Your smart contract wallet is not deployed yet. Please deploy it first using the button below.');
+          return;
+        }
+      }
+      
       // Check for specific paymaster errors
-      if (errorMsg.includes('Gas-free model is not supported')) {
-        errorMsg = 'Sponsored transactions are currently disabled. Please select a token payment type.';
+      if (errorMsg.includes('Gas-free model is not supported') || 
+          errorMsg.includes('sponsored transactions are currently disabled')) {
+        
+        // For Type 0 errors, try to switch to Type 1
+        if (paymentType === 0 && selectedToken) {
+          setError('Sponsored transactions are currently not supported. Trying with token payment instead...');
+          
+          try {
+            // Try again with Type 1
+            const txHash = await executeBatchPurchase({
+              selections,
+              paymentType: 1,
+              paymentToken: selectedToken.address,
+              useSessionKey: hasActiveSessionKey
+            });
+            
+            if (txHash) {
+              // Success notification
+              setError(null);
+              
+              // Clear selections after successful purchase
+              setSelections([]);
+              
+              // Update payment type for future transactions
+              setPaymentType(1);
+              
+              // Trigger callback
+              if (onBatchComplete) {
+                onBatchComplete(txHash);
+              }
+              
+              return;
+            }
+          } catch (fallbackErr) {
+            // If fallback also fails, show both errors
+            console.error('Fallback transaction error:', fallbackErr);
+            errorMsg = 'Sponsored transaction failed, and fallback to token payment also failed.';
+          }
+        } else {
+          errorMsg = 'Sponsored transactions are currently disabled. Please select a token payment type.';
+        }
         
         // Store this information for future reference
         localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-        
-        // Auto-switch to Type 1 if Type 0 was selected
-        if (paymentType === 0) {
-          setPaymentType(1);
-        }
       } else if (errorMsg.includes('insufficient allowance')) {
         errorMsg = 'Insufficient token allowance for the selected token.';
       } else if (errorMsg.includes('insufficient balance')) {
@@ -183,7 +303,6 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
     } finally {
       setIsProcessing(false);
     }
-      
   };
   
   // Batch summary component
@@ -269,6 +388,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
         <h4>Payment Method</h4>
         
         <div className="payment-types">
+          {/* Type 0 is now included as an option */}
           <div 
             className={`payment-type ${paymentType === 0 ? 'selected' : ''}`}
             onClick={() => handlePaymentTypeChange(0)}
@@ -309,6 +429,17 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
           </div>
         </div>
         
+        {/* Warning for Type 0 */}
+        {showSponsoredWarning && (
+          <div className="payment-type-warning">
+            <div className="warning-icon">⚠️</div>
+            <div className="warning-text">
+              Sponsored transactions may not be available on testnet. If this fails, your transaction will automatically try using token payment instead.
+            </div>
+          </div>
+        )}
+        
+        {/* Token selection for non-zero payment types */}
         {(paymentType === 1 || paymentType === 2) && (
           <div className="token-selection">
             <label>Select Token for Gas:</label>
@@ -376,6 +507,38 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   
   // Batch execution button component
   const renderExecuteButton = () => {
+    // If wallet is not deployed, show deploy button
+    if (aaWalletAddress && !isDeployed && !isDevelopmentMode) {
+      return (
+        <div className="deploy-wallet-section">
+          <div className="warning-message">
+            Your smart contract wallet needs to be deployed for the best experience. This is a one-time setup.
+          </div>
+          <button 
+            className="deploy-button"
+            onClick={handleDeployWallet}
+            disabled={isDeployingWallet}
+          >
+            {isDeployingWallet ? 'Deploying Wallet...' : 'Deploy Wallet First'}
+          </button>
+          <div className="deploy-note">
+            <div className="note-icon">ℹ️</div>
+            <div className="note-text">
+              This one-time setup requires a small amount of NERO tokens.
+            </div>
+          </div>
+          
+          <button 
+            className="execute-button continue-anyway"
+            onClick={handleExecuteBatch}
+            disabled={isProcessing || selections.length === 0}
+          >
+            Continue Without Deploying
+          </button>
+        </div>
+      );
+    }
+    
     return (
       <div className="execute-section">
         {error && (

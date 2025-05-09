@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 
+/**
+ * Payment optimizer view component for token selection
+ * Updated to show all payment types with appropriate warnings
+ */
 const PaymentOptimizerView = ({
   isLoading,
   error,
@@ -10,21 +14,16 @@ const PaymentOptimizerView = ({
   optimizationFactors,
   gasCostEstimates,
   handleTokenSelect,
-  handlePaymentTypeSelect,
+  handlePaymentTypeChange,
   handleFactorChange
 }) => {
-  // Set disableSponsoredPayments to true by default since it's not supported
-  const [disableSponsoredPayments, setDisableSponsoredPayments] = useState(true);
-
+  // Show warning for Type 0 when selected
+  const [showSponsoredWarning, setShowSponsoredWarning] = useState(selectedPaymentType === 0);
+  
+  // Update warning when payment type changes
   useEffect(() => {
-    // Store this setting for future reference
-    localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-    
-    // Default to Type 1 payment if Type 0 was selected
-    if (selectedPaymentType === 0) {
-      handlePaymentTypeSelect(1);
-    }
-  }, [selectedPaymentType, handlePaymentTypeSelect]);
+    setShowSponsoredWarning(selectedPaymentType === 0);
+  }, [selectedPaymentType]);
 
   // Loading state
   if (isLoading) {
@@ -48,7 +47,7 @@ const PaymentOptimizerView = ({
   }
   
   // Empty state
-  if (paymentOptions.length === 0) {
+  if (!paymentOptions || paymentOptions.length === 0) {
     return (
       <div className="payment-optimizer empty">
         <p>No supported payment tokens found in your wallet.</p>
@@ -71,25 +70,23 @@ const PaymentOptimizerView = ({
       <div className="payment-types">
         <div className="section-title">Payment Method</div>
         <div className="payment-type-options">
-          {/* Type 0 is disabled by default */}
-          {!disableSponsoredPayments && (
-            <div
-              className={`payment-type-option ${selectedPaymentType === 0 ? 'selected' : ''}`}
-              onClick={() => handlePaymentTypeSelect(0)}
-            >
-              <div className="option-radio">
-                <div className={`radio-inner ${selectedPaymentType === 0 ? 'selected' : ''}`}></div>
-              </div>
-              <div className="option-content">
-                <div className="option-title">Sponsored (Free)</div>
-                <div className="option-description">Developer pays gas fees for you</div>
-              </div>
+          {/* Type 0 - Sponsored (may not be supported but shown for user choice) */}
+          <div
+            className={`payment-type-option ${selectedPaymentType === 0 ? 'selected' : ''}`}
+            onClick={() => handlePaymentTypeChange(0)}
+          >
+            <div className="option-radio">
+              <div className={`radio-inner ${selectedPaymentType === 0 ? 'selected' : ''}`}></div>
             </div>
-          )}
+            <div className="option-content">
+              <div className="option-title">Sponsored (Free)</div>
+              <div className="option-description">Developer pays gas fees for you</div>
+            </div>
+          </div>
           
           <div
             className={`payment-type-option ${selectedPaymentType === 1 ? 'selected' : ''}`}
-            onClick={() => handlePaymentTypeSelect(1)}
+            onClick={() => handlePaymentTypeChange(1)}
           >
             <div className="option-radio">
               <div className={`radio-inner ${selectedPaymentType === 1 ? 'selected' : ''}`}></div>
@@ -102,7 +99,7 @@ const PaymentOptimizerView = ({
           
           <div
             className={`payment-type-option ${selectedPaymentType === 2 ? 'selected' : ''}`}
-            onClick={() => handlePaymentTypeSelect(2)}
+            onClick={() => handlePaymentTypeChange(2)}
           >
             <div className="option-radio">
               <div className={`radio-inner ${selectedPaymentType === 2 ? 'selected' : ''}`}></div>
@@ -113,8 +110,19 @@ const PaymentOptimizerView = ({
             </div>
           </div>
         </div>
+        
+        {/* Warning for Type 0 */}
+        {showSponsoredWarning && (
+          <div className="payment-type-warning">
+            <div className="warning-icon">⚠️</div>
+            <div className="warning-text">
+              Sponsored transactions may not be available on testnet. If this fails, your transaction will automatically try using token payment instead.
+            </div>
+          </div>
+        )}
       </div>
       
+      {/* Token selection for Type 1 & 2 */}
       {(selectedPaymentType === 1 || selectedPaymentType === 2) && (
         <>
           <div className="token-selection">
@@ -187,53 +195,28 @@ const PaymentOptimizerView = ({
           <div className="optimization-settings">
             <div className="section-title">
               <span>Optimization Factors</span>
-              <button className="toggle-settings">⚙️</button>
             </div>
             <div className="factors-sliders">
-              <div className="factor-item">
-                <div className="factor-header">
-                  <span className="factor-label">Balance</span>
-                  <span className="factor-value">{optimizationFactors.balanceWeight}%</span>
+              {optimizationFactors && Object.entries(optimizationFactors).map(([key, value]) => (
+                <div className="factor-item" key={key}>
+                  <div className="factor-header">
+                    <span className="factor-label">
+                      {key === 'balanceWeight' ? 'Balance' : 
+                       key === 'volatilityWeight' ? 'Stability' : 
+                       key === 'slippageWeight' ? 'Gas Cost' : key}
+                    </span>
+                    <span className="factor-value">{value}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={value}
+                    onChange={(e) => handleFactorChange(key, e.target.value)}
+                    className="factor-slider"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={optimizationFactors.balanceWeight}
-                  onChange={(e) => handleFactorChange('balanceWeight', e.target.value)}
-                  className="factor-slider"
-                />
-              </div>
-              
-              <div className="factor-item">
-                <div className="factor-header">
-                  <span className="factor-label">Stability</span>
-                  <span className="factor-value">{optimizationFactors.volatilityWeight}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={optimizationFactors.volatilityWeight}
-                  onChange={(e) => handleFactorChange('volatilityWeight', e.target.value)}
-                  className="factor-slider"
-                />
-              </div>
-              
-              <div className="factor-item">
-                <div className="factor-header">
-                  <span className="factor-label">Gas Cost</span>
-                  <span className="factor-value">{optimizationFactors.slippageWeight}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={optimizationFactors.slippageWeight}
-                  onChange={(e) => handleFactorChange('slippageWeight', e.target.value)}
-                  className="factor-slider"
-                />
-              </div>
+              ))}
             </div>
           </div>
         </>
@@ -242,8 +225,7 @@ const PaymentOptimizerView = ({
       <div className="info-box">
         <div className="info-icon">ℹ️</div>
         <div className="info-content">
-          <p>Note: Free gas (sponsored) mode is currently not available on NERO Chain testnet. 
-          Please use ERC20 tokens to pay for gas.</p>
+          <p>NERO Chain's Account Abstraction lets you pay for gas with any token, not just the native currency. For the most reliable experience, we recommend using token payment (Type 1 or 2).</p>
         </div>
       </div>
     </div>
