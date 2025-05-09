@@ -320,7 +320,7 @@ class PaymasterService {
   /**
    * Sponsor a UserOperation via Paymaster
    * @param {object} userOp - Partial UserOperation object
-   * @param {string} tokenAddress - ERC20 token address used for payment
+   * @param {object} paymasterOptions - Options for the paymaster including type and token
    * @returns {Promise<string>} - paymasterAndData string
    */
   async sponsorUserOp(userOp, paymasterOptions) {
@@ -358,6 +358,11 @@ class PaymasterService {
     if (!this.paymasterRpc) await this.init();
     
     try {
+      // For Type 0 (sponsored), return zero cost
+      if (tokenAddress === null || tokenAddress === undefined) {
+        return { gasCostToken: 0, gasCostUsd: 0 };
+      }
+      
       // Normalize address
       const normalizedTokenAddress = ethers.utils.getAddress(tokenAddress);
       

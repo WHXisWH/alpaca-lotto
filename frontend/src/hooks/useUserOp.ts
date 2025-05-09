@@ -260,7 +260,7 @@ const useUserOp = () => {
     lotteryId, 
     tokenAddress, 
     quantity, 
-    paymentType = 1, // Default to Type 1 (prepay) as Type 0 is not supported
+    paymentType = 1, 
     paymentToken = null,
     useSessionKey = false 
   }) => {
@@ -268,20 +268,6 @@ const useUserOp = () => {
     setError(null);
     
     try {
-      // Check if Type 0 (sponsored) was selected and convert to Type 1
-      if (paymentType === 0) {
-        console.warn('Free gas model is not supported, switching to ERC20 prepayment.');
-        paymentType = 1;
-        
-        // Store preference for future use
-        localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-        
-        // Default to USDC if no token selected
-        if (!paymentToken) {
-          paymentToken = SUPPORTED_TOKENS.USDC.address;
-        }
-      }
-      
       // Validate token address for Types 1 & 2
       if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
         // Use USDC by default if no token specified
@@ -335,8 +321,6 @@ const useUserOp = () => {
         
         // This is a crucial step - ensure token is approved for Paymaster
         await ensurePaymasterApproval(paymentToken, builder);
-      } else if (paymentType !== 0 && paymentType !== undefined) {
-        throw new Error("Payment token required for ERC20 gas payment");
       }
       
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
@@ -358,7 +342,7 @@ const useUserOp = () => {
 
 
       const paymasterOpts: any = { type: paymentType.toString() };
-      if (paymentType === 1) paymasterOpts.token = paymentToken;
+      if (paymentType === 1 || paymentType === 2) paymasterOpts.token = paymentToken;
       const pmData = await paymasterService.sponsorUserOp(userOp, paymasterOpts);
       userOp.paymasterAndData = pmData;
       builder.setOp(userOp);
@@ -399,12 +383,7 @@ const useUserOp = () => {
       let errorMsg = err.message || 'Failed to purchase tickets';
       
       // Check for specific error messages
-      if (errorMsg.includes('Gas-free model is not supported')) {
-        errorMsg = 'Sponsored transactions are currently disabled. Please select a token payment type.';
-        
-        // Store this information for future reference
-        localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-      } else if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
+      if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
         errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
       } else if (errorMsg.includes('insufficient allowance')) {
         errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
@@ -423,7 +402,7 @@ const useUserOp = () => {
    */
   const executeBatchPurchase = useCallback(async ({ 
     selections, 
-    paymentType = 1, // Default to Type 1 as Type 0 is not supported
+    paymentType = 1,
     paymentToken = null,
     useSessionKey = false
   }) => {
@@ -431,20 +410,6 @@ const useUserOp = () => {
     setError(null);
     
     try {
-      // Check if Type 0 (sponsored) was selected and convert to Type 1
-      if (paymentType === 0) {
-        console.warn('Free gas model is not supported, switching to ERC20 prepayment.');
-        paymentType = 1;
-        
-        // Store preference for future use
-        localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-        
-        // Default to USDC if no token selected
-        if (!paymentToken) {
-          paymentToken = SUPPORTED_TOKENS.USDC.address;
-        }
-      }
-      
       // Validate token address for Types 1 & 2
       if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
         // Use USDC by default if no token specified
@@ -503,8 +468,6 @@ const useUserOp = () => {
         
         // Ensure token is approved for Paymaster
         await ensurePaymasterApproval(paymentToken, builder);
-      } else if (paymentType !== 0 && paymentType !== undefined) {
-        throw new Error("Payment token required for ERC20 gas payment");
       }
       
       // Configure the execution
@@ -526,7 +489,7 @@ const useUserOp = () => {
       };
 
       const paymasterOpts: any = { type: paymentType.toString() };
-      if (paymentType === 1) paymasterOpts.token = paymentToken;
+      if (paymentType === 1 || paymentType === 2) paymasterOpts.token = paymentToken;
       const pmData = await paymasterService.sponsorUserOp(userOp, paymasterOpts);
       userOp.paymasterAndData = pmData;
       builder.setOp(userOp);
@@ -554,12 +517,7 @@ const useUserOp = () => {
       let errorMsg = err.message || 'Failed to execute batch purchase';
       
       // Check for specific error messages
-      if (errorMsg.includes('Gas-free model is not supported')) {
-        errorMsg = 'Sponsored transactions are currently disabled. Please select a token payment type.';
-        
-        // Store this information for future reference
-        localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-      } else if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
+      if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
         errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
       } else if (errorMsg.includes('insufficient allowance')) {
         errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
@@ -630,9 +588,9 @@ const useUserOp = () => {
       // Reset the builder operation
       builder.resetOp && builder.resetOp();
       
-      // Configure Paymaster options - remember Type 0 is not supported
+      // Configure Paymaster options
       const paymasterOptions = {
-        type: paymentType === 0 ? 1 : paymentType, // Convert Type 0 to Type 1
+        type: paymentType,
         apikey: import.meta.env.VITE_PAYMASTER_API_KEY || '',
         rpc: PAYMASTER_URL
       };
@@ -673,12 +631,7 @@ const useUserOp = () => {
       let errorMsg = err.message || 'Failed to create session key';
       
       // Check for specific error messages
-      if (errorMsg.includes('Gas-free model is not supported')) {
-        errorMsg = 'Sponsored transactions are currently disabled. Please select a token payment type.';
-        
-        // Store this information for future reference
-        localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-      } else if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
+      if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
         errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
       }
       
