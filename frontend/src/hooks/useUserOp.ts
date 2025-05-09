@@ -3,6 +3,7 @@ import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
 import { Client, Presets } from 'userop';
 import SUPPORTED_TOKENS from '../constants/tokens';
+import paymasterService from '../services/paymasterService'; 
 
 // Constants for AA setup - use environment variables with fallbacks
 const NERO_RPC_URL = import.meta.env.VITE_NERO_RPC_URL || "https://rpc-testnet.nerochain.io";
@@ -354,8 +355,10 @@ const useUserOp = () => {
         throw new Error("Payment token required for ERC20 gas payment");
       }
       
-      // Set paymaster options after approval check
-      builder.setPaymasterOptions(paymasterOptions);
+      const userOp = await builder.getOp();
+      const paymasterAndData = await paymasterService.sponsorUserOp(userOp, paymentToken);
+      userOp.paymasterAndData = paymasterAndData;
+      builder.setOp(userOp);
       
       // Configure the execution
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
@@ -509,8 +512,10 @@ const useUserOp = () => {
       // Configure the execution
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
-      // Set paymaster options with proper structure
-      builder.setPaymasterOptions(paymasterOptions);
+      const userOp = await builder.getOp();
+      const paymasterAndData = await paymasterService.sponsorUserOp(userOp, paymentToken);
+      userOp.paymasterAndData = paymasterAndData;
+      builder.setOp(userOp);
       
       // If using session key, set specific options here
       // This would need to be implemented based on your session key implementation

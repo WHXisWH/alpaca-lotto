@@ -324,6 +324,33 @@ class PaymasterService {
       });
     }
   }
+  
+  /**
+   * Sponsor a UserOperation via Paymaster
+   * @param {object} userOp - Partial UserOperation object
+   * @param {string} tokenAddress - ERC20 token address used for payment
+   * @returns {Promise<string>} - paymasterAndData string
+   */
+  async sponsorUserOp(userOp, tokenAddress) {
+    if (!this.paymasterRpc) await this.init();
+
+    try {
+      const response = await this.paymasterRpc.send("pm_sponsor_userop", [
+        userOp,
+        this.apiKey,
+        this.entryPoint,
+        {
+          type: 1,
+          token: tokenAddress
+        }
+      ]);
+
+      return response?.paymasterAndData || "0x";
+    } catch (error) {
+      console.error("❌ Error sponsoring userOp:", error);
+      throw error;
+    }
+  }
 
   /**
    * Get gas cost estimation for a token
