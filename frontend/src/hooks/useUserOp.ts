@@ -1,5 +1,3 @@
-// frontend/src/hooks/useUserOp.ts
-
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
@@ -13,7 +11,8 @@ const PAYMASTER_URL = import.meta.env.VITE_PAYMASTER_URL || "https://paymaster-t
 const ENTRYPOINT_ADDRESS = import.meta.env.VITE_ENTRYPOINT_ADDRESS || "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
 const ACCOUNT_FACTORY_ADDRESS = import.meta.env.VITE_ACCOUNT_FACTORY_ADDRESS || "0x9406Cc6185a346906296840746125a0E44976454";
 const LOTTERY_CONTRACT_ADDRESS = import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS || "";
-const TOKEN_PAYMASTER_ADDRESS = import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0xB24a30A3971e4d9bf771BDc81735e8cbEc95D578";
+// Normalize address to checksum format
+const TOKEN_PAYMASTER_ADDRESS = ethers.utils.getAddress(import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0xB24a30A3971e4d9bf771BDc81735e8cbEc95D578");
 
 /**
  * Custom hook for NERO Chain's Account Abstraction functionality
@@ -30,6 +29,53 @@ const useUserOp = () => {
   const [isDevelopmentMode, setIsDevelopmentMode] = useState(false);
 
   /**
+   * Method to deploy AA wallet
+   */
+  const deployAAWallet = async (builder, client) => {
+    if (!builder || !client) return false;
+    
+    try {
+      console.log("Deploying AA wallet...");
+      
+      // Set up initialization code before deploying AA wallet
+      // This typically uses SimpleAccount Factory
+      const initCode = Presets.Builder.SimpleAccount.getInitCode(
+        ACCOUNT_FACTORY_ADDRESS,
+        await builder.getSender()
+      );
+      
+      // Check if initialization code is already set
+      if (builder.initCode === "0x") {
+        builder.initCode = initCode;
+      }
+      
+      // Configure Paymaster options (sponsored transaction)
+      builder.setPaymasterOptions({
+        type: 1, // Type 1: Try prepay method
+        apikey: import.meta.env.VITE_PAYMASTER_API_KEY || '',
+        rpc: PAYMASTER_URL,
+        token: SUPPORTED_TOKENS.USDC.address // Use USDC
+      });
+      
+      // Set empty execution function (for wallet deployment only)
+      builder.execute(ethers.constants.AddressZero, 0, "0x");
+      
+      // Send UserOperation
+      const result = await client.sendUserOperation(builder);
+      console.log("Deployment UserOp hash:", result.userOpHash);
+      
+      // Wait for transaction to complete
+      const receipt = await result.wait();
+      console.log("Deployment transaction receipt:", receipt);
+      
+      return true;
+    } catch (err) {
+      console.error("Error deploying AA wallet:", err);
+      return false;
+    }
+  };
+
+  /**
    * Ensure token approval for Paymaster
    * @param {string} tokenAddress - The token address for payment
    * @param {Object} builder - The current builder
@@ -39,26 +85,44 @@ const useUserOp = () => {
     if (!tokenAddress || !builder || isDevelopmentMode) return true;
     
     try {
+      // Normalize addresses to checksum format
+      const normalizedTokenAddress = ethers.utils.getAddress(tokenAddress);
+      const normalizedPaymasterAddress = ethers.utils.getAddress(TOKEN_PAYMASTER_ADDRESS);
+      
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       
+      // Also normalize AA wallet address
+      const normalizedAAWalletAddress = ethers.utils.getAddress(aaWalletAddress);
+      
       // Create token contract interface
       const tokenContract = new ethers.Contract(
-        tokenAddress,
+        normalizedTokenAddress,
         ['function allowance(address owner, address spender) view returns (uint256)',
          'function approve(address spender, uint256 amount) returns (bool)'],
         signer
       );
       
-      console.log(`Checking allowance for token ${tokenAddress} to paymaster ${TOKEN_PAYMASTER_ADDRESS}`);
+      console.log(`Checking allowance for token ${normalizedTokenAddress} to paymaster ${normalizedPaymasterAddress}`);
       
       // Check if AA wallet address has already approved tokens for Paymaster
-      const allowance = await tokenContract.allowance(aaWalletAddress, TOKEN_PAYMASTER_ADDRESS);
+      // Read operations are valid even if AA wallet isn't deployed yet
+      const allowance = await tokenContract.allowance(normalizedAAWalletAddress, normalizedPaymasterAddress);
       
       // If allowance is sufficient, no need to approve
       if (allowance.gte(ethers.constants.MaxUint256.div(2))) {
         console.log('Token already approved for Paymaster');
         return true;
+      }
+      
+      // Check if AA wallet is deployed
+      const code = await provider.getCode(normalizedAAWalletAddress);
+      if (code === '0x') {
+        console.log('AA wallet not deployed yet, deploying first...');
+        const deploySuccess = await deployAAWallet(builder, client);
+        if (!deploySuccess) {
+          console.warn('Failed to deploy AA wallet, proceeding with approval attempt anyway');
+        }
       }
       
       console.log('Insufficient allowance, approving token for Paymaster...');
@@ -69,22 +133,22 @@ const useUserOp = () => {
       // Encode approve function call
       const approveData = tokenContract.interface.encodeFunctionData(
         'approve',
-        [TOKEN_PAYMASTER_ADDRESS, ethers.constants.MaxUint256]
+        [normalizedPaymasterAddress, ethers.constants.MaxUint256]
       );
       
-      // Create approval operation using FREE_GAS (type 0) temporarily
-      // This is the key part - we need to use Type 0 for the approval operation
-      // even if the user will use Type 1 or 2 for the actual transaction
+      // Create approval operation using Type 1 (prepay)
+      // Change type - Try Type 1 (prepay) if Type 0 doesn't work
       const approvalOptions = {
-        type: 0, // Use sponsored gas for approval (this works for approval)
+        type: 1,
         apikey: import.meta.env.VITE_PAYMASTER_API_KEY || '',
-        rpc: PAYMASTER_URL
+        rpc: PAYMASTER_URL,
+        token: SUPPORTED_TOKENS.USDC.address // Use USDC
       };
       
       builder.setPaymasterOptions(approvalOptions);
       
       // Execute the approval transaction
-      builder.execute(tokenAddress, 0, approveData);
+      builder.execute(normalizedTokenAddress, 0, approveData);
       
       // Send approval operation
       console.log('Sending approval UserOperation...');
@@ -96,7 +160,7 @@ const useUserOp = () => {
       console.log('Approval transaction complete:', approvalReceipt);
       
       // Verify approval was successful
-      const newAllowance = await tokenContract.allowance(aaWalletAddress, TOKEN_PAYMASTER_ADDRESS);
+      const newAllowance = await tokenContract.allowance(normalizedAAWalletAddress, normalizedPaymasterAddress);
       return newAllowance.gt(allowance);
     } catch (error) {
       console.error('Error ensuring token approval for Paymaster:', error);
@@ -175,11 +239,14 @@ const useUserOp = () => {
             
             // Get counterfactual address
             const aaAddress = await aaBuilder.getSender();
-            setAaWalletAddress(aaAddress);
+            // Normalize address
+            const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
+            setAaWalletAddress(normalizedAAAddress);
             
             // Check if wallet is deployed
-            const code = await provider.getCode(aaAddress);
-            setIsDeployed(code !== '0x');
+            const code = await provider.getCode(normalizedAAAddress);
+            const deployed = code !== '0x';
+            setIsDeployed(deployed);
             
             if (code === '0x') {
               console.log('AA wallet not deployed — using counterfactual address');
@@ -715,7 +782,8 @@ const useUserOp = () => {
     executeTicketPurchase,
     executeBatchPurchase,
     createSessionKey,
-    revokeSessionKey
+    revokeSessionKey,
+    deployAAWallet
   };
 };
 

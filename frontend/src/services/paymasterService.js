@@ -1,8 +1,10 @@
 import { ethers } from 'ethers';
 import SUPPORTED_TOKENS from '../constants/tokens';
 
-// Token Paymaster address
-const TOKEN_PAYMASTER_ADDRESS = import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0xB24a30A3971e4d9bf771BDc81735e8cbEc95D578";
+// Token Paymaster address - normalize to checksum format
+const TOKEN_PAYMASTER_ADDRESS = ethers.utils.getAddress(
+  import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0xB24a30A3971e4d9bf771BDc81735e8cbEc95D578"
+);
 
 class PaymasterService {
   constructor() {
@@ -17,8 +19,15 @@ class PaymasterService {
     this.gasCostEstimationCache = new Map();
     this.cacheExpiryTime = 60 * 1000; // 1 minute cache
     
-    // Known valid tokens - prefill with our constants
-    this.validatedTokens = new Set(Object.values(SUPPORTED_TOKENS).map(t => t.address.toLowerCase()));
+    // Known valid tokens - prefill with our constants - normalize addresses
+    this.validatedTokens = new Set(Object.values(SUPPORTED_TOKENS).map(t => {
+      try {
+        return ethers.utils.getAddress(t.address).toLowerCase();
+      } catch (e) {
+        console.warn(`Invalid token address: ${t.address}`);
+        return t.address.toLowerCase();
+      }
+    }));
   }
 
   async init(apiKey = '') {
@@ -59,7 +68,9 @@ class PaymasterService {
     if (!this.provider) await this.init();
     
     try {
-      const code = await this.provider.getCode(address);
+      // Normalize address
+      const normalizedAddress = ethers.utils.getAddress(address);
+      const code = await this.provider.getCode(normalizedAddress);
       return code !== '0x';
     } catch (error) {
       console.error('Error checking account deployment:', error);
@@ -75,34 +86,52 @@ class PaymasterService {
   async isTokenSupported(tokenAddress) {
     if (!tokenAddress) return false;
     
-    const normalizedAddress = tokenAddress.toLowerCase();
-    
-    // Check our validated set first (cache)
-    if (this.validatedTokens.has(normalizedAddress)) {
-      return true;
-    }
-    
-    // Fall back to checking against known supported tokens
-    const knownTokens = Object.values(SUPPORTED_TOKENS).map(t => t.address.toLowerCase());
-    if (knownTokens.includes(normalizedAddress)) {
-      this.validatedTokens.add(normalizedAddress);
-      return true;
-    }
-    
-    // If not in our known list, try to check with the API
     try {
-      const tokens = await this.getSupportedTokens('0x1234567890123456789012345678901234567890');
-      const isSupported = tokens.some(token => 
-        token.address.toLowerCase() === normalizedAddress
-      );
+      // Normalize address then convert to lowercase
+      const normalizedAddress = ethers.utils.getAddress(tokenAddress).toLowerCase();
       
-      if (isSupported) {
-        this.validatedTokens.add(normalizedAddress);
+      // Check our validated set first (cache)
+      if (this.validatedTokens.has(normalizedAddress)) {
+        return true;
       }
       
-      return isSupported;
-    } catch (error) {
-      console.error('Error checking token support:', error);
+      // Fall back to checking against known supported tokens
+      const knownTokens = Object.values(SUPPORTED_TOKENS).map(t => {
+        try {
+          return ethers.utils.getAddress(t.address).toLowerCase();
+        } catch (e) {
+          return t.address.toLowerCase();
+        }
+      });
+      
+      if (knownTokens.includes(normalizedAddress)) {
+        this.validatedTokens.add(normalizedAddress);
+        return true;
+      }
+      
+      // If not in our known list, try to check with the API
+      try {
+        const tokens = await this.getSupportedTokens('0x1234567890123456789012345678901234567890');
+        const isSupported = tokens.some(token => {
+          try {
+            const normalizedToken = ethers.utils.getAddress(token.address).toLowerCase();
+            return normalizedToken === normalizedAddress;
+          } catch (e) {
+            return token.address.toLowerCase() === normalizedAddress;
+          }
+        });
+        
+        if (isSupported) {
+          this.validatedTokens.add(normalizedAddress);
+        }
+        
+        return isSupported;
+      } catch (error) {
+        console.error('Error checking token support via API:', error);
+        return false;
+      }
+    } catch (e) {
+      console.error('Error normalizing token address:', e);
       return false;
     }
   }
@@ -117,13 +146,18 @@ class PaymasterService {
     if (!this.provider) await this.init();
     
     try {
+      // Normalize both addresses
+      const normalizedTokenAddress = ethers.utils.getAddress(tokenAddress);
+      const normalizedOwnerAddress = ethers.utils.getAddress(ownerAddress);
+      const normalizedPaymasterAddress = ethers.utils.getAddress(TOKEN_PAYMASTER_ADDRESS);
+      
       const tokenContract = new ethers.Contract(
-        tokenAddress,
+        normalizedTokenAddress,
         ['function allowance(address owner, address spender) view returns (uint256)'],
         this.provider
       );
       
-      const allowance = await tokenContract.allowance(ownerAddress, TOKEN_PAYMASTER_ADDRESS);
+      const allowance = await tokenContract.allowance(normalizedOwnerAddress, normalizedPaymasterAddress);
       return allowance.gt(ethers.BigNumber.from(0));
     } catch (error) {
       console.error('Error checking token approval:', error);
@@ -139,24 +173,27 @@ class PaymasterService {
   async getSupportedTokens(aaWalletAddress) {
     if (!this.paymasterRpc) await this.init();
     
-    // Check cache first
-    const cacheKey = `tokens-${aaWalletAddress}`;
-    const cachedData = this.supportedTokensCache.get(cacheKey);
-    
-    if (cachedData && Date.now() - cachedData.timestamp < this.cacheExpiryTime) {
-      return cachedData.tokens;
-    }
-    
-    // Check if account is deployed before making API calls
-    const isDeployed = await this.isAccountDeployed(aaWalletAddress);
-    if (!isDeployed) {
-      console.log("Account not deployed yet, using counterfactual address");
-    }
-    
     try {
+      // Normalize address
+      const normalizedWalletAddress = ethers.utils.getAddress(aaWalletAddress);
+      
+      // Check cache first
+      const cacheKey = `tokens-${normalizedWalletAddress}`;
+      const cachedData = this.supportedTokensCache.get(cacheKey);
+      
+      if (cachedData && Date.now() - cachedData.timestamp < this.cacheExpiryTime) {
+        return cachedData.tokens;
+      }
+      
+      // Check if account is deployed before making API calls
+      const isDeployed = await this.isAccountDeployed(normalizedWalletAddress);
+      if (!isDeployed) {
+        console.log("Account not deployed yet, using counterfactual address");
+      }
+      
       // Create a minimal UserOp for the request
       const minimalUserOp = {
-        sender: aaWalletAddress,
+        sender: normalizedWalletAddress,
         nonce: "0x0",
         initCode: "0x",
         callData: "0x",
@@ -193,19 +230,36 @@ class PaymasterService {
           }
         }
         
-        // Normalize token structure
-        const normalizedTokens = tokens.map(token => ({
-          address: token.token || token.address,
-          decimals: token.decimals || 18, // Default to 18 if not specified
-          symbol: token.symbol || 'Unknown',
-          type: token.type || 'erc20'
-        }));
+        // Normalize token structure and addresses
+        const normalizedTokens = tokens.map(token => {
+          const address = token.token || token.address;
+          try {
+            return {
+              address: ethers.utils.getAddress(address),
+              decimals: token.decimals || 18, // Default to 18 if not specified
+              symbol: token.symbol || 'Unknown',
+              type: token.type || 'erc20'
+            };
+          } catch (e) {
+            // If address normalization fails, use the original
+            return {
+              address: address,
+              decimals: token.decimals || 18,
+              symbol: token.symbol || 'Unknown',
+              type: token.type || 'erc20'
+            };
+          }
+        });
         
         if (normalizedTokens.length > 0) {
           // Update our validated tokens set
           normalizedTokens.forEach(token => {
             if (token.address) {
-              this.validatedTokens.add(token.address.toLowerCase());
+              try {
+                this.validatedTokens.add(ethers.utils.getAddress(token.address).toLowerCase());
+              } catch (e) {
+                this.validatedTokens.add(token.address.toLowerCase());
+              }
             }
           });
           
@@ -222,26 +276,23 @@ class PaymasterService {
       }
       
       // If API fails or returns empty, use our known supported tokens
-      const fallbackTokens = [
-        {
-          address: SUPPORTED_TOKENS.DAI.address,
-          decimals: SUPPORTED_TOKENS.DAI.decimals,
-          symbol: SUPPORTED_TOKENS.DAI.symbol,
-          type: 'erc20'
-        },
-        {
-          address: SUPPORTED_TOKENS.USDC.address,
-          decimals: SUPPORTED_TOKENS.USDC.decimals,
-          symbol: SUPPORTED_TOKENS.USDC.symbol,
-          type: 'erc20'
-        },
-        {
-          address: SUPPORTED_TOKENS.USDT.address,
-          decimals: SUPPORTED_TOKENS.USDT.decimals,
-          symbol: SUPPORTED_TOKENS.USDT.symbol,
-          type: 'erc20'
+      const fallbackTokens = Object.values(SUPPORTED_TOKENS).map(token => {
+        try {
+          return {
+            address: ethers.utils.getAddress(token.address),
+            decimals: token.decimals,
+            symbol: token.symbol,
+            type: 'erc20'
+          };
+        } catch (e) {
+          return {
+            address: token.address,
+            decimals: token.decimals,
+            symbol: token.symbol,
+            type: 'erc20'
+          };
         }
-      ];
+      });
       
       // Update cache with fallback tokens
       this.supportedTokensCache.set(cacheKey, {
@@ -253,27 +304,24 @@ class PaymasterService {
     } catch (error) {
       console.error('Error getting supported tokens:', error);
       
-      // Return fallback tokens in case of error
-      return [
-        {
-          address: SUPPORTED_TOKENS.DAI.address,
-          decimals: SUPPORTED_TOKENS.DAI.decimals,
-          symbol: SUPPORTED_TOKENS.DAI.symbol,
-          type: 'erc20'
-        },
-        {
-          address: SUPPORTED_TOKENS.USDC.address,
-          decimals: SUPPORTED_TOKENS.USDC.decimals,
-          symbol: SUPPORTED_TOKENS.USDC.symbol,
-          type: 'erc20'
-        },
-        {
-          address: SUPPORTED_TOKENS.USDT.address,
-          decimals: SUPPORTED_TOKENS.USDT.decimals,
-          symbol: SUPPORTED_TOKENS.USDT.symbol,
-          type: 'erc20'
+      // Return fallback tokens in case of error - normalize addresses
+      return Object.values(SUPPORTED_TOKENS).map(token => {
+        try {
+          return {
+            address: ethers.utils.getAddress(token.address),
+            decimals: token.decimals,
+            symbol: token.symbol,
+            type: 'erc20'
+          };
+        } catch (e) {
+          return {
+            address: token.address,
+            decimals: token.decimals,
+            symbol: token.symbol,
+            type: 'erc20'
+          };
         }
-      ];
+      });
     }
   }
 
@@ -286,22 +334,25 @@ class PaymasterService {
   async getGasCostEstimation(tokenAddress, gasLimit) {
     if (!this.paymasterRpc) await this.init();
     
-    // Check if token is supported first
-    const isSupported = await this.isTokenSupported(tokenAddress);
-    if (!isSupported) {
-      console.warn(`Token ${tokenAddress} is not supported by the Paymaster`);
-      throw new Error('Token is not supported by the Paymaster');
-    }
-    
-    // Check cache first
-    const cacheKey = `gas-${tokenAddress}-${gasLimit}`;
-    const cachedData = this.gasCostEstimationCache.get(cacheKey);
-    
-    if (cachedData && Date.now() - cachedData.timestamp < this.cacheExpiryTime) {
-      return cachedData.estimation;
-    }
-    
     try {
+      // Normalize address
+      const normalizedTokenAddress = ethers.utils.getAddress(tokenAddress);
+      
+      // Check if token is supported first
+      const isSupported = await this.isTokenSupported(normalizedTokenAddress);
+      if (!isSupported) {
+        console.warn(`Token ${normalizedTokenAddress} is not supported by the Paymaster`);
+        throw new Error('Token is not supported by the Paymaster');
+      }
+      
+      // Check cache first
+      const cacheKey = `gas-${normalizedTokenAddress}-${gasLimit}`;
+      const cachedData = this.gasCostEstimationCache.get(cacheKey);
+      
+      if (cachedData && Date.now() - cachedData.timestamp < this.cacheExpiryTime) {
+        return cachedData.estimation;
+      }
+      
       // Try to get a real estimation if possible
       // Create a minimal UserOp for the request
       const minimalUserOp = {
@@ -324,7 +375,7 @@ class PaymasterService {
           minimalUserOp,
           this.apiKey,
           this.entryPoint,
-          tokenAddress
+          normalizedTokenAddress
         ]);
         
         if (priceResponse && priceResponse.price) {
