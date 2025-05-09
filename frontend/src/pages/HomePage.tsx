@@ -70,9 +70,9 @@ const HomePage = () => {
   useEffect(() => {
     if (aaWalletAddress && !isDeployed) {
       checkAAWalletPrefunding().then(isPrefunded => {
-        // If not prefunded and not already showing the modal, show it
-        if (!isPrefunded && !isPrefundModalOpen) {
-          setIsPrefundModalOpen(true);
+
+        if (!isPrefunded && !isPrefundModalOpen && localStorage.getItem('skipWalletSetup') !== 'true') {
+
         }
       }).catch(console.error);
     }
@@ -330,22 +330,30 @@ const HomePage = () => {
       
       {/* Show wallet setup alert if needed */}
       {(needsNeroTokens || walletNeedsPrefunding) && !isPrefundModalOpen && (
-        <div className="wallet-setup-alert">
-          <div className="alert-content">
-            <div className="alert-icon">⚠️</div>
-            <div className="alert-message">
-              <strong>Wallet Setup Required</strong>
-              <p>Your smart contract wallet needs to be set up before you can make transactions.</p>
-            </div>
-            <button 
-              className="setup-button"
-              onClick={() => setIsPrefundModalOpen(true)}
-            >
-              Set Up Wallet
-            </button>
-          </div>
-        </div>
-      )}
+  <div className="wallet-setup-alert">
+    <div className="alert-content">
+      <div className="alert-icon">ℹ️</div>
+      <div className="alert-message">
+        <strong>Smart Contract Wallet Recommended</strong>
+        <p>Setting up a smart contract wallet can improve your transaction experience.</p>
+      </div>
+      <div className="alert-actions">
+        <button 
+          className="setup-button"
+          onClick={() => setIsPrefundModalOpen(true)}
+        >
+          Set Up Wallet
+        </button>
+        <button 
+          className="skip-button"
+          onClick={() => localStorage.setItem('skipWalletSetup', 'true')}
+        >
+          Skip
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       
       {/* Modals */}
       {isTicketModalOpen && selectedLottery && (

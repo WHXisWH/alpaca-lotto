@@ -110,8 +110,13 @@ const PaymentPage = () => {
     if (!isDeployed || needsNeroTokens || walletNeedsPrefunding) {
       const isPrefunded = await checkAAWalletPrefunding();
       if (!isPrefunded) {
-        setIsPrefundModalOpen(true);
-        return;
+        // Instead of automatically opening the modal, show a confirmation first
+        if (window.confirm('Your smart contract wallet is not set up. Setting it up can improve your transaction experience. Would you like to set it up now?')) {
+          setIsPrefundModalOpen(true);
+          return;
+        }
+        // If user chooses not to set up wallet, proceed with transaction
+        // Note: This may still fail, but we're letting the user decide
       }
     }
     
@@ -134,8 +139,13 @@ const PaymentPage = () => {
       // Check if transaction needs prefunding
       if (result && result.needsPrefunding) {
         setTransactionStatus('preparing');
-        setIsPrefundModalOpen(true);
-        setErrorMessage(result.error || 'Your wallet needs to be prefunded');
+        // Ask the user if they want to set up their wallet
+        if (window.confirm('This transaction may be more likely to succeed if you set up your smart contract wallet. Would you like to set it up now?')) {
+          setIsPrefundModalOpen(true);
+        } else {
+          // If user declines, inform them that the transaction might fail
+          setErrorMessage('You chose to skip wallet setup. Note that your transaction may fail or cost more gas.');
+        }
         return;
       }
       
@@ -164,9 +174,15 @@ const PaymentPage = () => {
       if (error.message?.includes('prefund') || 
           error.message?.includes('NERO tokens') || 
           error.message?.includes('deploy')) {
-        setIsPrefundModalOpen(true);
-        setTransactionStatus('preparing');
-        setErrorMessage('Your wallet needs to be prefunded with NERO tokens');
+        // Ask the user if they want to set up their wallet
+        if (window.confirm('This transaction requires wallet setup to succeed. Would you like to set up your smart contract wallet now?')) {
+          setIsPrefundModalOpen(true);
+          setTransactionStatus('preparing');
+        } else {
+          // If user declines, show error message
+          setErrorMessage('Transaction failed. Setting up your wallet might resolve this issue.');
+          setTransactionStatus('error');
+        }
         return;
       }
       
@@ -404,22 +420,30 @@ const PaymentPage = () => {
         
         {/* Show wallet setup alert if needed */}
         {(needsNeroTokens || walletNeedsPrefunding) && !isPrefundModalOpen && (
-          <div className="wallet-setup-alert">
-            <div className="alert-content">
-              <div className="alert-icon">⚠️</div>
-              <div className="alert-message">
-                <strong>Wallet Setup Required</strong>
-                <p>Your smart contract wallet needs to be set up before you can make transactions.</p>
-              </div>
-              <button 
-                className="setup-button"
-                onClick={() => setIsPrefundModalOpen(true)}
-              >
-                Set Up Wallet
-              </button>
-            </div>
-          </div>
-        )}
+  <div className="wallet-setup-alert">
+    <div className="alert-content">
+      <div className="alert-icon">ℹ️</div>
+      <div className="alert-message">
+        <strong>Smart Contract Wallet Recommended</strong>
+        <p>Setting up a smart contract wallet can improve your transaction success rate and may reduce costs.</p>
+      </div>
+      <div className="alert-actions">
+        <button 
+          className="setup-button"
+          onClick={() => setIsPrefundModalOpen(true)}
+        >
+          Set Up Wallet
+        </button>
+        <button 
+          className="skip-button"
+          onClick={() => localStorage.setItem('skipWalletSetup', 'true')}
+        >
+          Skip
+        </button>
+      </div>
+    </div>
+  </div>
+)}
         
         <div className="payment-card">
           <h2>Confirm Ticket Purchase</h2>

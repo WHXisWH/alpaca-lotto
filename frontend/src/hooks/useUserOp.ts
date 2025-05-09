@@ -465,7 +465,11 @@ const useUserOp = () => {
         const isPrefunded = await checkAAWalletPrefunding();
         if (!isPrefunded) {
           setNeedsNeroTokens(true);
-          throw new Error("Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract. Please use the 'Prefund Wallet' button first.");
+          return {
+            success: false,
+            needsPrefunding: true,
+            walletNotDeployed: true,
+            error: "Your wallet is not deployed. Setting up a smart contract wallet is recommended but optional."};
         }
       }
       

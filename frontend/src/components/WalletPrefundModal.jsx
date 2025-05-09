@@ -3,7 +3,7 @@ import useUserOp from '../hooks/useUserOp';
 
 /**
  * A reusable modal component for prefunding and deploying AA wallets
- * This can be used anywhere in the app when prefunding is needed
+ * Modified to be optional rather than mandatory
  */
 const WalletPrefundModal = ({ isOpen, onClose, onComplete }) => {
   const {
@@ -98,8 +98,8 @@ const WalletPrefundModal = ({ isOpen, onClose, onComplete }) => {
         
         <div className="modal-content">
           <div className="warning-message">
-            <strong>One-time Wallet Setup Required</strong>
-            <p>Your smart contract wallet needs to be set up before you can make transactions. This is a one-time process:</p>
+            <strong>Optional Wallet Setup</strong>
+            <p>Setting up a smart contract wallet can improve your transaction experience. This is a one-time process:</p>
           </div>
           
           <div className="setup-steps">
@@ -149,14 +149,18 @@ const WalletPrefundModal = ({ isOpen, onClose, onComplete }) => {
               {error}
             </div>
           )}
+          
+          <div className="skip-warning">
+            <p>You can skip this setup, but you may experience higher gas fees or transaction failures.</p>
+          </div>
         </div>
         
         <div className="modal-footer">
           <button 
-            className="cancel-button"
+            className="skip-button"
             onClick={onClose}
           >
-            Cancel
+            Skip for Now
           </button>
           {status === 'deployed' && (
             <button 
