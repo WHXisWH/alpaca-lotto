@@ -1,5 +1,3 @@
-// backend/services/userOpService.js
-
 const { ethers } = require('ethers');
 const { Client, Presets } = require('userop');
 
@@ -51,6 +49,10 @@ class UserOpService {
       // AAウォレットアドレスを取得
       const aaWalletAddress = await this.builder.getSender();
       
+      if (!this.builder.initCode || this.builder.initCode === "0x") {
+        this.builder.initCode = await this.builder.getInitCode();
+      }
+
       return {
         client: this.client,
         builder: this.builder,

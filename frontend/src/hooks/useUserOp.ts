@@ -39,13 +39,10 @@ const useUserOp = () => {
       
       // Set up initialization code before deploying AA wallet
       // This typically uses SimpleAccount Factory
-      const initCode = Presets.Builder.SimpleAccount.getInitCode(
-        ACCOUNT_FACTORY_ADDRESS,
-        await builder.getSender()
-      );
+      const initCode = await builder.getInitCode();
       
       // Check if initialization code is already set
-      if (builder.initCode === "0x") {
+      if (!builder.initCode || builder.initCode === "0x") {
         builder.initCode = initCode;
       }
       
@@ -243,11 +240,8 @@ const useUserOp = () => {
             const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
             setAaWalletAddress(normalizedAAAddress);
             
-            if (aaBuilder.initCode === "0x") {
-              aaBuilder.initCode = Presets.Builder.SimpleAccount.getInitCode(
-                ACCOUNT_FACTORY_ADDRESS,
-                normalizedAAAddress
-              );
+            if (!aaBuilder.initCode || aaBuilder.initCode === "0x") {
+              aaBuilder.initCode = await aaBuilder.getInitCode();
             }
             
             // Check if wallet is deployed
