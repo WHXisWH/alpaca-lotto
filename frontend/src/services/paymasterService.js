@@ -323,8 +323,7 @@ class PaymasterService {
    * @param {string} tokenAddress - ERC20 token address used for payment
    * @returns {Promise<string>} - paymasterAndData string
    */
-  async sponsorUserOp(userOp, tokenAddress) {
-    // Paymaster URL が必ず this.rpcUrl を指すようにする
+  async sponsorUserOp(userOp, paymasterOptions) {
     const res = await fetch(this.rpcUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -336,7 +335,7 @@ class PaymasterService {
           userOp,
           this.apiKey,
           this.entryPoint,
-          { type: 1, token: tokenAddress }
+          paymasterOptions 
         ]
       })
     });

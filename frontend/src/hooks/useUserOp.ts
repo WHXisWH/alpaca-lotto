@@ -355,17 +355,34 @@ const useUserOp = () => {
         throw new Error("Payment token required for ERC20 gas payment");
       }
       
-      const userOp = await builder.getOp();
-      const paymasterAndData = await paymasterService.sponsorUserOp(userOp, paymentToken);
-      userOp.paymasterAndData = paymasterAndData;
-      builder.setOp(userOp);
-      
-      // Configure the execution
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
-      
-      // If using session key, set specific options here
-      // This would need to be implemented based on your session key implementation
-      
+
+      const rawOp = await builder.getOp();
+      const userOp = {
+            sender:                rawOp.sender,
+            nonce:                 rawOp.nonce.toHexString(),
+            initCode:              rawOp.initCode,
+            callData:              rawOp.callData,
+            callGasLimit:          rawOp.callGasLimit.toHexString(),
+            verificationGasLimit:  rawOp.verificationGasLimit.toHexString(),
+            preVerificationGas:    rawOp.preVerificationGas.toHexString(),
+            maxFeePerGas:          rawOp.maxFeePerGas.toHexString(),
+            maxPriorityFeePerGas:  rawOp.maxPriorityFeePerGas.toHexString(),
+            paymasterAndData:      rawOp.paymasterAndData,
+            signature:             rawOp.signature
+         };
+
+      const paymasterOpts: any = { type: paymentType };
+      if (paymentType === 1) {
+        paymasterOpts.token = paymentToken; 
+      }
+      const paymasterOpts: any = { type: paymentType };
+      if (paymentType === 1) paymasterOpts.token = paymentToken;
+      const pmData = await paymasterService.sponsorUserOp(userOp, paymasterOpts);
+      userOp.paymasterAndData = pmData;
+      builder.setOp(userOp);
+
+            
       // Send the UserOperation
       const result = await client.sendUserOperation(builder);
       console.log('UserOperation result:', result);
@@ -512,9 +529,25 @@ const useUserOp = () => {
       // Configure the execution
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
-      const userOp = await builder.getOp();
-      const paymasterAndData = await paymasterService.sponsorUserOp(userOp, paymentToken);
-      userOp.paymasterAndData = paymasterAndData;
+      const rawOp = await builder.getOp();
+      const userOp = {
+        sender:               rawOp.sender,
+        nonce:                rawOp.nonce.toHexString(),
+        initCode:             rawOp.initCode,
+        callData:             rawOp.callData,
+        callGasLimit:         rawOp.callGasLimit.toHexString(),
+        verificationGasLimit: rawOp.verificationGasLimit.toHexString(),
+        preVerificationGas:   rawOp.preVerificationGas.toHexString(),
+        maxFeePerGas:         rawOp.maxFeePerGas.toHexString(),
+        maxPriorityFeePerGas: rawOp.maxPriorityFeePerGas.toHexString(),
+        paymasterAndData:     rawOp.paymasterAndData,
+        signature:            rawOp.signature
+      };
+
+      const paymasterOpts: any = { type: paymentType };
+      if (paymentType === 1) paymasterOpts.token = paymentToken;
+      const pmData = await paymasterService.sponsorUserOp(userOp, paymasterOpts);
+      userOp.paymasterAndData = pmData;
       builder.setOp(userOp);
       
       // If using session key, set specific options here
