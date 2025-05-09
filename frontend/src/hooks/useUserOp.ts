@@ -34,34 +34,18 @@ const useUserOp = () => {
    */
   const deployAAWallet = async (signer, builder, client) => {
     if (!signer || !builder || !client) return false;
-  
-    try {
-      const newBuilder = await Presets.Builder.SimpleAccount.init(signer, NERO_RPC_URL, {
-        overrideBundlerRpc: BUNDLER_URL,
-        entryPoint: ENTRYPOINT_ADDRESS,
-        factory: ACCOUNT_FACTORY_ADDRESS,
-      });
-  
-      // Use Paymaster with dummy op (approve or 0-call)
-      newBuilder.setPaymasterOptions({
-        type: 1,
-        apikey: import.meta.env.VITE_PAYMASTER_API_KEY || '',
-        rpc: PAYMASTER_URL,
-        token: SUPPORTED_TOKENS.USDC.address,
-      });
-  
-      // Dummy execution (e.g., empty call)
-      newBuilder.execute(ethers.constants.AddressZero, 0, "0x");
-  
-      const result = await client.sendUserOperation(newBuilder);
-      await result.wait();
-      return true;
-    } catch (err) {
-      console.error("Error deploying AA wallet:", err);
-      return false;
+ 
+   try {
+    builder.resetOp && builder.resetOp();
+    builder.execute(ethers.constants.AddressZero, 0, "0x");
+    const result = await client.sendUserOperation(builder);
+    await result.wait();
+    return true;
+   } catch (err) {
+     console.error("Error deploying AA wallet:", err);
+     return false;
     }
   };
-     
   /**
    * Ensure token approval for Paymaster
    * @param {string} tokenAddress - The token address for payment
