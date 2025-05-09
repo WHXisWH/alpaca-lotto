@@ -7,7 +7,7 @@ export const generateMockLotteries = () => {
   // Mock token addresses that are consistent
   const mockTokens = [
     '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
-    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
+    '0xC86Fed58edF0981e927160C50ecB8a8B05B32fed', // USDC
     '0xdac17f958d2ee523a2206206994597c13d831ec7'  // USDT
   ];
   
@@ -99,7 +99,7 @@ export const generateMockTickets = (lotteryId) => {
       lotteryId: lotteryId,
       ticketNumber: Math.floor(Math.random() * 100) + 1,
       user: '0x1234567890123456789012345678901234567890',
-      paymentToken: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
+      paymentToken: '0xC86Fed58edF0981e927160C50ecB8a8B05B32fed', // USDC
       amountPaid: '5000000' // 5 USDC with 6 decimals
     });
   }

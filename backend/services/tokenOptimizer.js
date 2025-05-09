@@ -170,7 +170,7 @@ class TokenOptimizer {
       const mockPrices = {
         // ステーブルコイン
         '0x6b175474e89094c44da98b954eedeac495271d0f': 1.0, // DAI
-        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 1.0, // USDC
+        '0xC86Fed58edF0981e927160C50ecB8a8B05B32fed': 1.0, // USDC
         '0xdac17f958d2ee523a2206206994597c13d831ec7': 1.0, // USDT
         
         // 主要暗号資産
@@ -219,7 +219,7 @@ class TokenOptimizer {
       const mockVolatility = {
         // ステーブルコイン（非常に低いボラティリティ）
         '0x6b175474e89094c44da98b954eedeac495271d0f': 0.2, // DAI
-        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 0.1, // USDC
+        '0xC86Fed58edF0981e927160C50ecB8a8B05B32fed': 0.1, // USDC
         '0xdac17f958d2ee523a2206206994597c13d831ec7': 0.15, // USDT
         
         // 主要暗号資産（中程度のボラティリティ）
@@ -264,7 +264,7 @@ class TokenOptimizer {
       const mockSlippage = {
         // 高流動性トークン（低スリッページ）
         '0x6b175474e89094c44da98b954eedeac495271d0f': 0.1, // DAI
-        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 0.05, // USDC
+        '0xC86Fed58edF0981e927160C50ecB8a8B05B32fed': 0.05, // USDC
         '0xdac17f958d2ee523a2206206994597c13d831ec7': 0.08, // USDT
         '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 0.3, // WBTC
         '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 0.2, // WETH

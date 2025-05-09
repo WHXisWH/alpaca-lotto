@@ -1,5 +1,5 @@
-// frontend/src/services/paymasterService.js
 import { ethers } from 'ethers';
+import SUPPORTED_TOKENS from '../constants/tokens';
 
 class PaymasterService {
   constructor() {
@@ -97,51 +97,104 @@ class PaymasterService {
         signature: "0x"
       };
       
-      // Call the pm_supported_tokens method
-      const tokensResponse = await this.paymasterRpc.send("pm_supported_tokens", [
-        minimalUserOp,
-        this.apiKey,
-        this.entryPoint
-      ]);
-      
-      // Enhanced parsing to handle multiple response formats
-      let tokens = [];
-      
-      if (tokensResponse?.tokens) {
-        tokens = tokensResponse.tokens;
-      } else if (Array.isArray(tokensResponse)) {
-        tokens = tokensResponse;
-      } else if (typeof tokensResponse === 'object') {
-        // Try to find tokens in the response object
-        const possibleTokensArray = Object.values(tokensResponse).find(val => Array.isArray(val));
-        if (possibleTokensArray && Array.isArray(possibleTokensArray)) {
-          tokens = possibleTokensArray;
+      // Try getting supported tokens from the Paymaster API
+      try {
+        // Call the pm_supported_tokens method
+        const tokensResponse = await this.paymasterRpc.send("pm_supported_tokens", [
+          minimalUserOp,
+          this.apiKey,
+          this.entryPoint
+        ]);
+        
+        // Enhanced parsing to handle multiple response formats
+        let tokens = [];
+        
+        if (tokensResponse?.tokens) {
+          tokens = tokensResponse.tokens;
+        } else if (Array.isArray(tokensResponse)) {
+          tokens = tokensResponse;
+        } else if (typeof tokensResponse === 'object') {
+          // Try to find tokens in the response object
+          const possibleTokensArray = Object.values(tokensResponse).find(val => Array.isArray(val));
+          if (possibleTokensArray && Array.isArray(possibleTokensArray)) {
+            tokens = possibleTokensArray;
+          }
         }
+        
+        // Normalize token structure
+        const normalizedTokens = tokens.map(token => ({
+          address: token.token || token.address,
+          decimals: token.decimals || 18, // Default to 18 if not specified
+          symbol: token.symbol || 'Unknown',
+          type: token.type || 'erc20'
+        }));
+        
+        if (normalizedTokens.length > 0) {
+          // Update cache
+          this.supportedTokensCache.set(cacheKey, {
+            tokens: normalizedTokens,
+            timestamp: Date.now()
+          });
+          
+          return normalizedTokens;
+        }
+      } catch (apiError) {
+        console.warn("Error fetching tokens from Paymaster API, falling back to supported tokens list", apiError);
       }
       
-      // Normalize token structure
-      const normalizedTokens = tokens.map(token => ({
-        address: token.token || token.address,
-        decimals: token.decimals || 18, // Default to 18 if not specified
-        symbol: token.symbol || 'Unknown',
-        type: token.type || 'erc20'
-      }));
+      // If API fails or returns empty, use our known supported tokens
+      const fallbackTokens = [
+        {
+          address: SUPPORTED_TOKENS.DAI.address,
+          decimals: SUPPORTED_TOKENS.DAI.decimals,
+          symbol: SUPPORTED_TOKENS.DAI.symbol,
+          type: 'erc20'
+        },
+        {
+          address: SUPPORTED_TOKENS.USDC.address,
+          decimals: SUPPORTED_TOKENS.USDC.decimals,
+          symbol: SUPPORTED_TOKENS.USDC.symbol,
+          type: 'erc20'
+        },
+        {
+          address: SUPPORTED_TOKENS.USDT.address,
+          decimals: SUPPORTED_TOKENS.USDT.decimals,
+          symbol: SUPPORTED_TOKENS.USDT.symbol,
+          type: 'erc20'
+        }
+      ];
       
-      // Update cache
+      // Update cache with fallback tokens
       this.supportedTokensCache.set(cacheKey, {
-        tokens: normalizedTokens,
+        tokens: fallbackTokens,
         timestamp: Date.now()
       });
       
-      return normalizedTokens;
+      return fallbackTokens;
     } catch (error) {
       console.error('Error getting supported tokens:', error);
-      // Log the error details for debugging
-      if (error.response) {
-        console.error('Response data:', error.response.data);
-        console.error('Response status:', error.response.status);
-      }
-      return [];
+      
+      // Return fallback tokens in case of error
+      return [
+        {
+          address: SUPPORTED_TOKENS.DAI.address,
+          decimals: SUPPORTED_TOKENS.DAI.decimals,
+          symbol: SUPPORTED_TOKENS.DAI.symbol,
+          type: 'erc20'
+        },
+        {
+          address: SUPPORTED_TOKENS.USDC.address,
+          decimals: SUPPORTED_TOKENS.USDC.decimals,
+          symbol: SUPPORTED_TOKENS.USDC.symbol,
+          type: 'erc20'
+        },
+        {
+          address: SUPPORTED_TOKENS.USDT.address,
+          decimals: SUPPORTED_TOKENS.USDT.decimals,
+          symbol: SUPPORTED_TOKENS.USDT.symbol,
+          type: 'erc20'
+        }
+      ];
     }
   }
 
@@ -176,22 +229,6 @@ class PaymasterService {
       });
       
       return mockEstimation;
-      
-      // In production, you would call the actual gas estimation API:
-      /*
-      const estimation = await this.paymasterRpc.send("pm_estimate_gas_cost", [
-        tokenAddress,
-        gasLimit,
-        this.apiKey
-      ]);
-      
-      this.gasCostEstimationCache.set(cacheKey, {
-        estimation,
-        timestamp: Date.now()
-      });
-      
-      return estimation;
-      */
     } catch (error) {
       console.error('Error estimating gas cost:', error);
       return { gasCostToken: 0.001 };

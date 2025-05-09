@@ -13,17 +13,16 @@ const PaymentOptimizerView = ({
   handlePaymentTypeSelect,
   handleFactorChange
 }) => {
-  const [disableSponsoredPayments, setDisableSponsoredPayments] = useState(false);
+  // Set disableSponsoredPayments to true by default since it's not supported
+  const [disableSponsoredPayments, setDisableSponsoredPayments] = useState(true);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const sponsoredError = localStorage.getItem('sponsoredPaymentsDisabled');
-      if (sponsoredError === 'true') {
-        setDisableSponsoredPayments(true);
-        if (selectedPaymentType === 0) {
-          handlePaymentTypeSelect(1);
-        }
-      }
+    // Store this setting for future reference
+    localStorage.setItem('sponsoredPaymentsDisabled', 'true');
+    
+    // Default to Type 1 payment if Type 0 was selected
+    if (selectedPaymentType === 0) {
+      handlePaymentTypeSelect(1);
     }
   }, [selectedPaymentType, handlePaymentTypeSelect]);
 
@@ -72,6 +71,7 @@ const PaymentOptimizerView = ({
       <div className="payment-types">
         <div className="section-title">Payment Method</div>
         <div className="payment-type-options">
+          {/* Type 0 is disabled by default */}
           {!disableSponsoredPayments && (
             <div
               className={`payment-type-option ${selectedPaymentType === 0 ? 'selected' : ''}`}
@@ -238,6 +238,14 @@ const PaymentOptimizerView = ({
           </div>
         </>
       )}
+      
+      <div className="info-box">
+        <div className="info-icon">ℹ️</div>
+        <div className="info-content">
+          <p>Note: Free gas (sponsored) mode is currently not available on NERO Chain testnet. 
+          Please use ERC20 tokens to pay for gas.</p>
+        </div>
+      </div>
     </div>
   );
 };

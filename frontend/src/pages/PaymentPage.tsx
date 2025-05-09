@@ -93,21 +93,14 @@ const PaymentPage = () => {
     updateProcessingStep('preparing', 'complete');
     updateProcessingStep('submitting', 'pending');
     
-
-    // Validate payment selection for Type 1 and 2
-    if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
-      setErrorMessage('Please select a token for gas payment');
-      return;
-    }
-    
     try {
-      // Execute ticket purchase transaction with proper payment parameters
+      // Execute ticket purchase transaction
       const hash = await executeTicketPurchase({
         lotteryId: lottery.id,
         tokenAddress: token.address,
         quantity,
-        paymentType: paymentType,
-        paymentToken: (paymentType === 1 || paymentType === 2) ? paymentToken.address : null,
+        paymentType,
+        paymentToken: paymentToken?.address,
         useSessionKey: hasActiveSessionKey
       });
       
@@ -130,22 +123,7 @@ const PaymentPage = () => {
         setTransactionStatus('success');
       }
     } catch (error) {
-      // Enhanced error handling
       console.error('Transaction error:', error);
-      
-      let errorMsg = error.message || 'Transaction failed';
-      
-      // Check for specific paymaster errors
-      if (errorMsg.includes('Gas-free model is not supported')) {
-        errorMsg = 'Sponsored transactions are currently disabled. Please select a token payment type.';
-        
-        // Store this information for future reference
-        localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-      } else if (errorMsg.includes('insufficient allowance')) {
-        errorMsg = 'Insufficient token allowance. Please approve the token for gas payment first.';
-      } else if (errorMsg.includes('insufficient balance')) {
-        errorMsg = 'Insufficient token balance for gas payment.';
-      }
       
       // Update processing steps to show error
       const currentStep = processingSteps.find(step => step.status === 'pending');
@@ -153,7 +131,7 @@ const PaymentPage = () => {
         updateProcessingStep(currentStep.id, 'error');
       }
       
-      setErrorMessage(errorMsg);
+      setErrorMessage(error.message || 'Transaction failed');
       setTransactionStatus('error');
     }
   };
