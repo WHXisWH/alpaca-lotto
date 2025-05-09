@@ -45,16 +45,8 @@ class PaymasterService {
       this.provider = new ethers.providers.JsonRpcProvider('https://ethereum.publicnode.com');
     }
     
-    // Create paymaster RPC with retry mechanism
-    try {
-      this.paymasterRpc = new ethers.providers.JsonRpcProvider(this.rpcUrl);
-      // Basic connectivity test
-      await this.paymasterRpc.getNetwork();
-    } catch (err) {
-      console.warn("Failed to initialize paymaster RPC", err);
-      // Fallback to using the same provider
-      this.paymasterRpc = this.provider;
-    }
+    this.paymasterRpc = new ethers.providers.JsonRpcProvider(this.rpcUrl);
+    await this.paymasterRpc.getNetwork();
     
     return this;
   }
@@ -332,24 +324,29 @@ class PaymasterService {
    * @returns {Promise<string>} - paymasterAndData string
    */
   async sponsorUserOp(userOp, tokenAddress) {
-    if (!this.paymasterRpc) await this.init();
+    // Paymaster URL が必ず this.rpcUrl を指すようにする
+    const res = await fetch(this.rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'pm_sponsor_userop',
+        params: [
+          userOp,
+          this.apiKey,
+          this.entryPoint,
+          { type: 1, token: tokenAddress }
+        ]
+      })
+    });
 
-    try {
-      const response = await this.paymasterRpc.send("pm_sponsor_userop", [
-        userOp,
-        this.apiKey,
-        this.entryPoint,
-        {
-          type: 1,
-          token: tokenAddress
-        }
-      ]);
-
-      return response?.paymasterAndData || "0x";
-    } catch (error) {
-      console.error("❌ Error sponsoring userOp:", error);
-      throw error;
+    const json = await res.json();
+    if (json.error) {
+      console.error('❌ Paymaster error:', json.error);
+      throw new Error(`Paymaster pm_sponsor_userop error: ${json.error.message}`);
     }
+    return json.result.paymasterAndData;
   }
 
   /**
