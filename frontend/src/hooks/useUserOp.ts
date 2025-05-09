@@ -32,6 +32,7 @@ const useUserOp = () => {
   const [isDevelopmentMode, setIsDevelopmentMode] = useState(false);
   const [needsNeroTokens, setNeedsNeroTokens] = useState(false);
 
+  const [walletNeedsPrefunding, setWalletNeedsPrefunding] = useState(false);
   /**
    * Check if the AA wallet has enough prefunding in the EntryPoint contract
    */
@@ -52,6 +53,11 @@ const useUserOp = () => {
       
       // Check if deposit is greater than 0
       const hasDeposit = depositInfo && depositInfo.deposit && depositInfo.deposit.gt(0);
+      
+      // Update state based on deposit check
+      setWalletNeedsPrefunding(!hasDeposit);
+      setNeedsNeroTokens(!hasDeposit);
+      
       console.log('AA wallet deposit info:', depositInfo);
       console.log('Has deposit:', hasDeposit);
       
@@ -538,6 +544,21 @@ const useUserOp = () => {
       return receipt.transactionHash;
     } catch (err) {
       console.error('Error executing ticket purchase:', err);
+      if (err.message?.includes('prefund') || 
+          err.message?.includes('NERO tokens') || 
+          err.message?.includes('AA20') || 
+          err.message?.includes('AA21')) {
+       setWalletNeedsPrefunding(true);
+       setNeedsNeroTokens(true);
+       setError("Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract.");
+       setIsLoading(false);
+       return {
+         success: false,
+         needsPrefunding: true,
+         error: err.message
+        };
+      }
+      
       
       // Enhanced error handling
       let errorMsg = err.message || 'Failed to purchase tickets';
@@ -573,7 +594,19 @@ const useUserOp = () => {
   }) => {
     setIsLoading(true);
     setError(null);
-    
+    if (!isDeployed) {
+      const isPrefunded = await checkAAWalletPrefunding();
+      if (!isPrefunded) {
+        setWalletNeedsPrefunding(true);
+        setNeedsNeroTokens(true);
+        setIsLoading(false);
+        return {
+          success: false,
+          needsPrefunding: true,
+          error: "Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract."
+        };
+      }
+    } 
     try {
       // Validate token address for Types 1 & 2
       if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
@@ -725,6 +758,12 @@ const useUserOp = () => {
     }
   }, [isConnected, initSDK]);
 
+  useEffect(() => {
+    if (aaWalletAddress && !isDeployed) {
+      checkAAWalletPrefunding().catch(console.error);
+    }
+  }, [aaWalletAddress, isDeployed]);
+
   return {
     client,
     builder,
@@ -736,6 +775,7 @@ const useUserOp = () => {
     isDevelopmentMode,
     needsNeroTokens,
     isPrefundingWallet,
+    walletNeedsPrefunding,
     initSDK,
     executeTicketPurchase,
     executeBatchPurchase,

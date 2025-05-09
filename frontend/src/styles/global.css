@@ -1972,15 +1972,61 @@
 }
 
 
-/* Smart Contract Wallet Setup Styles */
-.deploy-wallet-section {
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  padding: 16px;
-  margin-top: 16px;
-  border: 1px solid #e2e8f0;
+/* Wallet Prefund Modal Styles */
+.wallet-prefund-modal {
+  background-color: white;
+  border-radius: var(--border-radius);
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
+/* Wallet Setup Alert */
+.wallet-setup-alert {
+  margin-bottom: 1.5rem;
+  background-color: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: var(--border-radius);
+  padding: 1rem;
+}
+
+.alert-content {
+  display: flex;
+  align-items: center;
+}
+
+.alert-icon {
+  font-size: 1.5rem;
+  margin-right: 1rem;
+  color: #f57c00;
+}
+
+.alert-message {
+  flex: 1;
+}
+
+.alert-message strong {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: #f57c00;
+}
+
+.setup-button {
+  background-color: #f57c00;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--border-radius);
+  margin-left: 1rem;
+  white-space: nowrap;
+}
+
+.setup-button:hover {
+  background-color: #e65100;
+}
+
+/* Prefund Modal Specific Styles */
 .warning-message {
   background-color: #fff8e1;
   border-left: 4px solid #ffc107;
@@ -2020,7 +2066,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background-color: #5a67d8;
+  background-color: #3a6ea5;
   color: white;
   border-radius: 50%;
   font-weight: bold;
@@ -2068,20 +2114,20 @@
 }
 
 .prefund-button {
-  background-color: #3b82f6;
+  background-color: #3a6ea5;
 }
 
 .prefund-button:hover {
-  background-color: #2563eb;
+  background-color: #204e75;
 }
 
 .deploy-button {
-  background-color: #10b981;
+  background-color: #28a745;
   padding: 10px 20px;
 }
 
 .deploy-button:hover {
-  background-color: #059669;
+  background-color: #218838;
 }
 
 .prefund-button:disabled, .deploy-button:disabled {
@@ -2095,40 +2141,6 @@
   margin-top: 4px;
 }
 
-.error-message {
-  background-color: #fee2e2;
-  border-left: 4px solid #ef4444;
-  padding: 12px;
-  margin-bottom: 16px;
-  border-radius: 4px;
-  color: #b91c1c;
-  font-size: 14px;
-}
-
-.execute-button {
-  display: block;
-  width: 100%;
-  padding: 12px 16px;
-  background-color: #5a67d8;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-weight: 500;
-  cursor: pointer;
-  font-size: 16px;
-  transition: background-color 0.2s;
-  margin-top: 12px;
-}
-
-.execute-button:hover {
-  background-color: #4c51bf;
-}
-
-.execute-button:disabled {
-  background-color: #a0aec0;
-  cursor: not-allowed;
-}
-
 /* Media queries for responsive design */
 @media (max-width: 768px) {
   .prefund-controls {
@@ -2137,5 +2149,21 @@
   
   .setup-steps {
     gap: 24px;
+  }
+  
+  .alert-content {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .alert-icon {
+    margin-right: 0;
+    margin-bottom: 0.5rem;
+  }
+  
+  .setup-button {
+    margin-left: 0;
+    margin-top: 0.5rem;
+    width: 100%;
   }
 }

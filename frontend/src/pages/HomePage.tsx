@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAccount } from 'wagmi'; // Using wagmi's useAccount hook
+import { useAccount } from 'wagmi';
 import ActiveLotteries from '../components/ActiveLotteries';
 import LotteryDetails from '../components/LotteryDetails';
 import TicketPurchase from '../components/TicketPurchase';
 import SessionKeyModal from '../components/SessionKeyModal';
-import useWagmiWallet from '../hooks/useWagmiWallet'; // Using our new wagmi wallet hook
+import WalletPrefundModal from '../components/WalletPrefundModal'; // Import our new component
+import useWagmiWallet from '../hooks/useWagmiWallet';
+import useUserOp from '../hooks/useUserOp'; // Import useUserOp
 import useTokens from '../hooks/useTokens';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
 
 /**
  * Home page of the application
- * Updated to use wagmi hooks
+ * Updated to handle wallet prefunding requirements
  */
 const HomePage = () => {
   const navigate = useNavigate();
@@ -20,6 +22,15 @@ const HomePage = () => {
   // Using wagmi hooks
   const { address, isConnected } = useAccount();
   const { isDevelopmentMode } = useWagmiWallet();
+  
+  // Add useUserOp to check for prefunding needs
+  const { 
+    aaWalletAddress, 
+    isDeployed,
+    needsNeroTokens,
+    walletNeedsPrefunding,
+    checkAAWalletPrefunding
+  } = useUserOp();
   
   // Using other custom hooks
   const { 
@@ -50,9 +61,22 @@ const HomePage = () => {
   const [selectedLottery, setSelectedLottery] = useState(null);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [isSessionKeyModalOpen, setIsSessionKeyModalOpen] = useState(false);
+  const [isPrefundModalOpen, setIsPrefundModalOpen] = useState(false); // Add state for prefund modal
   const [ticketQuantity, setTicketQuantity] = useState(1);
   const [error, setError] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  
+  // Check if wallet needs prefunding when AA wallet address is available
+  useEffect(() => {
+    if (aaWalletAddress && !isDeployed) {
+      checkAAWalletPrefunding().then(isPrefunded => {
+        // If not prefunded and not already showing the modal, show it
+        if (!isPrefunded && !isPrefundModalOpen) {
+          setIsPrefundModalOpen(true);
+        }
+      }).catch(console.error);
+    }
+  }, [aaWalletAddress, isDeployed, checkAAWalletPrefunding, isPrefundModalOpen]);
   
   // Log component mount and lottery state
   useEffect(() => {
@@ -69,7 +93,6 @@ const HomePage = () => {
     }
   }, [activeLotteries, selectedLottery]);
 
-  
   // Combine errors from different hooks
   useEffect(() => {
     const currentError = lotteriesError || tokensError || sessionKeyError;
@@ -82,7 +105,6 @@ const HomePage = () => {
   
   /**
    * Select a lottery
-   * @param {Object} lottery - The lottery to select
    */
   const handleSelectLottery = (lottery) => {
     setSelectedLottery(lottery);
@@ -90,9 +112,15 @@ const HomePage = () => {
   
   /**
    * Open ticket purchase modal
+   * Check if prefunding is needed first
    */
   const handleOpenTicketModal = () => {
-    setIsTicketModalOpen(true);
+    // Check if prefunding is needed before opening ticket modal
+    if (!isDeployed || needsNeroTokens || walletNeedsPrefunding) {
+      setIsPrefundModalOpen(true);
+    } else {
+      setIsTicketModalOpen(true);
+    }
   };
   
   /**
@@ -107,7 +135,12 @@ const HomePage = () => {
    * Open session key modal
    */
   const handleOpenSessionKeyModal = () => {
-    setIsSessionKeyModalOpen(true);
+    // Check if prefunding is needed before creating session key
+    if (!isDeployed || needsNeroTokens || walletNeedsPrefunding) {
+      setIsPrefundModalOpen(true);
+    } else {
+      setIsSessionKeyModalOpen(true);
+    }
   };
   
   /**
@@ -118,8 +151,23 @@ const HomePage = () => {
   };
   
   /**
+   * Close prefund modal
+   */
+  const handleClosePrefundModal = () => {
+    setIsPrefundModalOpen(false);
+  };
+  
+  /**
+   * Handle prefund completion
+   */
+  const handlePrefundComplete = () => {
+    setIsPrefundModalOpen(false);
+    // After prefunding is complete, proceed with the original action
+    // This could be opening the ticket modal or other actions
+  };
+  
+  /**
    * Change ticket quantity
-   * @param {number} quantity - New ticket quantity
    */
   const handleTicketQuantityChange = (quantity) => {
     setTicketQuantity(quantity);
@@ -127,9 +175,14 @@ const HomePage = () => {
   
   /**
    * Purchase tickets
-   * @param {Object} token - Token to use for payment
    */
   const handlePurchaseTickets = async ({ token, paymentType }) => {
+    // Check if prefunding is needed before proceeding to payment
+    if (!isDeployed || needsNeroTokens || walletNeedsPrefunding) {
+      setIsPrefundModalOpen(true);
+      return;
+    }
+    
     navigate('/payment', {
       state: {
         lottery: selectedLottery,
@@ -143,7 +196,6 @@ const HomePage = () => {
   
   /**
    * Create session key
-   * @param {number} duration - Duration in seconds
    */
   const handleCreateSessionKey = async (duration) => {
     try {
@@ -168,7 +220,6 @@ const HomePage = () => {
     }
   };
 
- 
   // Display error state
   if (error) {
     return (
@@ -234,7 +285,6 @@ const HomePage = () => {
     );
   }
   
-
   // Regular display with active lotteries
   return (
     <div className="home-page">
@@ -278,6 +328,25 @@ const HomePage = () => {
         </div>
       </div>
       
+      {/* Show wallet setup alert if needed */}
+      {(needsNeroTokens || walletNeedsPrefunding) && !isPrefundModalOpen && (
+        <div className="wallet-setup-alert">
+          <div className="alert-content">
+            <div className="alert-icon">⚠️</div>
+            <div className="alert-message">
+              <strong>Wallet Setup Required</strong>
+              <p>Your smart contract wallet needs to be set up before you can make transactions.</p>
+            </div>
+            <button 
+              className="setup-button"
+              onClick={() => setIsPrefundModalOpen(true)}
+            >
+              Set Up Wallet
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Modals */}
       {isTicketModalOpen && selectedLottery && (
         <TicketPurchase
@@ -299,6 +368,15 @@ const HomePage = () => {
           onClose={handleCloseSessionKeyModal}
           isLoading={sessionKeyLoading}
           isDevelopmentMode={isDevelopmentMode}
+        />
+      )}
+      
+      {/* Prefund Modal */}
+      {isPrefundModalOpen && (
+        <WalletPrefundModal
+          isOpen={isPrefundModalOpen}
+          onClose={handleClosePrefundModal}
+          onComplete={handlePrefundComplete}
         />
       )}
     </div>
