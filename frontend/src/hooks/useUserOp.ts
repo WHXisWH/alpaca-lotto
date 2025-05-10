@@ -142,53 +142,36 @@ const useUserOp = () => {
     if (!builder || !client) {
       throw new Error('SDK not initialized');
     }
- 
+  
     setIsLoading(true);
     setError(null);
-    
+  
     try {
-      console.log("Attempting to deploy AA wallet...");
+      console.log("🚀 Attempting to deploy AA wallet...");
       builder.resetOp && builder.resetOp();
-      
-      // Check if wallet is prefunded first
-      const isPrefunded = await checkAAWalletPrefunding();
-      
-      // If not prefunded, attempt to prefund automatically
-      if (!isPrefunded) {
-        try {
-          console.log("Wallet needs prefunding, attempting automatic prefunding...");
-          await prefundAAWallet("0.05");
-        } catch (prefundError) {
-          setError("Prefunding required: " + prefundError.message);
-          throw new Error("Your wallet needs to be prefunded with NERO tokens first. Please use the 'Add NERO' button.");
-        }
-      }
-      
-      // Use a minimal transaction to deploy
+  
+  
+      // Trigger a minimal “empty” UserOp to force contract deployment
       builder.execute(ethers.constants.AddressZero, 0, "0x");
-      
-      // Try to send the operation
-      const result = await client.sendUserOperation(builder);
-      const receipt = await result.wait();
-      console.log("AA wallet deployed successfully", receipt);
-      
-      // Update deployment status
+  
+
+      const userOpResponse = await client.sendUserOperation(builder);
+      const receipt = await userOpResponse.wait();
+  
+      console.log("✅ AA wallet deployed:", receipt.transactionHash);
       setIsDeployed(true);
       setNeedsNeroTokens(false);
-      setIsLoading(false);
-      
       return receipt;
-    } catch (err) {
-      console.error("Error deploying AA wallet:", err);
-      setIsLoading(false);
-      
-      // Handle specific error cases
-      if (err.message?.includes('AA21')) {
+    } catch (err: any) {
+      console.error("❌ Failed to deploy AA wallet:", err);
+
+      if (err.message?.includes('AA21') || err.message?.includes('funds')) {
         setNeedsNeroTokens(true);
-        throw new Error("Your wallet needs NERO tokens to deploy a smart contract wallet. Please add some NERO tokens to continue.");
+        throw new Error("Not enough NERO balance to deploy the AA wallet. Please deposit funds into the EntryPoint contract first.");
       }
-      
       throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -447,7 +430,7 @@ const useUserOp = () => {
       builder.resetOp && builder.resetOp();
       
       // Force Type 1 for better compatibility if Type 0 was selected
-      const finalPaymentType = paymentType === 0 ? 1 : paymentType;
+      const finalPaymentType = paymentType;
       const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
       
       // Ensure token is approved for Paymaster with direct EOA approach
@@ -594,7 +577,7 @@ const useUserOp = () => {
       builder.resetOp && builder.resetOp();
       
       // Force Type 1 payment since Type 0 may not be supported
-      const finalPaymentType = paymentType === 0 ? 1 : paymentType;
+      const finalPaymentType = paymentType;
       const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
       
       // Ensure token is approved for Paymaster using direct EOA approach
