@@ -1972,198 +1972,263 @@
 }
 
 
-/* Wallet Prefund Modal Styles */
-.wallet-prefund-modal {
-  background-color: white;
-  border-radius: var(--border-radius);
-  width: 100%;
-  max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-}
-
-/* Wallet Setup Alert */
-.wallet-setup-alert {
-  margin-bottom: 1.5rem;
-  background-color: #fff8e1;
-  border: 1px solid #ffe082;
-  border-radius: var(--border-radius);
-  padding: 1rem;
-}
-
-.alert-content {
+/* Wallet status banner */
+.wallet-status-banner {
   display: flex;
   align-items: center;
-}
-
-.alert-icon {
-  font-size: 1.5rem;
-  margin-right: 1rem;
-  color: #f57c00;
-}
-
-.alert-message {
-  flex: 1;
-}
-
-.alert-message strong {
-  display: block;
-  margin-bottom: 0.25rem;
-  color: #f57c00;
-}
-
-.setup-button {
-  background-color: #f57c00;
-  color: white;
-  padding: 0.5rem 1rem;
-  border-radius: var(--border-radius);
-  margin-left: 1rem;
-  white-space: nowrap;
-}
-
-.setup-button:hover {
-  background-color: #e65100;
-}
-
-/* Prefund Modal Specific Styles */
-.warning-message {
-  background-color: #fff8e1;
+  padding: 0.75rem 1rem;
+  background-color: #fff8e6;
   border-left: 4px solid #ffc107;
-  padding: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 1.5rem;
   border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.warning-message strong {
-  display: block;
-  font-size: 16px;
-  margin-bottom: 4px;
-  color: #b7791f;
+.wallet-status-banner .banner-icon {
+  margin-right: 0.75rem;
+  font-size: 1.25rem;
 }
 
-.warning-message p {
-  margin: 0;
-  color: #4a5568;
-  font-size: 14px;
+.wallet-status-banner .banner-text {
+  flex: 1;
+  font-weight: 500;
 }
 
-.setup-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.step {
-  display: flex;
-  gap: 12px;
-}
-
-.step-number {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background-color: #3a6ea5;
+.wallet-status-banner .deploy-button {
+  padding: 0.5rem 1rem;
+  background-color: #4a6bff;
   color: white;
-  border-radius: 50%;
-  font-weight: bold;
-  flex-shrink: 0;
-}
-
-.step-content {
-  flex: 1;
-}
-
-.step-content h4 {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-  color: #2d3748;
-}
-
-.step-content p {
-  margin: 0 0 12px 0;
-  color: #4a5568;
-  font-size: 14px;
-}
-
-.prefund-controls {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.prefund-input {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid #cbd5e0;
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-.prefund-button, .deploy-button {
-  padding: 8px 16px;
   border: none;
   border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.wallet-status-banner .deploy-button:hover {
+  background-color: #3a5ae8;
+}
+
+.wallet-status-banner .deploy-button:disabled {
+  background-color: #9eaeff;
+  cursor: not-allowed;
+}
+
+/* Full wallet status component */
+.aa-wallet-status {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.aa-wallet-status .status-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.aa-wallet-status .status-icon {
+  font-size: 1.5rem;
+  margin-right: 1rem;
+}
+
+.aa-wallet-status h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #333;
+}
+
+.aa-wallet-status .status-content p {
+  color: #666;
+  margin-bottom: 1.5rem;
+}
+
+.aa-wallet-status .setup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.aa-wallet-status .action-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.aa-wallet-status .action-description {
+  flex: 1;
+  margin: 0;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.aa-wallet-status .advanced-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.aa-wallet-status .section-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.aa-wallet-status .section-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #888;
+}
+
+.aa-wallet-status .prefund-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.aa-wallet-status .prefund-input {
+  width: 5rem;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.aa-wallet-status .status-error {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background-color: #fef0f0;
+  border-left: 3px solid #e53e3e;
+  color: #c53030;
+  border-radius: 4px;
+}
+
+.aa-wallet-status .status-success {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background-color: #f0fff4;
+  border-left: 3px solid #48bb78;
+  color: #2f855a;
+  border-radius: 4px;
+}
+
+/* Primary and secondary buttons */
+.primary-button {
+  padding: 0.75rem 1.5rem;
+  background-color: #4a6bff;
   color: white;
+  border: none;
+  border-radius: 4px;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
-.prefund-button {
-  background-color: #3a6ea5;
+.primary-button:hover {
+  background-color: #3a5ae8;
 }
 
-.prefund-button:hover {
-  background-color: #204e75;
-}
-
-.deploy-button {
-  background-color: #28a745;
-  padding: 10px 20px;
-}
-
-.deploy-button:hover {
-  background-color: #218838;
-}
-
-.prefund-button:disabled, .deploy-button:disabled {
-  background-color: #a0aec0;
+.primary-button:disabled {
+  background-color: #9eaeff;
   cursor: not-allowed;
 }
 
-.prefund-note {
-  font-size: 12px;
-  color: #718096;
-  margin-top: 4px;
+.secondary-button {
+  padding: 0.75rem 1.5rem;
+  background-color: #f0f2f5;
+  color: #4a5568;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
-/* Media queries for responsive design */
-@media (max-width: 768px) {
-  .prefund-controls {
-    flex-direction: column;
-  }
-  
-  .setup-steps {
-    gap: 24px;
-  }
-  
-  .alert-content {
-    flex-direction: column;
-    text-align: center;
-  }
-  
-  .alert-icon {
-    margin-right: 0;
-    margin-bottom: 0.5rem;
-  }
-  
-  .setup-button {
-    margin-left: 0;
-    margin-top: 0.5rem;
-    width: 100%;
-  }
+.secondary-button:hover {
+  background-color: #e2e8f0;
+}
+
+.secondary-button:disabled {
+  background-color: #f8fafc;
+  color: #a0aec0;
+  cursor: not-allowed;
+}
+
+/* Deployment success message */
+.deployment-success {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  background-color: #f0fff4;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.deployment-success .success-icon {
+  font-size: 1.25rem;
+  margin-right: 0.75rem;
+  color: #48bb78;
+}
+
+.deployment-success .success-message {
+  color: #2f855a;
+  font-weight: 500;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Wallet deployment prompt in batch operations */
+.wallet-deployment-prompt {
+  padding: 1rem;
+  background-color: #fff8e6;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.wallet-deployment-prompt .prompt-message {
+  font-weight: 500;
+  color: #805a00;
+}
+
+.wallet-deployment-prompt .deploy-button {
+  align-self: flex-start;
+  padding: 0.5rem 1rem;
+  background-color: #f59e0b;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.wallet-deployment-prompt .deploy-button:hover {
+  background-color: #d97706;
+}
+
+.wallet-deployment-prompt .deploy-button:disabled {
+  background-color: #fcd34d;
+  cursor: not-allowed;
+}
+
+/* Error message styling */
+.error-message {
+  padding: 0.75rem;
+  margin: 1rem 0;
+  background-color: #fef0f0;
+  border-left: 3px solid #e53e3e;
+  color: #c53030;
+  border-radius: 4px;
+}
+
+/* Wallet status in details panel */
+.wallet-status-panel {
+  margin-top: 2rem;
 }

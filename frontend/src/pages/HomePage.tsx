@@ -5,47 +5,16 @@ import ActiveLotteries from '../components/ActiveLotteries';
 import LotteryDetails from '../components/LotteryDetails';
 import TicketPurchase from '../components/TicketPurchase';
 import SessionKeyModal from '../components/SessionKeyModal';
-import WalletPrefundModal from '../components/WalletPrefundModal';
+import AAWalletStatus from '../components/AAWalletStatus';
 import useWagmiWallet from '../hooks/useWagmiWallet';
 import useUserOp from '../hooks/useUserOp'; 
 import useTokens from '../hooks/useTokens';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
 
-
-function WalletSetupPrompt({ isVisible, onSetup, onSkip }) {
-  if (!isVisible) return null;
-  
-  return (
-    <div className="wallet-setup-prompt">
-      <div className="prompt-content">
-        <div className="prompt-icon">ℹ️</div>
-        <div className="prompt-message">
-          <p><strong>Would you like to set up a smart contract wallet?</strong></p>
-          <p>This can improve transaction reliability but is not required.</p>
-        </div>
-        <div className="prompt-actions">
-          <button 
-            className="setup-button"
-            onClick={onSetup}
-          >
-            Set Up Wallet
-          </button>
-          <button 
-            className="skip-button"
-            onClick={onSkip}
-          >
-            Skip
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /**
  * Home page of the application
- * Updated to handle wallet prefunding requirements
+ * Updated with simplified wallet deployment flow
  */
 const HomePage = () => {
   const navigate = useNavigate();
@@ -54,14 +23,13 @@ const HomePage = () => {
   const { address, isConnected } = useAccount();
   const { isDevelopmentMode } = useWagmiWallet();
   
-  // Add useUserOp to check for prefunding needs
+  // Using user operation hook
   const { 
     aaWalletAddress, 
     isDeployed,
     needsNeroTokens,
-    walletNeedsPrefunding,
-    executeTicketPurchase, 
-    checkAAWalletPrefunding
+    executeTicketPurchase,
+    deployOrWarn
   } = useUserOp();
   
   // Using other custom hooks
@@ -93,26 +61,10 @@ const HomePage = () => {
   const [selectedLottery, setSelectedLottery] = useState(null);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [isSessionKeyModalOpen, setIsSessionKeyModalOpen] = useState(false);
-  const [isPrefundModalOpen, setIsPrefundModalOpen] = useState(false); 
   const [ticketQuantity, setTicketQuantity] = useState(1);
   const [error, setError] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
-  const [showWalletSetupPrompt, setShowWalletSetupPrompt] = useState(false);
-  
-  // Check if wallet needs prefunding when AA wallet address is available
-  useEffect(() => {
-    if (aaWalletAddress && !isDeployed) {
-      checkAAWalletPrefunding().then(isPrefunded => {
-        const shouldShowBanner = !isPrefunded && 
-                                localStorage.getItem('skipWalletSetup') !== 'true' && 
-                                !isPrefundModalOpen;
-        
-        setShowWalletSetupPrompt(shouldShowBanner);
-      }).catch(console.error);
-    } else {
-      setShowWalletSetupPrompt(false);
-    }
-  }, [aaWalletAddress, isDeployed, checkAAWalletPrefunding, isPrefundModalOpen]);
+  const [deploymentSuccess, setDeploymentSuccess] = useState(false);
   
   // Log component mount and lottery state
   useEffect(() => {
@@ -139,6 +91,16 @@ const HomePage = () => {
     }
   }, [lotteriesError, tokensError, sessionKeyError]);
   
+  // Reset deployment success message after 5 seconds
+  useEffect(() => {
+    if (deploymentSuccess) {
+      const timer = setTimeout(() => {
+        setDeploymentSuccess(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [deploymentSuccess]);
+  
   /**
    * Select a lottery
    */
@@ -148,14 +110,20 @@ const HomePage = () => {
   
   /**
    * Open ticket purchase modal
-   * Check if prefunding is needed first
+   * First check if wallet is deployed
    */
-  const handleOpenTicketModal = () => {
-    // Check if prefunding is needed before opening ticket modal
-    if (!isDeployed || needsNeroTokens || walletNeedsPrefunding) {
-      setIsPrefundModalOpen(true);
-    } else {
+  const handleOpenTicketModal = async () => {
+    try {
+      // Check if wallet is deployed and deploy if needed
+      if (!isDeployed) {
+        if (window.confirm('Smart contract wallet is not deployed. Would you like to deploy it first?')) {
+          await deployOrWarn();
+          setDeploymentSuccess(true);
+        }
+      }
       setIsTicketModalOpen(true);
+    } catch (err) {
+      setError(err.message || 'Failed to deploy wallet');
     }
   };
   
@@ -169,13 +137,20 @@ const HomePage = () => {
   
   /**
    * Open session key modal
+   * First check if wallet is deployed
    */
-  const handleOpenSessionKeyModal = () => {
-    // Check if prefunding is needed before creating session key
-    if (!isDeployed || needsNeroTokens || walletNeedsPrefunding) {
-      setIsPrefundModalOpen(true);
-    } else {
+  const handleOpenSessionKeyModal = async () => {
+    try {
+      // Check if wallet is deployed and deploy if needed
+      if (!isDeployed) {
+        if (window.confirm('Smart contract wallet is not deployed. Would you like to deploy it first?')) {
+          await deployOrWarn();
+          setDeploymentSuccess(true);
+        }
+      }
       setIsSessionKeyModalOpen(true);
+    } catch (err) {
+      setError(err.message || 'Failed to deploy wallet');
     }
   };
   
@@ -184,22 +159,6 @@ const HomePage = () => {
    */
   const handleCloseSessionKeyModal = () => {
     setIsSessionKeyModalOpen(false);
-  };
-  
-  /**
-   * Close prefund modal
-   */
-  const handleClosePrefundModal = () => {
-    setIsPrefundModalOpen(false);
-  };
-  
-  /**
-   * Handle prefund completion
-   */
-  const handlePrefundComplete = () => {
-    setIsPrefundModalOpen(false);
-    // After prefunding is complete, proceed with the original action
-    // This could be opening the ticket modal or other actions
   };
   
   /**
@@ -214,59 +173,26 @@ const HomePage = () => {
    */
   const handlePurchaseTickets = async ({ token, paymentType }) => {
     try {
-      const result = await executeTicketPurchase({
+      // Try to purchase tickets, deployOrWarn will be called internally
+      const txHash = await executeTicketPurchase({
         lotteryId: selectedLottery.id,
         tokenAddress: token.address,
         quantity: ticketQuantity,
         paymentType,
         paymentToken: token.address,
-        useSessionKey: hasActiveSessionKey,
-        skipDeploymentCheck: true 
+        useSessionKey: hasActiveSessionKey
       });
       
-      if (result && typeof result === 'object' && result.needsDeployment) {
-        if (window.confirm(result.message || "Smart contract wallet not deployed. Would you like to deploy it now?")) {
-          setIsPrefundModalOpen(true);
-          return;
-        } else {
-
-          localStorage.setItem('skipWalletSetup', 'true');
-          
-          const retryResult = await executeTicketPurchase({
-            lotteryId: selectedLottery.id,
-            tokenAddress: token.address,
-            quantity: ticketQuantity,
-            paymentType,
-            paymentToken: token.address,
-            useSessionKey: hasActiveSessionKey,
-            skipDeploymentCheck: true
-          });
-          
-          if (typeof retryResult === 'string') {
-            navigate('/payment', {
-              state: {
-                lottery: selectedLottery,
-                token,
-                paymentType,
-                quantity: ticketQuantity,
-                txHash: retryResult
-              },
-            });
-            handleCloseTicketModal();
-          }
-        }
-      } else if (typeof result === 'string') {
-        navigate('/payment', {
-          state: {
-            lottery: selectedLottery,
-            token,
-            paymentType,
-            quantity: ticketQuantity,
-            txHash: result
-          },
-        });
-        handleCloseTicketModal();
-      }
+      navigate('/payment', {
+        state: {
+          lottery: selectedLottery,
+          token,
+          paymentType,
+          quantity: ticketQuantity,
+          txHash
+        },
+      });
+      handleCloseTicketModal();
     } catch (err) {
       console.error('Purchase error:', err);
       setError(err.message || 'Failed to purchase tickets');
@@ -367,6 +293,19 @@ const HomePage = () => {
   // Regular display with active lotteries
   return (
     <div className="home-page">
+      {/* Display AA wallet status banner if not deployed */}
+      {!isDeployed && <AAWalletStatus minimal className="wallet-status-banner" />}
+      
+      {/* Show success message after deployment */}
+      {deploymentSuccess && (
+        <div className="deployment-success">
+          <div className="success-icon">✓</div>
+          <div className="success-message">
+            Smart contract wallet deployed successfully!
+          </div>
+        </div>
+      )}
+      
       <div className="lottery-container">
         <div className="lottery-grid">
           <div className="lottery-list-panel">
@@ -402,20 +341,17 @@ const HomePage = () => {
                   </button>
                 )}
               </div>
+              
+              {/* Show AA wallet status in details panel if not deployed */}
+              {!isDeployed && (
+                <div className="wallet-status-panel">
+                  <AAWalletStatus />
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
-      
-      {/* Show wallet setup alert if needed */}
-      <WalletSetupPrompt
-        isVisible={showWalletSetupPrompt}
-         onSetup={() => setIsPrefundModalOpen(true)}
-         onSkip={() => {
-           localStorage.setItem('skipWalletSetup', 'true');
-           setShowWalletSetupPrompt(false);
-        }}
-      />
       
       {/* Modals */}
       {isTicketModalOpen && selectedLottery && (
@@ -438,15 +374,6 @@ const HomePage = () => {
           onClose={handleCloseSessionKeyModal}
           isLoading={sessionKeyLoading}
           isDevelopmentMode={isDevelopmentMode}
-        />
-      )}
-      
-      {/* Prefund Modal */}
-      {isPrefundModalOpen && (
-        <WalletPrefundModal
-          isOpen={isPrefundModalOpen}
-          onClose={handleClosePrefundModal}
-          onComplete={handlePrefundComplete}
         />
       )}
     </div>

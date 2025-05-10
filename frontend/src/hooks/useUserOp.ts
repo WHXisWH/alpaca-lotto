@@ -1,15 +1,15 @@
+// frontend/src/hooks/useUserOp.ts - Modified with integrated deployment logic
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
 import { Client, Presets } from 'userop';
 import SUPPORTED_TOKENS from '../constants/tokens';
 import paymasterService from '../services/paymasterService';
-import { EntryPointAbi } from '../constants/abi'; // Import the EntryPoint ABI
+import { EntryPointAbi } from '../constants/abi';
 
 async function ensureWalletAccess() {
   try {
     if (typeof window !== 'undefined' && window.ethereum) {
-
       await window.ethereum.request({ method: 'eth_requestAccounts' });
       return true;
     }
@@ -31,7 +31,7 @@ const TOKEN_PAYMASTER_ADDRESS = ethers.utils.getAddress(import.meta.env.VITE_TOK
 
 /**
  * Custom hook for NERO Chain's Account Abstraction functionality
- * Enhanced with prefunding capability
+ * Enhanced with integrated deployment workflow
  */
 const useUserOp = () => {
   const { address, isConnected } = useAccount();
@@ -46,7 +46,6 @@ const useUserOp = () => {
   const [isDevelopmentMode, setIsDevelopmentMode] = useState(false);
   const [needsNeroTokens, setNeedsNeroTokens] = useState(false);
 
-  const [walletNeedsPrefunding, setWalletNeedsPrefunding] = useState(false);
   /**
    * Check if the AA wallet has enough prefunding in the EntryPoint contract
    */
@@ -69,7 +68,6 @@ const useUserOp = () => {
       const hasDeposit = depositInfo && depositInfo.deposit && depositInfo.deposit.gt(0);
       
       // Update state based on deposit check
-      setWalletNeedsPrefunding(!hasDeposit);
       setNeedsNeroTokens(!hasDeposit);
       
       console.log('AA wallet deposit info:', depositInfo);
@@ -137,7 +135,7 @@ const useUserOp = () => {
   };
 
   /**
-   * Attempt to deploy AA wallet with proper error handling
+   * Deploy AA wallet with integrated prefunding if needed
    */
   const deployAAWallet = async () => {
     if (!builder || !client) {
@@ -153,9 +151,16 @@ const useUserOp = () => {
       
       // Check if wallet is prefunded first
       const isPrefunded = await checkAAWalletPrefunding();
+      
+      // If not prefunded, attempt to prefund automatically
       if (!isPrefunded) {
-        setNeedsNeroTokens(true);
-        throw new Error("Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract. Please use the 'Prefund Wallet' button first.");
+        try {
+          console.log("Wallet needs prefunding, attempting automatic prefunding...");
+          await prefundAAWallet("0.05");
+        } catch (prefundError) {
+          setError("Prefunding required: " + prefundError.message);
+          throw new Error("Your wallet needs to be prefunded with NERO tokens first. Please use the 'Add NERO' button.");
+        }
       }
       
       // Use a minimal transaction to deploy
@@ -183,6 +188,51 @@ const useUserOp = () => {
       }
       
       throw err;
+    }
+  };
+
+  /**
+   * Main deployment function with warning
+   * This serves as the single entry point for deployment checks
+   */
+  const deployOrWarn = async () => {
+    // First check if already deployed
+    if (isDeployed) return true;
+    
+    // Otherwise attempt deployment
+    await deployAAWallet();
+    return true;
+  };
+
+  /**
+   * Check if token approval is needed
+   */
+  const checkTokenApproval = async (tokenAddress) => {
+    if (!tokenAddress || !aaWalletAddress || isDevelopmentMode) return true;
+    
+    try {
+      // Normalize addresses
+      const normalizedTokenAddress = ethers.utils.getAddress(tokenAddress);
+      const normalizedPaymasterAddress = ethers.utils.getAddress(TOKEN_PAYMASTER_ADDRESS);
+      const normalizedAAWalletAddress = ethers.utils.getAddress(aaWalletAddress);
+      
+      // Create provider and token contract
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      
+      const tokenContract = new ethers.Contract(
+        normalizedTokenAddress,
+        ['function allowance(address owner, address spender) view returns (uint256)'],
+        provider
+      );
+      
+      // Check current allowance
+      const allowance = await tokenContract.allowance(normalizedAAWalletAddress, normalizedPaymasterAddress);
+      
+      // Return true if allowance is sufficient
+      return allowance.gte(ethers.constants.MaxUint256.div(2));
+    } catch (error) {
+      console.error('Error checking token approval:', error);
+      return false;
     }
   };
 
@@ -224,18 +274,8 @@ const useUserOp = () => {
       if (code === '0x') {
         console.log('AA wallet not deployed yet, deploying first...');
         
-        // Check if prefunded
-        const isPrefunded = await checkAAWalletPrefunding();
-        if (!isPrefunded) {
-          setNeedsNeroTokens(true);
-          throw new Error("Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract. Please use the 'Prefund Wallet' button first.");
-        }
-        
-        const deploySuccess = await deployAAWallet();
-        if (!deploySuccess) {
-          console.warn('Failed to deploy AA wallet');
-          throw new Error('Failed to deploy smart contract wallet. Please try again later.');
-        }
+        // Ensure wallet is deployed
+        await deployOrWarn();
       }
       
       console.log('Insufficient allowance, approving token for Paymaster...');
@@ -293,38 +333,6 @@ const useUserOp = () => {
   };
 
   /**
-   * Check if token approval is needed
-   */
-  const checkTokenApproval = async (tokenAddress) => {
-    if (!tokenAddress || !aaWalletAddress || isDevelopmentMode) return true;
-    
-    try {
-      // Normalize addresses
-      const normalizedTokenAddress = ethers.utils.getAddress(tokenAddress);
-      const normalizedPaymasterAddress = ethers.utils.getAddress(TOKEN_PAYMASTER_ADDRESS);
-      const normalizedAAWalletAddress = ethers.utils.getAddress(aaWalletAddress);
-      
-      // Create provider and token contract
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      
-      const tokenContract = new ethers.Contract(
-        normalizedTokenAddress,
-        ['function allowance(address owner, address spender) view returns (uint256)'],
-        provider
-      );
-      
-      // Check current allowance
-      const allowance = await tokenContract.allowance(normalizedAAWalletAddress, normalizedPaymasterAddress);
-      
-      // Return true if allowance is sufficient
-      return allowance.gte(ethers.constants.MaxUint256.div(2));
-    } catch (error) {
-      console.error('Error checking token approval:', error);
-      return false;
-    }
-  };
-
-  /**
    * Initialize the Account Abstraction SDK
    */
   const initSDK = useCallback(async () => {
@@ -345,13 +353,13 @@ const useUserOp = () => {
     try {
       if (typeof window !== 'undefined' && window.ethereum) {
         try {
-
+          // Ensure wallet access permissions first
           await ensureWalletAccess();
           
           const provider = new ethers.providers.Web3Provider(window.ethereum);
           const signer = provider.getSigner();
           
-
+          // Get EOA address
           const signerAddress = await signer.getAddress();
           
           const aaClient = await Client.init(NERO_RPC_URL, {
@@ -408,7 +416,7 @@ const useUserOp = () => {
   }, [isConnected, checkAAWalletPrefunding]);  
 
   /**
-   * Execute a ticket purchase operation with improved error handling
+   * Execute a ticket purchase operation with integrated deployment check
    */
   const executeTicketPurchase = useCallback(async ({
     lotteryId,
@@ -442,6 +450,11 @@ const useUserOp = () => {
         }
       }
       
+      // Make sure the wallet is deployed if not skipping check
+      if (!skipDeploymentCheck && !isDeployed) {
+        await deployOrWarn();
+      }
+      
       const contractInterface = new ethers.utils.Interface([
         'function purchaseTickets(uint256 _lotteryId, address _tokenAddress, uint256 _quantity) returns (bool)'
       ]);
@@ -453,28 +466,13 @@ const useUserOp = () => {
       
       builder.resetOp && builder.resetOp();
       
-
+      // Force Type 1 for better compatibility if Type 0 was selected
       const finalPaymentType = paymentType === 0 ? 1 : paymentType;
       const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
       
-
-      if (!skipDeploymentCheck && !isDeployed) {
-        const isPrefunded = await checkAAWalletPrefunding();
-        
-        if (!isPrefunded) {
-          setNeedsNeroTokens(true);
-
-          setIsLoading(false);
-          return {
-            success: false,
-            needsDeployment: true,
-            message: "Smart contract wallet not deployed. You can continue without deployment, but transactions may be more likely to fail."
-          };
-        }
-      }
-      
+      // Ensure token is approved for Paymaster (if needed)
       if (finalPaymentType !== 0) {
-        await ensurePaymasterApproval(finalPaymentToken);
+        await ensurePaymasterApproval(finalPaymentToken, builder);
       }
       
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
@@ -505,21 +503,6 @@ const useUserOp = () => {
         builder.setOp(userOp);
       } catch (sponsorError) {
         console.error("Error sponsoring operation:", sponsorError);
-        
-
-        if (sponsorError.message?.includes('account not deployed') || 
-            sponsorError.message?.includes('AA20')) {
-          
-          setIsLoading(false);
-
-          return {
-            success: false,
-            needsDeployment: true,
-            error: sponsorError.message,
-            message: "Smart contract wallet not deployed. Would you like to deploy it now?"
-          };
-        }
-        
         throw sponsorError;
       }
       
@@ -545,25 +528,6 @@ const useUserOp = () => {
     } catch (err) {
       console.error('Error executing ticket purchase:', err);
       
-
-      if (err.message?.includes('prefund') ||
-          err.message?.includes('NERO tokens') ||
-          err.message?.includes('AA20') ||
-          err.message?.includes('AA21')) {
-        
-        setWalletNeedsPrefunding(true);
-        setNeedsNeroTokens(true);
-        setError("Smart contract wallet not deployed. You can continue without deployment, but transactions may be more likely to fail.");
-        
-        setIsLoading(false);
-        return {
-          success: false,
-          needsDeployment: true,
-          error: err.message,
-          message: "Smart contract wallet not deployed. Would you like to deploy it now?"
-        };
-      }
-      
       let errorMsg = err.message || 'Failed to purchase tickets';
       
       if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
@@ -573,15 +537,7 @@ const useUserOp = () => {
       } else if (errorMsg.includes('insufficient balance')) {
         errorMsg = 'Insufficient token balance for gas payment.';
       } else if (errorMsg.includes('account not deployed') || errorMsg.includes('AA20')) {
-        errorMsg = 'Smart contract wallet not deployed. You can continue without deployment, but transactions may be more likely to fail.';
-        
-        setIsLoading(false);
-        return {
-          success: false,
-          needsDeployment: true,
-          error: err.message,
-          message: "Smart contract wallet not deployed. Would you like to deploy it now?"
-        };
+        errorMsg = 'Smart contract wallet not deployed. Please deploy your wallet first.';
       } else if (errorMsg.includes('AA21')) {
         errorMsg = 'Insufficient funds to deploy your smart wallet.';
       }
@@ -590,33 +546,21 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, initSDK, isDevelopmentMode, address, isDeployed, checkAAWalletPrefunding, ensurePaymasterApproval]);
+  }, [client, builder, initSDK, isDevelopmentMode, address, isDeployed, deployOrWarn, ensurePaymasterApproval]);
 
   /**
-   * Execute a batch ticket purchase operation
+   * Execute a batch ticket purchase operation with integrated deployment check
    */
   const executeBatchPurchase = useCallback(async ({ 
     selections, 
     paymentType = 1,
     paymentToken = null,
     useSessionKey = false,
-    skipApprovalCheck = false
+    skipDeploymentCheck = false
   }) => {
     setIsLoading(true);
     setError(null);
-    if (!isDeployed) {
-      const isPrefunded = await checkAAWalletPrefunding();
-      if (!isPrefunded) {
-        setWalletNeedsPrefunding(true);
-        setNeedsNeroTokens(true);
-        setIsLoading(false);
-        return {
-          success: false,
-          needsPrefunding: true,
-          error: "Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract."
-        };
-      }
-    } 
+    
     try {
       // Validate token address for Types 1 & 2
       if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
@@ -644,6 +588,11 @@ const useUserOp = () => {
         }
       }
       
+      // Make sure wallet is deployed if not skipping check
+      if (!skipDeploymentCheck && !isDeployed) {
+        await deployOrWarn();
+      }
+      
       // Create contract interface
       const contractInterface = new ethers.utils.Interface([
         'function batchPurchaseTickets(uint256[] _lotteryIds, address[] _tokenAddresses, uint256[] _quantities) returns (bool)'
@@ -667,17 +616,8 @@ const useUserOp = () => {
       const finalPaymentType = paymentType === 0 ? 1 : paymentType;
       const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
       
-      // Check if the wallet is deployed
-      if (!isDeployed) {
-        const isPrefunded = await checkAAWalletPrefunding();
-        if (!isPrefunded) {
-          setNeedsNeroTokens(true);
-          throw new Error("Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract. Please use the 'Prefund Wallet' button first.");
-        }
-      }
-      
-      // Ensure token is approved for Paymaster (unless explicitly skipped)
-      if (finalPaymentType !== 0 && !skipApprovalCheck) {
+      // Ensure token is approved for Paymaster (if needed)
+      if (finalPaymentType !== 0) {
         await ensurePaymasterApproval(finalPaymentToken, builder);
       }
       
@@ -712,12 +652,6 @@ const useUserOp = () => {
         builder.setOp(userOp);
       } catch (sponsorError) {
         console.error("Error sponsoring batch operation:", sponsorError);
-        
-        // If the account is not deployed, we need to deploy it first
-        if (sponsorError.message?.includes('account not deployed')) {
-          throw new Error("Smart contract wallet not deployed. Please add some NERO tokens to your wallet to deploy it.");
-        }
-        
         throw sponsorError;
       }
       
@@ -748,7 +682,7 @@ const useUserOp = () => {
       } else if (errorMsg.includes('insufficient balance')) {
         errorMsg = 'Insufficient token balance for gas payment.';
       } else if (errorMsg.includes('account not deployed') || errorMsg.includes('AA20')) {
-        errorMsg = 'Smart contract wallet not deployed. Please add some NERO tokens to your wallet to deploy it.';
+        errorMsg = 'Smart contract wallet not deployed. Please deploy your wallet first.';
       } else if (errorMsg.includes('AA21')) {
         errorMsg = 'Insufficient funds to deploy your smart wallet. Please add some NERO tokens to continue.';
       }
@@ -757,7 +691,7 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, initSDK, isDevelopmentMode, ensurePaymasterApproval, isDeployed, checkAAWalletPrefunding]);
+  }, [client, builder, initSDK, isDevelopmentMode, ensurePaymasterApproval, isDeployed, deployOrWarn]);
 
   // Automatically initialize SDK when wallet is connected
   useEffect(() => {
@@ -768,6 +702,7 @@ const useUserOp = () => {
     }
   }, [isConnected, initSDK]);
 
+  // Check prefunding status when wallet address changes
   useEffect(() => {
     if (aaWalletAddress && !isDeployed) {
       checkAAWalletPrefunding().catch(console.error);
@@ -785,14 +720,14 @@ const useUserOp = () => {
     isDevelopmentMode,
     needsNeroTokens,
     isPrefundingWallet,
-    walletNeedsPrefunding,
     initSDK,
     executeTicketPurchase,
     executeBatchPurchase,
     deployAAWallet,
     prefundAAWallet,
     checkAAWalletPrefunding,
-    checkTokenApproval
+    checkTokenApproval,
+    deployOrWarn
   };
 };
 

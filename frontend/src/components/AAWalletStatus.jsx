@@ -1,0 +1,141 @@
+import React, { useState } from 'react';
+import useUserOp from '../hooks/useUserOp';
+
+/**
+ * Component to display wallet deployment status and provide actions
+ */
+const AAWalletStatus = ({ className = '', minimal = false }) => {
+  const { 
+    isDeployed, 
+    needsNeroTokens,
+    deployAAWallet,
+    prefundAAWallet,
+    isLoading,
+    isPrefundingWallet,
+    error: userOpError
+  } = useUserOp();
+  
+  const [prefundAmount, setPrefundAmount] = useState('0.05');
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  
+  // If wallet is already deployed, don't show anything
+  if (isDeployed) return null;
+  
+  // Handle deployment
+  const handleDeploy = async () => {
+    setError(null);
+    setSuccess(null);
+    
+    try {
+      await deployAAWallet();
+      setSuccess('Smart contract wallet deployed successfully!');
+    } catch (err) {
+      setError(err.message || 'Failed to deploy wallet');
+    }
+  };
+  
+  // Handle prefunding
+  const handlePrefund = async () => {
+    setError(null);
+    setSuccess(null);
+    
+    try {
+      await prefundAAWallet(prefundAmount);
+      setSuccess(`Successfully added ${prefundAmount} NERO to your wallet`);
+    } catch (err) {
+      setError(err.message || 'Failed to add NERO tokens');
+    }
+  };
+  
+  // In minimal mode, show a simplified banner
+  if (minimal) {
+    return (
+      <div className={`aa-wallet-banner ${className}`}>
+        <span className="banner-icon">⚠️</span>
+        <span className="banner-text">Smart contract wallet not deployed.</span>
+        <button 
+          className="deploy-button"
+          onClick={handleDeploy}
+          disabled={isLoading}
+        >
+          {isLoading ? 'Deploying...' : 'Deploy Now'}
+        </button>
+      </div>
+    );
+  }
+  
+  // Full wallet status component
+  return (
+    <div className={`aa-wallet-status ${className}`}>
+      <div className="status-header">
+        <div className="status-icon">⚠️</div>
+        <h3>Smart Contract Wallet Setup</h3>
+      </div>
+      
+      <div className="status-content">
+        <p>
+          Your smart contract wallet needs to be set up before making transactions.
+          This is a one-time process that will improve your transaction experience.
+        </p>
+        
+        <div className="setup-actions">
+          <div className="action-row">
+            <button 
+              className="deploy-button primary-button"
+              onClick={handleDeploy}
+              disabled={isLoading}
+            >
+              {isLoading ? 'Deploying...' : 'Deploy Wallet'}
+            </button>
+            <p className="action-description">
+              Deploy your smart contract wallet. This will automatically add the necessary NERO tokens.
+            </p>
+          </div>
+          
+          <div className="advanced-section">
+            <div className="section-header">
+              <span className="section-title">Advanced Options</span>
+            </div>
+            
+            <div className="action-row">
+              <div className="prefund-controls">
+                <input 
+                  type="text" 
+                  value={prefundAmount} 
+                  onChange={(e) => setPrefundAmount(e.target.value)}
+                  placeholder="Amount in NERO"
+                  className="prefund-input"
+                />
+                <button 
+                  className="prefund-button secondary-button"
+                  onClick={handlePrefund}
+                  disabled={isPrefundingWallet}
+                >
+                  {isPrefundingWallet ? 'Adding NERO...' : 'Add NERO'}
+                </button>
+              </div>
+              <p className="action-description">
+                Manually add NERO tokens to your wallet. Recommended: 0.05 NERO
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        {(error || userOpError) && (
+          <div className="status-error">
+            {error || userOpError}
+          </div>
+        )}
+        
+        {success && (
+          <div className="status-success">
+            {success}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default AAWalletStatus;

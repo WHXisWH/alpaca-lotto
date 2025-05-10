@@ -4,6 +4,7 @@ import useSessionKeys from '../hooks/useSessionKeys';
 import useUserOp from '../hooks/useUserOp';
 import useTokens from '../hooks/useTokens';
 import useWagmiWallet from '../hooks/useWagmiWallet';
+import AAWalletStatus from './AAWalletStatus';
 
 /**
  * QuickPlay Component
@@ -32,7 +33,9 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
   const {
     executeTicketPurchase,
     isLoading: userOpLoading,
-    error: userOpError
+    error: userOpError,
+    isDeployed,
+    deployOrWarn
   } = useUserOp();
   
   const { tokens } = useTokens();
@@ -45,6 +48,7 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
   const [selectedToken, setSelectedToken] = useState(null);
   const [purchaseQuantity, setPurchaseQuantity] = useState(1);
   const [error, setError] = useState(null);
+  const [deploymentSuccess, setDeploymentSuccess] = useState(false);
   
   // Set default token if available
   useEffect(() => {
@@ -67,10 +71,35 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
   
-  // Open session key creation modal
-  const handleOpenModal = () => {
-    setIsModalOpen(true);
-    setError(null);
+  // Reset deployment success message after 5 seconds
+  useEffect(() => {
+    if (deploymentSuccess) {
+      const timer = setTimeout(() => {
+        setDeploymentSuccess(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [deploymentSuccess]);
+  
+  // Open session key creation modal with wallet deployment check
+  const handleOpenModal = async () => {
+    try {
+      // Check if wallet is deployed first
+      if (!isDeployed) {
+        if (window.confirm('Smart contract wallet is not deployed. Would you like to deploy it first?')) {
+          await deployOrWarn();
+          setDeploymentSuccess(true);
+        } else {
+          setError('Smart contract wallet needs to be deployed first for session keys to work');
+          return;
+        }
+      }
+      
+      setIsModalOpen(true);
+      setError(null);
+    } catch (err) {
+      setError(err.message || 'Failed to deploy wallet');
+    }
   };
   
   // Close session key creation modal
@@ -83,6 +112,17 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
     if (!isConnected && !isDevelopmentMode) {
       setError('Wallet not connected');
       return;
+    }
+    
+    // Make sure wallet is deployed first
+    if (!isDeployed) {
+      try {
+        await deployOrWarn();
+        setDeploymentSuccess(true);
+      } catch (err) {
+        setError(err.message || 'Failed to deploy wallet');
+        return;
+      }
     }
     
     setIsCreatingKey(true);
@@ -118,6 +158,17 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
     if (!hasActiveSessionKey && !isDevelopmentMode) {
       setError('No active session key. Please enable Quick Play first.');
       return;
+    }
+    
+    // Make sure wallet is deployed first
+    if (!isDeployed) {
+      try {
+        await deployOrWarn();
+        setDeploymentSuccess(true);
+      } catch (err) {
+        setError(err.message || 'Failed to deploy wallet');
+        return;
+      }
     }
     
     setIsPurchasing(true);
@@ -377,6 +428,21 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
           </div>
         )}
       </div>
+      
+      {/* Show wallet status if not deployed */}
+      {!isDeployed && (
+        <AAWalletStatus minimal className="wallet-status-banner" />
+      )}
+      
+      {/* Show deployment success message if needed */}
+      {deploymentSuccess && (
+        <div className="deployment-success">
+          <div className="success-icon">✓</div>
+          <div className="success-message">
+            Smart contract wallet deployed successfully!
+          </div>
+        </div>
+      )}
       
       {!hasActiveSessionKey ? (
         <div className="enable-quick-play">

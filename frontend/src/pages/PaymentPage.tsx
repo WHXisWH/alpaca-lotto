@@ -1,3 +1,4 @@
+// frontend/src/pages/PaymentPage.tsx - Modified version with simplified wallet management
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAccount } from 'wagmi';
@@ -5,12 +6,12 @@ import useWagmiWallet from '../hooks/useWagmiWallet';
 import useUserOp from '../hooks/useUserOp';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
-import WalletPrefundModal from '../components/WalletPrefundModal'; // Import our new component
+import AAWalletStatus from '../components/AAWalletStatus';
 import { ethers } from 'ethers';
 
 /**
  * Payment processing page
- * Updated to handle wallet prefunding requirements
+ * Updated with simplified wallet deployment flow
  */
 const PaymentPage = () => {
   const location = useLocation();
@@ -27,7 +28,7 @@ const PaymentPage = () => {
     fetchAllUserTickets
   } = useLotteries();
   
-  // Custom hooks with prefunding checks
+  // Custom hooks with integrated deployment features
   const { 
     executeTicketPurchase, 
     isLoading: purchaseLoading, 
@@ -35,9 +36,7 @@ const PaymentPage = () => {
     txHash,
     isDevelopmentMode: userOpDevMode,
     isDeployed,
-    needsNeroTokens,
-    walletNeedsPrefunding,
-    checkAAWalletPrefunding
+    deployOrWarn
   } = useUserOp();
   
   const { hasActiveSessionKey } = useSessionKeys();
@@ -47,7 +46,7 @@ const PaymentPage = () => {
   const [paymentToken, setPaymentToken] = useState(token);
   const [transactionStatus, setTransactionStatus] = useState('preparing'); // 'preparing', 'processing', 'success', 'error'
   const [errorMessage, setErrorMessage] = useState('');
-  const [isPrefundModalOpen, setIsPrefundModalOpen] = useState(false); // Add state for prefund modal
+  const [deploymentSuccess, setDeploymentSuccess] = useState(false);
   const [processingSteps, setProcessingSteps] = useState([
     { id: 'preparing', label: 'Preparing transaction', status: 'pending' },
     { id: 'submitting', label: 'Submitting to blockchain', status: 'waiting' },
@@ -55,16 +54,15 @@ const PaymentPage = () => {
     { id: 'finalizing', label: 'Finalizing purchase', status: 'waiting' }
   ]);
   
-  // Check if wallet needs prefunding when component mounts
+  // Reset deployment success message after 5 seconds
   useEffect(() => {
-    if (!isDeployed || needsNeroTokens) {
-      checkAAWalletPrefunding().then(isPrefunded => {
-        if (!isPrefunded) {
-          setIsPrefundModalOpen(true);
-        }
-      }).catch(console.error);
+    if (deploymentSuccess) {
+      const timer = setTimeout(() => {
+        setDeploymentSuccess(false);
+      }, 5000);
+      return () => clearTimeout(timer);
     }
-  }, [isDeployed, needsNeroTokens, checkAAWalletPrefunding]);
+  }, [deploymentSuccess]);
   
   // Navigate back to home if lottery or token is missing
   useEffect(() => {
@@ -99,11 +97,37 @@ const PaymentPage = () => {
     );
   };
   
-  // Transaction submission handler
+  // Handle wallet deployment
+  const handleDeployWallet = async () => {
+    try {
+      await deployOrWarn();
+      setDeploymentSuccess(true);
+    } catch (err) {
+      setErrorMessage(err.message || 'Failed to deploy wallet');
+    }
+  };
+  
+  // Transaction submission handler with integrated deployment check
   const handleSubmitTransaction = async () => {
     if ((!isConnected && !isDevelopmentMode) || !lottery || !token) {
       setErrorMessage('Wallet not connected or missing required information');
       return;
+    }
+    
+    // Check if wallet is deployed
+    if (!isDeployed) {
+      if (window.confirm('Smart contract wallet not deployed. Deploy it now?')) {
+        try {
+          await deployOrWarn();
+          setDeploymentSuccess(true);
+        } catch (err) {
+          setErrorMessage(err.message || 'Failed to deploy wallet');
+          return;
+        }
+      } else {
+        setErrorMessage('Smart contract wallet needs to be deployed for successful transactions');
+        return;
+      }
     }
     
     setTransactionStatus('processing');
@@ -111,77 +135,30 @@ const PaymentPage = () => {
     updateProcessingStep('submitting', 'pending');
     
     try {
-      const result = await executeTicketPurchase({
+      const txHash = await executeTicketPurchase({
         lotteryId: lottery.id,
         tokenAddress: token.address,
         quantity,
         paymentType,
         paymentToken: paymentToken?.address,
-        useSessionKey: hasActiveSessionKey,
-        skipDeploymentCheck: true 
+        useSessionKey: hasActiveSessionKey
       });
       
-
-      if (result && typeof result === 'object' && result.needsDeployment) {
-        setTransactionStatus('preparing'); 
-       
-
-        if (localStorage.getItem('skipWalletSetup') !== 'true') {
-
-          if (window.confirm('This transaction may be more likely to succeed if you set up your smart contract wallet. Would you like to set it up now?')) {
-            setIsPrefundModalOpen(true);
-            return;
-          } else {
-
-            localStorage.setItem('skipWalletSetup', 'true');
-            
-
-            setErrorMessage('Proceeding without wallet setup. Note that some transactions may fail or cost more gas.');
-            
-
-            const retryResult = await executeTicketPurchase({
-              lotteryId: lottery.id,
-              tokenAddress: token.address,
-              quantity,
-              paymentType,
-              paymentToken: paymentToken?.address,
-              useSessionKey: hasActiveSessionKey,
-              skipDeploymentCheck: true
-            });
-            
-
-            if (typeof retryResult === 'string') {
-              processSuccessfulTransaction(retryResult);
-              return;
-            }
-          }
-        }
-
-        setErrorMessage('Transaction may fail without smart contract wallet setup. You can continue or set up wallet from the settings menu.');
-        return;
-      }
-      
-      if (result && typeof result === 'string') {
-        processSuccessfulTransaction(result);
-      }
+      processSuccessfulTransaction(txHash);
     } catch (err) {
       handleTransactionError(err);
     }
   };
 
-
   const processSuccessfulTransaction = async (txHash) => {
-
     updateProcessingStep('submitting', 'complete');
     updateProcessingStep('confirming', 'pending');
     
-
     await new Promise(resolve => setTimeout(resolve, isDevelopmentMode ? 1500 : 3000));
     
     updateProcessingStep('confirming', 'complete');
     updateProcessingStep('finalizing', 'pending');
     
-
     await new Promise(resolve => setTimeout(resolve, 1000));
     updateProcessingStep('finalizing', 'complete');
     
@@ -189,34 +166,8 @@ const PaymentPage = () => {
     setTransactionStatus('success');
   };
   
-
   const handleTransactionError = (error) => {
     console.error('Transaction error:', error);
-    
-
-    if (error.message?.includes('AA20') || 
-        error.message?.includes('account not deployed') ||
-        error.message?.includes('prefund') || 
-        error.message?.includes('NERO tokens') || 
-        error.message?.includes('deploy')) {
-        
-
-      if (localStorage.getItem('skipWalletSetup') !== 'true') {
-
-        if (window.confirm('This transaction requires wallet setup to succeed. Would you like to set up your smart contract wallet now?')) {
-          setIsPrefundModalOpen(true);
-          setTransactionStatus('preparing');
-          return;
-        } else {
-
-          localStorage.setItem('skipWalletSetup', 'true');
-        }
-      }
-      
-      setErrorMessage('Transaction failed. Setting up your wallet might resolve this issue.');
-      setTransactionStatus('error');
-      return;
-    }
     
     const currentStep = processingSteps.find(step => step.status === 'pending');
     if (currentStep) {
@@ -231,14 +182,14 @@ const PaymentPage = () => {
       errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
     } else if (errorMsg.includes('insufficient balance')) {
       errorMsg = 'Insufficient token balance for gas payment.';
+    } else if (errorMsg.includes('wallet') || errorMsg.includes('deploy')) {
+      errorMsg = 'Smart contract wallet not deployed. Please deploy your wallet first.';
     }
     
     setErrorMessage(errorMsg);
     setTransactionStatus('error');
   };
   
-
-
   // Navigate back to home
   const handleGoBack = async () => {
     if (transactionStatus === 'success' && lottery) {
@@ -252,29 +203,6 @@ const PaymentPage = () => {
       }
     }
     navigate('/');
-  };
-  
-  /**
-   * Close prefund modal
-   */
-  const handleClosePrefundModal = () => {
-    setIsPrefundModalOpen(false);
-  };
-  
-  /**
-   * Handle prefund completion
-   */
-  const handlePrefundComplete = async () => {
-    setIsPrefundModalOpen(false);
-    
-    // After prefunding is complete, check if we should continue with transaction
-    const isPrefunded = await checkAAWalletPrefunding();
-    if (isPrefunded) {
-      // If we were in the preparing state, retry the transaction
-      if (transactionStatus === 'preparing') {
-        handleSubmitTransaction();
-      }
-    }
   };
   
   // Estimate gas cost
@@ -460,32 +388,20 @@ const PaymentPage = () => {
           </button>
         </div>
         
-        {/* Show wallet setup alert if needed */}
-        {(needsNeroTokens || walletNeedsPrefunding) && !isPrefundModalOpen && (
-  <div className="wallet-setup-alert">
-    <div className="alert-content">
-      <div className="alert-icon">ℹ️</div>
-      <div className="alert-message">
-        <strong>Smart Contract Wallet Recommended</strong>
-        <p>Setting up a smart contract wallet can improve your transaction success rate and may reduce costs.</p>
-      </div>
-      <div className="alert-actions">
-        <button 
-          className="setup-button"
-          onClick={() => setIsPrefundModalOpen(true)}
-        >
-          Set Up Wallet
-        </button>
-        <button 
-          className="skip-button"
-          onClick={() => localStorage.setItem('skipWalletSetup', 'true')}
-        >
-          Skip
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+        {/* Show deployment success message if needed */}
+        {deploymentSuccess && (
+          <div className="deployment-success">
+            <div className="success-icon">✓</div>
+            <div className="success-message">
+              Smart contract wallet deployed successfully!
+            </div>
+          </div>
+        )}
+        
+        {/* Show wallet status if not deployed */}
+        {!isDeployed && (
+          <AAWalletStatus minimal className="wallet-status-banner" />
+        )}
         
         <div className="payment-card">
           <h2>Confirm Ticket Purchase</h2>
@@ -500,8 +416,14 @@ const PaymentPage = () => {
           </div>
           
           <div className="purchase-summary">
-            {/* Purchase summary details here */}
-            {/* ... */}
+            <div className="summary-row">
+              <span className="summary-label">Tickets:</span>
+              <span className="summary-value">{quantity}</span>
+            </div>
+            <div className="summary-row">
+              <span className="summary-label">Total Cost:</span>
+              <span className="summary-value">{calculateTotalCost()} {token.symbol}</span>
+            </div>
           </div>
           
           <div className="gas-payment-section">
@@ -554,9 +476,6 @@ const PaymentPage = () => {
               </div>
             </div>
             
-            {/* Token selector here */}
-            {/* ... */}
-            
             <div className="gas-estimate">
               <span className="estimate-label">Estimated Gas Fee:</span>
               <span className="estimate-value">{calculateEstimatedGas()}</span>
@@ -586,14 +505,30 @@ const PaymentPage = () => {
               Cancel
             </button>
             
-            <button 
-              className="confirm-button"
-              onClick={handleSubmitTransaction}
-              disabled={purchaseLoading}
-            >
-              {purchaseLoading ? 'Processing...' : 'Confirm Purchase'}
-            </button>
+            {!isDeployed ? (
+              <button 
+                className="deploy-button"
+                onClick={handleDeployWallet}
+                disabled={purchaseLoading}
+              >
+                Deploy Wallet First
+              </button>
+            ) : (
+              <button 
+                className="confirm-button"
+                onClick={handleSubmitTransaction}
+                disabled={purchaseLoading}
+              >
+                {purchaseLoading ? 'Processing...' : 'Confirm Purchase'}
+              </button>
+            )}
           </div>
+          
+          {errorMessage && (
+            <div className="error-message">
+              {errorMessage}
+            </div>
+          )}
         </div>
         
         <div className="payment-info-card">
@@ -618,13 +553,11 @@ const PaymentPage = () => {
         </div>
       </div>
       
-      {/* Prefund Modal */}
-      {isPrefundModalOpen && (
-        <WalletPrefundModal
-          isOpen={isPrefundModalOpen}
-          onClose={handleClosePrefundModal}
-          onComplete={handlePrefundComplete}
-        />
+      {/* Full wallet status component for detailed setup if needed */}
+      {!isDeployed && (
+        <div className="wallet-setup-section">
+          <AAWalletStatus />
+        </div>
       )}
     </div>
   );
