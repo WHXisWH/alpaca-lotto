@@ -23,6 +23,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
     isDeployed,
     needsNeroTokens,
     executeBatchPurchase,
+    executeTicketPurchase, 
     deployAAWallet,
     prefundAAWallet,
     checkAAWalletPrefunding,
@@ -42,8 +43,10 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   const [totalCost, setTotalCost] = useState(0);
   const [isDeployingWallet, setIsDeployingWallet] = useState(false);
   const [showSponsoredWarning, setShowSponsoredWarning] = useState(false);
+  const [isPrefundModalOpen, setIsPrefundModalOpen] = useState(false);
   const [skipTokenApproval, setSkipTokenApproval] = useState(false);
   const [prefundAmount, setPrefundAmount] = useState("0.05");
+  const [txHash, setTxHash] = useState(null); 
   
   // Update total cost when selections change
   useEffect(() => {

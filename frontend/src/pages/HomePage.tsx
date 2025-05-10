@@ -5,9 +5,9 @@ import ActiveLotteries from '../components/ActiveLotteries';
 import LotteryDetails from '../components/LotteryDetails';
 import TicketPurchase from '../components/TicketPurchase';
 import SessionKeyModal from '../components/SessionKeyModal';
-import WalletPrefundModal from '../components/WalletPrefundModal'; // Import our new component
+import WalletPrefundModal from '../components/WalletPrefundModal';
 import useWagmiWallet from '../hooks/useWagmiWallet';
-import useUserOp from '../hooks/useUserOp'; // Import useUserOp
+import useUserOp from '../hooks/useUserOp'; 
 import useTokens from '../hooks/useTokens';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
@@ -60,6 +60,7 @@ const HomePage = () => {
     isDeployed,
     needsNeroTokens,
     walletNeedsPrefunding,
+    executeTicketPurchase, 
     checkAAWalletPrefunding
   } = useUserOp();
   
@@ -92,7 +93,7 @@ const HomePage = () => {
   const [selectedLottery, setSelectedLottery] = useState(null);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [isSessionKeyModalOpen, setIsSessionKeyModalOpen] = useState(false);
-  const [isPrefundModalOpen, setIsPrefundModalOpen] = useState(false); // Add state for prefund modal
+  const [isPrefundModalOpen, setIsPrefundModalOpen] = useState(false); 
   const [ticketQuantity, setTicketQuantity] = useState(1);
   const [error, setError] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
