@@ -244,107 +244,107 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
     setError(null);
     
     try {
-      // Check if wallet is deployed and prefunded
-      if (!isDeployed) {
-        const isPrefunded = await checkAAWalletPrefunding();
-        if (!isPrefunded) {
-          throw new Error("Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract. Please use the 'Prefund Wallet' button first.");
-        }
-      }
-      
-      // Execute batch purchase with properly configured payment options
-      const txHash = await executeBatchPurchase({
+      const result = await executeBatchPurchase({
         selections,
         paymentType,
         paymentToken: (paymentType === 1 || paymentType === 2) ? selectedToken.address : null,
         useSessionKey: hasActiveSessionKey,
-        skipApprovalCheck: skipTokenApproval // Skip approval if wallet not deployed
+        skipDeploymentCheck: true 
       });
       
-      // Handle successful transaction
-      if (txHash) {
-        // Success notification
-        setError(null);
-        
-        // Clear selections after successful purchase
-        setSelections([]);
-        
-        // Trigger callback
-        if (onBatchComplete) {
-          onBatchComplete(txHash);
-        }
-      }
-    } catch (err) {
-      console.error('Batch operation error:', err);
-      
-      let errorMsg = err.message || 'Error executing batch operation';
-      
-      // If error has prefund or NERO token messages
-      if (errorMsg.includes('prefund') || 
-          errorMsg.includes('NERO tokens') || 
-          errorMsg.includes('deploy') ||
-          errorMsg.includes('AA21') ||
-          errorMsg.includes('AA20')) {
-        
-        errorMsg = 'Your wallet needs to be prefunded with NERO tokens in the EntryPoint contract. Please use the "Prefund Wallet" button first.';
-      }
-      
-      // Check for specific paymaster errors
-      if (errorMsg.includes('Gas-free model is not supported') || 
-          errorMsg.includes('sponsored transactions are currently disabled')) {
-        
-        // For Type 0 errors, try to switch to Type 1
-        if (paymentType === 0 && selectedToken) {
-          setError('Sponsored transactions are currently not supported. Trying with token payment instead...');
-          
-          try {
-            // Try again with Type 1
-            const txHash = await executeBatchPurchase({
+
+      if (result && typeof result === 'object' && result.needsDeployment) {
+        if (localStorage.getItem('skipWalletSetup') !== 'true') {
+          if (window.confirm(result.message || 'Smart contract wallet is not deployed. Would you like to set it up now?')) {
+            setIsPrefundModalOpen(true);
+            setIsProcessing(false);
+            return;
+          } else {
+            localStorage.setItem('skipWalletSetup', 'true');
+            
+            const retryResult = await executeBatchPurchase({
               selections,
-              paymentType: 1,
-              paymentToken: selectedToken.address,
+              paymentType,
+              paymentToken: (paymentType === 1 || paymentType === 2) ? selectedToken.address : null,
               useSessionKey: hasActiveSessionKey,
-              skipApprovalCheck: true // Skip approval since we're in fallback mode
+              skipDeploymentCheck: true
             });
             
-            if (txHash) {
-              // Success notification
-              setError(null);
-              
-              // Clear selections after successful purchase
-              setSelections([]);
-              
-              // Update payment type for future transactions
-              setPaymentType(1);
-              
-              // Trigger callback
-              if (onBatchComplete) {
-                onBatchComplete(txHash);
-              }
-              
-              setIsProcessing(false);
+            if (typeof retryResult === 'string') {
+              handleBatchSuccess(retryResult);
               return;
             }
-          } catch (fallbackErr) {
-            // If fallback also fails, show both errors
-            console.error('Fallback transaction error:', fallbackErr);
-            errorMsg = 'Sponsored transaction failed, and fallback to token payment also failed.';
           }
         } else {
-          errorMsg = 'Sponsored transactions are currently disabled. Please select a token payment type.';
+          setError('Transaction may fail without smart contract wallet setup. You can continue or set up wallet from the settings menu.');
+          setIsProcessing(false);
+          return;
         }
-      } else if (errorMsg.includes('insufficient allowance')) {
-        errorMsg = 'Insufficient token allowance for the selected token.';
-      } else if (errorMsg.includes('insufficient balance')) {
-        errorMsg = 'Insufficient token balance for gas payment.';
       }
       
-      setError(errorMsg);
-    } finally {
-      setIsProcessing(false);
+      if (typeof result === 'string') {
+        handleBatchSuccess(result);
+      }
+    } catch (err) {
+      handleBatchError(err);
     }
   };
   
+  const handleBatchSuccess = (txHash) => {
+    setTxHash(txHash);
+    
+
+    setError(null);
+    
+
+    setSelections([]);
+    
+
+    if (onBatchComplete) {
+      onBatchComplete(txHash);
+    }
+    
+    setIsProcessing(false);
+  };
+  
+
+  const handleBatchError = (err) => {
+    console.error('Batch operation error:', err);
+    
+    let errorMsg = err.message || 'Error executing batch operation';
+    
+
+    if (errorMsg.includes('prefund') || 
+        errorMsg.includes('NERO tokens') || 
+        errorMsg.includes('deploy') ||
+        errorMsg.includes('AA21') ||
+        errorMsg.includes('AA20')) {
+      
+
+      if (localStorage.getItem('skipWalletSetup') !== 'true') {
+        if (window.confirm('This transaction requires wallet setup to succeed. Would you like to set up your smart contract wallet now?')) {
+          setIsPrefundModalOpen(true);
+          setIsProcessing(false);
+          return;
+        } else {
+
+          localStorage.setItem('skipWalletSetup', 'true');
+        }
+      }
+      
+      errorMsg = 'Transaction may fail without smart contract wallet setup. You can continue or set up wallet from the settings menu.';
+    } else if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
+      errorMsg = 'The selected token is not supported. Please try a different token.';
+    } else if (errorMsg.includes('insufficient allowance')) {
+      errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
+    } else if (errorMsg.includes('insufficient balance')) {
+      errorMsg = 'Insufficient token balance for gas payment.';
+    }
+    
+    setError(errorMsg);
+    setIsProcessing(false);
+  };
+
   // Batch summary component
   const renderBatchSummary = () => {
     if (selections.length === 0) {

@@ -106,26 +106,11 @@ const PaymentPage = () => {
       return;
     }
     
-    // Check if wallet needs prefunding before proceeding
-    if (!isDeployed || needsNeroTokens || walletNeedsPrefunding) {
-      const isPrefunded = await checkAAWalletPrefunding();
-      if (!isPrefunded) {
-        // Instead of automatically opening the modal, show a confirmation first
-        if (window.confirm('Your smart contract wallet is not set up. Setting it up can improve your transaction experience. Would you like to set it up now?')) {
-          setIsPrefundModalOpen(true);
-          return;
-        }
-        // If user chooses not to set up wallet, proceed with transaction
-        // Note: This may still fail, but we're letting the user decide
-      }
-    }
-    
     setTransactionStatus('processing');
     updateProcessingStep('preparing', 'complete');
     updateProcessingStep('submitting', 'pending');
     
     try {
-      // Execute ticket purchase transaction
       const result = await executeTicketPurchase({
         lotteryId: lottery.id,
         tokenAddress: token.address,
@@ -133,70 +118,127 @@ const PaymentPage = () => {
         paymentType,
         paymentToken: paymentToken?.address,
         useSessionKey: hasActiveSessionKey,
-        checkPrefunding: true // Enable prefunding check
+        skipDeploymentCheck: true 
       });
       
-      // Check if transaction needs prefunding
-      if (result && result.needsPrefunding) {
-        setTransactionStatus('preparing');
-        // Ask the user if they want to set up their wallet
-        if (window.confirm('This transaction may be more likely to succeed if you set up your smart contract wallet. Would you like to set it up now?')) {
-          setIsPrefundModalOpen(true);
-        } else {
-          // If user declines, inform them that the transaction might fail
-          setErrorMessage('You chose to skip wallet setup. Note that your transaction may fail or cost more gas.');
+
+      if (result && typeof result === 'object' && result.needsDeployment) {
+        setTransactionStatus('preparing'); 
+       
+
+        if (localStorage.getItem('skipWalletSetup') !== 'true') {
+
+          if (window.confirm('This transaction may be more likely to succeed if you set up your smart contract wallet. Would you like to set it up now?')) {
+            setIsPrefundModalOpen(true);
+            return;
+          } else {
+
+            localStorage.setItem('skipWalletSetup', 'true');
+            
+
+            setErrorMessage('Proceeding without wallet setup. Note that some transactions may fail or cost more gas.');
+            
+
+            const retryResult = await executeTicketPurchase({
+              lotteryId: lottery.id,
+              tokenAddress: token.address,
+              quantity,
+              paymentType,
+              paymentToken: paymentToken?.address,
+              useSessionKey: hasActiveSessionKey,
+              skipDeploymentCheck: true
+            });
+            
+
+            if (typeof retryResult === 'string') {
+              processSuccessfulTransaction(retryResult);
+              return;
+            }
+          }
         }
+
+        setErrorMessage('Transaction may fail without smart contract wallet setup. You can continue or set up wallet from the settings menu.');
         return;
       }
       
-      // If we have a success result with hash
-      if (result && result.transactionHash) {
-        // Update processing status
-        updateProcessingStep('submitting', 'complete');
-        updateProcessingStep('confirming', 'pending');
-        
-        // Simulate blockchain confirmation time
-        await new Promise(resolve => setTimeout(resolve, isDevelopmentMode ? 1500 : 3000));
-        
-        updateProcessingStep('confirming', 'complete');
-        updateProcessingStep('finalizing', 'pending');
-        
-        // Short delay before showing success
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        updateProcessingStep('finalizing', 'complete');
-        
-        setTransactionStatus('success');
+      if (result && typeof result === 'string') {
+        processSuccessfulTransaction(result);
       }
-    } catch (error) {
-      console.error('Transaction error:', error);
-      
-      // Check if error indicates prefunding is needed
-      if (error.message?.includes('prefund') || 
-          error.message?.includes('NERO tokens') || 
-          error.message?.includes('deploy')) {
-        // Ask the user if they want to set up their wallet
+    } catch (err) {
+      handleTransactionError(err);
+    }
+  };
+
+
+  const processSuccessfulTransaction = async (txHash) => {
+
+    updateProcessingStep('submitting', 'complete');
+    updateProcessingStep('confirming', 'pending');
+    
+
+    await new Promise(resolve => setTimeout(resolve, isDevelopmentMode ? 1500 : 3000));
+    
+    updateProcessingStep('confirming', 'complete');
+    updateProcessingStep('finalizing', 'pending');
+    
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    updateProcessingStep('finalizing', 'complete');
+    
+    setTxHash(txHash);
+    setTransactionStatus('success');
+  };
+  
+
+  const handleTransactionError = (error) => {
+    console.error('Transaction error:', error);
+    
+
+    if (error.message?.includes('AA20') || 
+        error.message?.includes('account not deployed') ||
+        error.message?.includes('prefund') || 
+        error.message?.includes('NERO tokens') || 
+        error.message?.includes('deploy')) {
+        
+
+      if (localStorage.getItem('skipWalletSetup') !== 'true') {
+
         if (window.confirm('This transaction requires wallet setup to succeed. Would you like to set up your smart contract wallet now?')) {
           setIsPrefundModalOpen(true);
           setTransactionStatus('preparing');
+          return;
         } else {
-          // If user declines, show error message
-          setErrorMessage('Transaction failed. Setting up your wallet might resolve this issue.');
-          setTransactionStatus('error');
+
+          localStorage.setItem('skipWalletSetup', 'true');
         }
-        return;
       }
       
-      // Update processing steps to show error
-      const currentStep = processingSteps.find(step => step.status === 'pending');
-      if (currentStep) {
-        updateProcessingStep(currentStep.id, 'error');
-      }
-      
-      setErrorMessage(error.message || 'Transaction failed');
+      setErrorMessage('Transaction failed. Setting up your wallet might resolve this issue.');
       setTransactionStatus('error');
+      return;
     }
+    
+    const currentStep = processingSteps.find(step => step.status === 'pending');
+    if (currentStep) {
+      updateProcessingStep(currentStep.id, 'error');
+    }
+    
+    let errorMsg = error.message || 'Transaction failed';
+    
+    if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
+      errorMsg = 'The selected token is not supported. Please try a different token.';
+    } else if (errorMsg.includes('insufficient allowance')) {
+      errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
+    } else if (errorMsg.includes('insufficient balance')) {
+      errorMsg = 'Insufficient token balance for gas payment.';
+    }
+    
+    setErrorMessage(errorMsg);
+    setTransactionStatus('error');
   };
   
+
+
   // Navigate back to home
   const handleGoBack = async () => {
     if (transactionStatus === 'success' && lottery) {

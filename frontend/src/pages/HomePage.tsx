@@ -12,6 +12,37 @@ import useTokens from '../hooks/useTokens';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
 
+
+function WalletSetupPrompt({ isVisible, onSetup, onSkip }) {
+  if (!isVisible) return null;
+  
+  return (
+    <div className="wallet-setup-prompt">
+      <div className="prompt-content">
+        <div className="prompt-icon">ℹ️</div>
+        <div className="prompt-message">
+          <p><strong>Would you like to set up a smart contract wallet?</strong></p>
+          <p>This can improve transaction reliability but is not required.</p>
+        </div>
+        <div className="prompt-actions">
+          <button 
+            className="setup-button"
+            onClick={onSetup}
+          >
+            Set Up Wallet
+          </button>
+          <button 
+            className="skip-button"
+            onClick={onSkip}
+          >
+            Skip
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Home page of the application
  * Updated to handle wallet prefunding requirements
@@ -65,16 +96,20 @@ const HomePage = () => {
   const [ticketQuantity, setTicketQuantity] = useState(1);
   const [error, setError] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [showWalletSetupPrompt, setShowWalletSetupPrompt] = useState(false);
   
   // Check if wallet needs prefunding when AA wallet address is available
   useEffect(() => {
     if (aaWalletAddress && !isDeployed) {
       checkAAWalletPrefunding().then(isPrefunded => {
-
-        if (!isPrefunded && !isPrefundModalOpen && localStorage.getItem('skipWalletSetup') !== 'true') {
-
-        }
+        const shouldShowBanner = !isPrefunded && 
+                                localStorage.getItem('skipWalletSetup') !== 'true' && 
+                                !isPrefundModalOpen;
+        
+        setShowWalletSetupPrompt(shouldShowBanner);
       }).catch(console.error);
+    } else {
+      setShowWalletSetupPrompt(false);
     }
   }, [aaWalletAddress, isDeployed, checkAAWalletPrefunding, isPrefundModalOpen]);
   
@@ -177,21 +212,64 @@ const HomePage = () => {
    * Purchase tickets
    */
   const handlePurchaseTickets = async ({ token, paymentType }) => {
-    // Check if prefunding is needed before proceeding to payment
-    if (!isDeployed || needsNeroTokens || walletNeedsPrefunding) {
-      setIsPrefundModalOpen(true);
-      return;
-    }
-    
-    navigate('/payment', {
-      state: {
-        lottery: selectedLottery,
-        token,         
-        paymentType,   
+    try {
+      const result = await executeTicketPurchase({
+        lotteryId: selectedLottery.id,
+        tokenAddress: token.address,
         quantity: ticketQuantity,
-      },
-    });
-    handleCloseTicketModal();
+        paymentType,
+        paymentToken: token.address,
+        useSessionKey: hasActiveSessionKey,
+        skipDeploymentCheck: true 
+      });
+      
+      if (result && typeof result === 'object' && result.needsDeployment) {
+        if (window.confirm(result.message || "Smart contract wallet not deployed. Would you like to deploy it now?")) {
+          setIsPrefundModalOpen(true);
+          return;
+        } else {
+
+          localStorage.setItem('skipWalletSetup', 'true');
+          
+          const retryResult = await executeTicketPurchase({
+            lotteryId: selectedLottery.id,
+            tokenAddress: token.address,
+            quantity: ticketQuantity,
+            paymentType,
+            paymentToken: token.address,
+            useSessionKey: hasActiveSessionKey,
+            skipDeploymentCheck: true
+          });
+          
+          if (typeof retryResult === 'string') {
+            navigate('/payment', {
+              state: {
+                lottery: selectedLottery,
+                token,
+                paymentType,
+                quantity: ticketQuantity,
+                txHash: retryResult
+              },
+            });
+            handleCloseTicketModal();
+          }
+        }
+      } else if (typeof result === 'string') {
+        navigate('/payment', {
+          state: {
+            lottery: selectedLottery,
+            token,
+            paymentType,
+            quantity: ticketQuantity,
+            txHash: result
+          },
+        });
+        handleCloseTicketModal();
+      }
+    } catch (err) {
+      console.error('Purchase error:', err);
+      setError(err.message || 'Failed to purchase tickets');
+    }
   };
   
   /**
@@ -329,31 +407,14 @@ const HomePage = () => {
       </div>
       
       {/* Show wallet setup alert if needed */}
-      {(needsNeroTokens || walletNeedsPrefunding) && !isPrefundModalOpen && (
-  <div className="wallet-setup-alert">
-    <div className="alert-content">
-      <div className="alert-icon">ℹ️</div>
-      <div className="alert-message">
-        <strong>Smart Contract Wallet Recommended</strong>
-        <p>Setting up a smart contract wallet can improve your transaction experience.</p>
-      </div>
-      <div className="alert-actions">
-        <button 
-          className="setup-button"
-          onClick={() => setIsPrefundModalOpen(true)}
-        >
-          Set Up Wallet
-        </button>
-        <button 
-          className="skip-button"
-          onClick={() => localStorage.setItem('skipWalletSetup', 'true')}
-        >
-          Skip
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      <WalletSetupPrompt
+        isVisible={showWalletSetupPrompt}
+         onSetup={() => setIsPrefundModalOpen(true)}
+         onSkip={() => {
+           localStorage.setItem('skipWalletSetup', 'true');
+           setShowWalletSetupPrompt(false);
+        }}
+      />
       
       {/* Modals */}
       {isTicketModalOpen && selectedLottery && (

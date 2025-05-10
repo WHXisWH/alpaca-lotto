@@ -99,7 +99,7 @@ const WalletPrefundModal = ({ isOpen, onClose, onComplete }) => {
         <div className="modal-content">
           <div className="warning-message">
             <strong>Optional Wallet Setup</strong>
-            <p>Setting up a smart contract wallet can improve your transaction experience. This is a one-time process:</p>
+            <p>Setting up a smart contract wallet is <strong>optional</strong> but can improve your transaction experience. You can skip this setup and continue using the app normally.</p>
           </div>
           
           <div className="setup-steps">
@@ -119,7 +119,7 @@ const WalletPrefundModal = ({ isOpen, onClose, onComplete }) => {
                   <button 
                     className="prefund-button"
                     onClick={handlePrefundWallet}
-                    disabled={isPrefundingWallet || status === 'deployed'}
+                    disabled={isPrefundingWallet}
                   >
                     {isPrefundingWallet ? 'Prefunding...' : 'Prefund Wallet'}
                   </button>
@@ -136,7 +136,7 @@ const WalletPrefundModal = ({ isOpen, onClose, onComplete }) => {
                 <button 
                   className="deploy-button"
                   onClick={handleDeployWallet}
-                  disabled={isDeployingWallet || status === 'deployed'}
+                  disabled={isDeployingWallet}
                 >
                   {isDeployingWallet ? 'Deploying Wallet...' : 'Deploy Wallet'}
                 </button>
@@ -149,16 +149,15 @@ const WalletPrefundModal = ({ isOpen, onClose, onComplete }) => {
               {error}
             </div>
           )}
-          
-          <div className="skip-warning">
-            <p>You can skip this setup, but you may experience higher gas fees or transaction failures.</p>
-          </div>
         </div>
-        
+
         <div className="modal-footer">
           <button 
             className="skip-button"
-            onClick={onClose}
+            onClick={() => {
+              localStorage.setItem('skipWalletSetup', 'true');
+              onClose();
+            }}
           >
             Skip for Now
           </button>
