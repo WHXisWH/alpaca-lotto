@@ -5,7 +5,7 @@ import { useAccount } from 'wagmi';
 import useWagmiWallet from '../hooks/useWagmiWallet';
 import useUserOp from '../hooks/useUserOp';
 import useLotteries from '../hooks/useLotteries';
-import useSessionKeys from '../h../components/AAWalletStatus
+import useSessionKeys from '../hooks/useSessionKeys';
 import AAWalletStatus from '../components/AAWalletStatus';
 import { ethers } from 'ethers';
 
