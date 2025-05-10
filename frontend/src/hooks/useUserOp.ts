@@ -35,6 +35,7 @@ const TOKEN_PAYMASTER_ADDRESS = ethers.utils.getAddress(import.meta.env.VITE_TOK
  */
 const useUserOp = () => {
   const { address, isConnected } = useAccount();
+  const [isInitialized, setIsInitialized] = useState(false);
   const [client, setClient] = useState(null);
   const [builder, setBuilder] = useState(null);
   const [aaWalletAddress, setAaWalletAddress] = useState(null);
@@ -240,17 +241,17 @@ const useUserOp = () => {
    * Ensure token approval for Paymaster with improved error handling
    */
   const ensurePaymasterApproval = async (tokenAddress, builder) => {
-    if (!tokenAddress || !builder || isDevelopmentMode) return true;
+    if (!tokenAddress || isDevelopmentMode) return true;
     
     try {
       // Normalize addresses
       const normalizedTokenAddress = ethers.utils.getAddress(tokenAddress);
       const normalizedPaymasterAddress = ethers.utils.getAddress(TOKEN_PAYMASTER_ADDRESS);
-      const normalizedAAWalletAddress = ethers.utils.getAddress(aaWalletAddress);
       
-      // Create provider and token contract
+      // Create provider and token contract - use direct EOA approach
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
+      const eoaAddress = await signer.getAddress();
       
       const tokenContract = new ethers.Contract(
         normalizedTokenAddress,
@@ -261,7 +262,7 @@ const useUserOp = () => {
       
       // Check current allowance
       console.log(`Checking allowance for token ${normalizedTokenAddress} to paymaster ${normalizedPaymasterAddress}`);
-      const allowance = await tokenContract.allowance(normalizedAAWalletAddress, normalizedPaymasterAddress);
+      const allowance = await tokenContract.allowance(eoaAddress, normalizedPaymasterAddress);
       
       // If allowance is sufficient, no need to approve
       if (allowance.gte(ethers.constants.MaxUint256.div(2))) {
@@ -269,49 +270,18 @@ const useUserOp = () => {
         return true;
       }
       
-      // Check if AA wallet is deployed
-      const code = await provider.getCode(normalizedAAWalletAddress);
-      if (code === '0x') {
-        console.log('AA wallet not deployed yet, deploying first...');
-        
-        // Ensure wallet is deployed
-        await deployOrWarn();
-      }
+      console.log('Insufficient allowance, approving token for Paymaster with direct EOA transaction...');
       
-      console.log('Insufficient allowance, approving token for Paymaster...');
-      
-      // Reset any previous operations
-      builder.resetOp && builder.resetOp();
-      
-      // Encode approve function call
-      const approveData = tokenContract.interface.encodeFunctionData(
-        'approve',
-        [normalizedPaymasterAddress, ethers.constants.MaxUint256]
-      );
-      
-      // Create approval operation using Type 1 (prepay)
-      // Always use Type 1 for approvals since it's most reliable
-      const approvalOptions = {
-        type: 1,
-        apikey: import.meta.env.VITE_PAYMASTER_API_KEY || '',
-        rpc: PAYMASTER_URL,
-        token: SUPPORTED_TOKENS.USDC.address // Use USDC for approval
-      };
-      
-      builder.setPaymasterOptions(approvalOptions);
-      builder.execute(normalizedTokenAddress, 0, approveData);
-      
-      // Send approval operation
-      console.log('Sending approval UserOperation...');
-      const approvalResult = await client.sendUserOperation(builder);
-      console.log('Approval UserOp hash:', approvalResult.userOpHash);
+      // Direct EOA transaction to approve token
+      const tx = await tokenContract.approve(normalizedPaymasterAddress, ethers.constants.MaxUint256);
+      console.log('Approval transaction sent:', tx.hash);
       
       // Wait for transaction confirmation
-      const approvalReceipt = await approvalResult.wait();
-      console.log('Approval transaction complete:', approvalReceipt);
+      const receipt = await tx.wait();
+      console.log('Approval transaction complete:', receipt);
       
       // Verify approval was successful
-      const newAllowance = await tokenContract.allowance(normalizedAAWalletAddress, normalizedPaymasterAddress);
+      const newAllowance = await tokenContract.allowance(eoaAddress, normalizedPaymasterAddress);
       return newAllowance.gt(allowance);
     } catch (error) {
       console.error('Error ensuring token approval for Paymaster:', error);
@@ -336,11 +306,16 @@ const useUserOp = () => {
    * Initialize the Account Abstraction SDK
    */
   const initSDK = useCallback(async () => {
+    if (isInitialized && client && builder) {
+      return { success: true, client, builder };
+    }
+    
     if (!isConnected) {
       if (localStorage.getItem('devModeEnabled') === 'true' ||
           window.location.search.includes('devMode=true')) {
         setIsDevelopmentMode(true);
         setAaWalletAddress('0x1234567890123456789012345678901234567890');
+        setIsInitialized(true);
         return { success: true, isDevelopmentMode: true };
       }
       setError('Wallet not connected');
@@ -392,18 +367,21 @@ const useUserOp = () => {
             setNeedsNeroTokens(!isPrefunded);
           }
           
+          setIsInitialized(true);
           setIsLoading(false);
-          return { success: true };
+          return { success: true, client: aaClient, builder: aaBuilder };
         } catch (err) {
           console.error('Error initializing AA SDK:', err);
           setIsDevelopmentMode(true);
           setAaWalletAddress('0x1234567890123456789012345678901234567890');
+          setIsInitialized(true);
           setIsLoading(false);
           return { success: true, isDevelopmentMode: true };
         }
       } else {
         setIsDevelopmentMode(true);
         setAaWalletAddress('0x1234567890123456789012345678901234567890');
+        setIsInitialized(true);
         setIsLoading(false);
         return { success: true, isDevelopmentMode: true };
       }
@@ -413,140 +391,142 @@ const useUserOp = () => {
       setIsLoading(false);
       return { success: false, error: err.message };
     }
-  }, [isConnected, checkAAWalletPrefunding]);  
+  }, [isConnected, isInitialized, client, builder, checkAAWalletPrefunding]);
 
   /**
-   * Execute a ticket purchase operation with integrated deployment check
-   */
-  const executeTicketPurchase = useCallback(async ({
-    lotteryId,
-    tokenAddress,
-    quantity,
-    paymentType = 1,
-    paymentToken = null,
-    useSessionKey = false,
-    skipDeploymentCheck = false 
-  }) => {
-    setIsLoading(true);
-    setError(null);
+ * Execute a ticket purchase operation with optimized initialization
+ */
+const executeTicketPurchase = useCallback(async ({
+  lotteryId,
+  tokenAddress,
+  quantity,
+  paymentType = 1,
+  paymentToken = null,
+  useSessionKey = false,
+  skipDeploymentCheck = false 
+}) => {
+  setIsLoading(true);
+  setError(null);
+  
+  try {
+    if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
+      paymentToken = SUPPORTED_TOKENS.USDC.address;
+    }
+    
+    if (isDevelopmentMode) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+      setTxHash(mockTxHash);
+      setIsLoading(false);
+      return mockTxHash;
+    }
+    
+    // Only initialize if not already initialized
+    if (!client || !builder) {
+      console.log('Initializing SDK for transaction...');
+      const initResult = await initSDK();
+      if (!initResult.success) {
+        throw new Error(initResult.error || 'Failed to initialize SDK');
+      }
+    }
+    
+    // Make sure the wallet is deployed if not skipping check
+    if (!skipDeploymentCheck && !isDeployed) {
+      await deployOrWarn();
+    }
+    
+    const contractInterface = new ethers.utils.Interface([
+      'function purchaseTickets(uint256 _lotteryId, address _tokenAddress, uint256 _quantity) returns (bool)'
+    ]);
+    
+    const callData = contractInterface.encodeFunctionData(
+      'purchaseTickets',
+      [lotteryId, tokenAddress, quantity]
+    );
+    
+    builder.resetOp && builder.resetOp();
+    
+    // Force Type 1 for better compatibility if Type 0 was selected
+    const finalPaymentType = paymentType === 0 ? 1 : paymentType;
+    const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
+    
+    // Ensure token is approved for Paymaster (if needed) - using direct EOA approval
+    if (finalPaymentType !== 0) {
+      await ensurePaymasterApproval(finalPaymentToken, builder);
+    }
+    
+    builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
+    
+    const rawOp = await builder.getOp();
+    const userOp = {
+      sender: rawOp.sender,
+      nonce: rawOp.nonce.toHexString(),
+      initCode: rawOp.initCode,
+      callData: rawOp.callData,
+      callGasLimit: rawOp.callGasLimit.toHexString(),
+      verificationGasLimit: rawOp.verificationGasLimit.toHexString(),
+      preVerificationGas: rawOp.preVerificationGas.toHexString(),
+      maxFeePerGas: rawOp.maxFeePerGas.toHexString(),
+      maxPriorityFeePerGas: rawOp.maxPriorityFeePerGas.toHexString(),
+      paymasterAndData: rawOp.paymasterAndData,
+      signature: rawOp.signature
+    };
+    
+    const paymasterOpts = {
+      type: finalPaymentType.toString(),
+      token: finalPaymentToken
+    };
     
     try {
-      if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
-        paymentToken = SUPPORTED_TOKENS.USDC.address;
-      }
-      
-      if (isDevelopmentMode) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-        setTxHash(mockTxHash);
-        setIsLoading(false);
-        return mockTxHash;
-      }
-      
-      if (!client || !builder) {
-        const initResult = await initSDK();
-        if (!initResult.success) {
-          throw new Error(initResult.error || 'Failed to initialize SDK');
-        }
-      }
-      
-      // Make sure the wallet is deployed if not skipping check
-      if (!skipDeploymentCheck && !isDeployed) {
-        await deployOrWarn();
-      }
-      
-      const contractInterface = new ethers.utils.Interface([
-        'function purchaseTickets(uint256 _lotteryId, address _tokenAddress, uint256 _quantity) returns (bool)'
-      ]);
-      
-      const callData = contractInterface.encodeFunctionData(
-        'purchaseTickets',
-        [lotteryId, tokenAddress, quantity]
-      );
-      
-      builder.resetOp && builder.resetOp();
-      
-      // Force Type 1 for better compatibility if Type 0 was selected
-      const finalPaymentType = paymentType === 0 ? 1 : paymentType;
-      const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
-      
-      // Ensure token is approved for Paymaster (if needed)
-      if (finalPaymentType !== 0) {
-        await ensurePaymasterApproval(finalPaymentToken, builder);
-      }
-      
-      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
-      
-      const rawOp = await builder.getOp();
-      const userOp = {
-        sender: rawOp.sender,
-        nonce: rawOp.nonce.toHexString(),
-        initCode: rawOp.initCode,
-        callData: rawOp.callData,
-        callGasLimit: rawOp.callGasLimit.toHexString(),
-        verificationGasLimit: rawOp.verificationGasLimit.toHexString(),
-        preVerificationGas: rawOp.preVerificationGas.toHexString(),
-        maxFeePerGas: rawOp.maxFeePerGas.toHexString(),
-        maxPriorityFeePerGas: rawOp.maxPriorityFeePerGas.toHexString(),
-        paymasterAndData: rawOp.paymasterAndData,
-        signature: rawOp.signature
-      };
-      
-      const paymasterOpts = {
-        type: finalPaymentType.toString(),
-        token: finalPaymentToken
-      };
-      
-      try {
-        const pmData = await paymasterService.sponsorUserOp(userOp, paymasterOpts);
-        userOp.paymasterAndData = pmData;
-        builder.setOp(userOp);
-      } catch (sponsorError) {
-        console.error("Error sponsoring operation:", sponsorError);
-        throw sponsorError;
-      }
-      
-      const result = await client.sendUserOperation(builder);
-      const receipt = await result.wait();
-      setTxHash(receipt.transactionHash);
-      
-      try {
-        const apiModule = await import('../services/api');
-        const api = apiModule.default || apiModule.api;
-        if (api && lotteryId) {
-          await api.getLotteryDetails(lotteryId);
-          if (address) {
-            await api.getUserTickets(lotteryId, address);
-          }
-        }
-      } catch (refreshErr) {
-        console.warn('Error refreshing data after purchase:', refreshErr);
-      }
-      
-      setIsLoading(false);
-      return receipt.transactionHash;
-    } catch (err) {
-      console.error('Error executing ticket purchase:', err);
-      
-      let errorMsg = err.message || 'Failed to purchase tickets';
-      
-      if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
-        errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
-      } else if (errorMsg.includes('insufficient allowance')) {
-        errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
-      } else if (errorMsg.includes('insufficient balance')) {
-        errorMsg = 'Insufficient token balance for gas payment.';
-      } else if (errorMsg.includes('account not deployed') || errorMsg.includes('AA20')) {
-        errorMsg = 'Smart contract wallet not deployed. Please deploy your wallet first.';
-      } else if (errorMsg.includes('AA21')) {
-        errorMsg = 'Insufficient funds to deploy your smart wallet.';
-      }
-      
-      setError(errorMsg);
-      setIsLoading(false);
-      throw new Error(errorMsg);
+      const pmData = await paymasterService.sponsorUserOp(userOp, paymasterOpts);
+      userOp.paymasterAndData = pmData;
+      builder.setOp(userOp);
+    } catch (sponsorError) {
+      console.error("Error sponsoring operation:", sponsorError);
+      throw sponsorError;
     }
-  }, [client, builder, initSDK, isDevelopmentMode, address, isDeployed, deployOrWarn, ensurePaymasterApproval]);
+    
+    const result = await client.sendUserOperation(builder);
+    const receipt = await result.wait();
+    setTxHash(receipt.transactionHash);
+    
+    try {
+      const apiModule = await import('../services/api');
+      const api = apiModule.default || apiModule.api;
+      if (api && lotteryId) {
+        await api.getLotteryDetails(lotteryId);
+        if (address) {
+          await api.getUserTickets(lotteryId, address);
+        }
+      }
+    } catch (refreshErr) {
+      console.warn('Error refreshing data after purchase:', refreshErr);
+    }
+    
+    setIsLoading(false);
+    return receipt.transactionHash;
+  } catch (err) {
+    console.error('Error executing ticket purchase:', err);
+    
+    let errorMsg = err.message || 'Failed to purchase tickets';
+    
+    if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
+      errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
+    } else if (errorMsg.includes('insufficient allowance')) {
+      errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
+    } else if (errorMsg.includes('insufficient balance')) {
+      errorMsg = 'Insufficient token balance for gas payment.';
+    } else if (errorMsg.includes('account not deployed') || errorMsg.includes('AA20')) {
+      errorMsg = 'Smart contract wallet not deployed. Please deploy your wallet first.';
+    } else if (errorMsg.includes('AA21')) {
+      errorMsg = 'Insufficient funds to deploy your smart wallet.';
+    }
+    
+    setError(errorMsg);
+    setIsLoading(false);
+    throw new Error(errorMsg);
+  }
+}, [client, builder, initSDK, isDevelopmentMode, address, isDeployed, deployOrWarn, ensurePaymasterApproval]);
 
   /**
    * Execute a batch ticket purchase operation with integrated deployment check
@@ -580,8 +560,9 @@ const useUserOp = () => {
         return mockTxHash;
       }
       
-      // Initialize SDK if not already initialized
+      // Only initialize if not already initialized
       if (!client || !builder) {
+        console.log('Initializing SDK for batch transaction...');
         const initResult = await initSDK();
         if (!initResult.success) {
           throw new Error(initResult.error || 'Failed to initialize SDK');
@@ -616,7 +597,7 @@ const useUserOp = () => {
       const finalPaymentType = paymentType === 0 ? 1 : paymentType;
       const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
       
-      // Ensure token is approved for Paymaster (if needed)
+      // Ensure token is approved for Paymaster using direct EOA approach
       if (finalPaymentType !== 0) {
         await ensurePaymasterApproval(finalPaymentToken, builder);
       }
@@ -639,7 +620,7 @@ const useUserOp = () => {
         paymasterAndData:     rawOp.paymasterAndData,
         signature:            rawOp.signature
       };
-
+  
       // Sponsor the operation
       const paymasterOpts = { 
         type: finalPaymentType.toString(),
@@ -695,12 +676,13 @@ const useUserOp = () => {
 
   // Automatically initialize SDK when wallet is connected
   useEffect(() => {
-    if ((isConnected) || 
+    if ((isConnected || 
         localStorage.getItem('devModeEnabled') === 'true' || 
-        window.location.search.includes('devMode=true')) {
+        window.location.search.includes('devMode=true')) && !isInitialized) {
+      console.log('Initializing AA SDK...');
       initSDK().catch(console.error);
     }
-  }, [isConnected, initSDK]);
+  }, [isConnected, initSDK, isInitialized]);
 
   // Check prefunding status when wallet address changes
   useEffect(() => {

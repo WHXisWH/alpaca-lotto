@@ -5,7 +5,7 @@ import ActiveLotteries from '../components/ActiveLotteries';
 import LotteryDetails from '../components/LotteryDetails';
 import TicketPurchase from '../components/TicketPurchase';
 import SessionKeyModal from '../components/SessionKeyModal';
-import AAWalletStatus from '../components/AAWalletStatus';
+import AAWalletStatus from '../c../components/AAWalletStatus
 import useWagmiWallet from '../hooks/useWagmiWallet';
 import useUserOp from '../hooks/useUserOp'; 
 import useTokens from '../hooks/useTokens';

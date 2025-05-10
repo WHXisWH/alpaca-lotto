@@ -5,7 +5,7 @@ import { useAccount } from 'wagmi';
 import useWagmiWallet from '../hooks/useWagmiWallet';
 import useUserOp from '../hooks/useUserOp';
 import useLotteries from '../hooks/useLotteries';
-import useSessionKeys from '../hooks/useSessionKeys';
+import useSessionKeys from '../h../components/AAWalletStatus
 import AAWalletStatus from '../components/AAWalletStatus';
 import { ethers } from 'ethers';
 
@@ -135,6 +135,7 @@ const PaymentPage = () => {
     updateProcessingStep('submitting', 'pending');
     
     try {
+      // Send the transaction - approval will be handled inside executeTicketPurchase
       const txHash = await executeTicketPurchase({
         lotteryId: lottery.id,
         tokenAddress: token.address,
