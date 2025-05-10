@@ -321,19 +321,44 @@ const useUserOp = () => {
    * Initialize the Account Abstraction SDK
    */
   const initSDK = useCallback(async () => {
+    // Add a static flag to track initialization in progress
+    if (initSDK.isInitializing) {
+      console.log('SDK initialization already in progress, waiting...');
+      await new Promise(resolve => {
+        const checkInterval = setInterval(() => {
+          if (!initSDK.isInitializing) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+      });
+      
+      return { 
+        success: isInitialized, 
+        client, 
+        builder,
+        isDevelopmentMode
+      };
+    }
+    
+    // Return cached result if already initialized
     if (isInitialized && client && builder) {
       return { success: true, client, builder };
     }
     
+    initSDK.isInitializing = true; // Set flag to prevent concurrent initializations
+      
     if (!isConnected) {
       if (localStorage.getItem('devModeEnabled') === 'true' ||
           window.location.search.includes('devMode=true')) {
         setIsDevelopmentMode(true);
         setAaWalletAddress('0x1234567890123456789012345678901234567890');
         setIsInitialized(true);
+        initSDK.isInitializing = false;
         return { success: true, isDevelopmentMode: true };
       }
       setError('Wallet not connected');
+      initSDK.isInitializing = false;
       return { success: false, error: 'Wallet not connected' };
     }
     
@@ -385,6 +410,8 @@ const useUserOp = () => {
           
           setIsInitialized(true);
           setIsLoading(false);
+          console.log('SDK initialized successfully');
+          initSDK.isInitializing = false;
           return { success: true, client: aaClient, builder: aaBuilder };
         } catch (err) {
           console.error('Error initializing AA SDK:', err);
@@ -392,6 +419,7 @@ const useUserOp = () => {
           setAaWalletAddress('0x1234567890123456789012345678901234567890');
           setIsInitialized(true);
           setIsLoading(false);
+          initSDK.isInitializing = false;
           return { success: true, isDevelopmentMode: true };
         }
       } else {
@@ -399,15 +427,20 @@ const useUserOp = () => {
         setAaWalletAddress('0x1234567890123456789012345678901234567890');
         setIsInitialized(true);
         setIsLoading(false);
+        initSDK.isInitializing = false;
         return { success: true, isDevelopmentMode: true };
       }
     } catch (err) {
       console.error('Error in AA SDK initialization:', err);
       setError(`AA SDK initialization error: ${err.message}`);
       setIsLoading(false);
+      initSDK.isInitializing = false;
       return { success: false, error: err.message };
     }
-  }, [isConnected, isInitialized, client, builder, checkAAWalletPrefunding]);  
+  }, [isConnected, isInitialized, client, builder, checkAAWalletPrefunding]);
+  
+  // Add static property to track initialization state
+  initSDK.isInitializing = false;  
 
   /**
    * Execute a ticket purchase operation with proper wallet verification
@@ -534,6 +567,7 @@ const useUserOp = () => {
       
       let errorMsg = err.message || 'Failed to purchase tickets';
       
+      // Handle specific error messages
       if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
         errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
       } else if (errorMsg.includes('insufficient allowance')) {
@@ -544,6 +578,11 @@ const useUserOp = () => {
         errorMsg = 'Smart contract wallet not deployed. Please deploy your wallet first.';
       } else if (errorMsg.includes('AA21')) {
         errorMsg = 'Insufficient funds to deploy your smart wallet.';
+      } else if (errorMsg.includes('AA25') || errorMsg.includes('nonce')) {
+        errorMsg = 'Transaction nonce is invalid. Please try again.';
+      } else if (errorMsg.includes('includes is not a function')) {
+        // Handle the specific TypeError
+        errorMsg = 'Error processing paymaster response. Please try again.';
       }
       
       setError(errorMsg);

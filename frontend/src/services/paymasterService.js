@@ -228,22 +228,31 @@ class PaymasterService {
           ]
         })
       });
-
+  
       const json = await res.json();
       
       if (json.error) {
         console.error('❌ Paymaster error:', json.error);
         
+        // Fix for the TypeError: Convert error data to string for safer comparison
+        const errorData = json.error.data ? 
+          (typeof json.error.data === 'string' ? json.error.data : JSON.stringify(json.error.data)) : '';
+        const errorMessage = json.error.message || '';
+        
         // Enhanced error handling with clear messages
-        if (json.error.data?.includes('AA21')) {
+        if (errorData.includes('AA21') || errorMessage.includes('AA21')) {
           throw new Error('Insufficient funds to deploy account. Please add NERO tokens to your wallet.');
-        } else if (json.error.data?.includes('AA20')) {
+        } else if (errorData.includes('AA20') || errorMessage.includes('AA20')) {
           throw new Error('Smart contract wallet not deployed.');
-        } else if (json.error.data?.includes('AA33')) {
+        } else if (errorData.includes('AA25') || errorMessage.includes('AA25') || 
+                   errorMessage.includes('invalid account nonce')) {
+          // Add handling for nonce error
+          throw new Error('Account nonce is invalid. Please try again.');
+        } else if (errorData.includes('AA33') || errorMessage.includes('AA33')) {
           throw new Error('Token approval failed. Please try again or choose a different token.');
-        } else if (json.error.data?.includes('gas type') || 
-                   json.error.message?.includes('Type 0') || 
-                   json.error.message?.includes('sponsored')) {
+        } else if (errorData.includes('gas type') || 
+                   errorMessage.includes('Type 0') || 
+                   errorMessage.includes('sponsored')) {
           // If Type 0 fails, retry with Type 1 as fallback
           console.warn('Type 0 (free gas) not supported, automatically trying with Type 1');
           
@@ -261,7 +270,8 @@ class PaymasterService {
           }
         }
         
-        throw new Error(`Paymaster error: ${json.error.message || json.error.data || 'Unknown error'}`);
+        // Generic error message if not matched above
+        throw new Error(`Paymaster error: ${errorMessage || 'Unknown error'}`);
       }
       
       return json.result.paymasterAndData;
