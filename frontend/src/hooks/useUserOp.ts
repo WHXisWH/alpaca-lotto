@@ -1,4 +1,3 @@
-// frontend/src/hooks/useUserOp.ts - Modified with direct EOA token approval
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
@@ -46,6 +45,7 @@ const useUserOp = () => {
   const [isDevelopmentMode, setIsDevelopmentMode] = useState(false);
   const [needsNeroTokens, setNeedsNeroTokens] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [provider, setProvider] = useState(null);
 
   /**
    * Check if the AA wallet has enough prefunding in the EntryPoint contract
@@ -136,7 +136,7 @@ const useUserOp = () => {
   };
 
   /**
-   * Deploy AA wallet with integrated prefunding if needed
+   * Deploy AA wallet with integrated verification
    */
   const deployAAWallet = async () => {
     if (!builder || !client) {
@@ -150,19 +150,32 @@ const useUserOp = () => {
       console.log("🚀 Attempting to deploy AA wallet...");
       builder.resetOp && builder.resetOp();
   
-  
-      // Trigger a minimal “empty” UserOp to force contract deployment
+      // Trigger a minimal "empty" UserOp to force contract deployment
       builder.execute(ethers.constants.AddressZero, 0, "0x");
   
-
       const userOpResponse = await client.sendUserOperation(builder);
+      console.log("🔄 Waiting for wallet deployment transaction to be mined...");
       const receipt = await userOpResponse.wait();
+      console.log("📝 Transaction mined:", receipt.transactionHash);
+      
+      // Wait a brief moment to ensure blockchain state is updated
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Verify the wallet is deployed by checking the code at the address
+      if (provider) {
+        const code = await provider.getCode(ethers.utils.getAddress(aaWalletAddress));
+        
+        if (code === '0x') {
+          console.error("❌ No code found at wallet address after deployment");
+          throw new Error('Wallet deployment failed - no code at wallet address');
+        }
+      }
   
       console.log("✅ AA wallet deployed:", receipt.transactionHash);
       setIsDeployed(true);
       setNeedsNeroTokens(false);
       return receipt;
-    } catch (err: any) {
+    } catch (err) {
       console.error("❌ Failed to deploy AA wallet:", err);
 
       if (err.message?.includes('AA21') || err.message?.includes('funds')) {
@@ -176,16 +189,35 @@ const useUserOp = () => {
   };
 
   /**
-   * Main deployment function with warning
+   * Main deployment function with verification
    * This serves as the single entry point for deployment checks
    */
   const deployOrWarn = async () => {
     // First check if already deployed
     if (isDeployed) return true;
     
-    // Otherwise attempt deployment
-    await deployAAWallet();
-    return true;
+    try {
+      // Double-check with getCode to be sure
+      if (aaWalletAddress && provider) {
+        console.log("🔍 Verifying wallet deployment status at:", aaWalletAddress);
+        const code = await provider.getCode(ethers.utils.getAddress(aaWalletAddress));
+        
+        if (code !== '0x') {
+          console.log("✅ Wallet already deployed - found code at address");
+          setIsDeployed(true);
+          return true;
+        }
+        
+        console.log("⚠️ Wallet not deployed - proceeding with deployment");
+      }
+      
+      // Otherwise attempt deployment
+      await deployAAWallet();
+      return true;
+    } catch (err) {
+      console.error("❌ Deployment error:", err);
+      throw err;
+    }
   };
 
   /**
@@ -315,6 +347,7 @@ const useUserOp = () => {
           await ensureWalletAccess();
           
           const provider = new ethers.providers.Web3Provider(window.ethereum);
+          setProvider(provider);
           const signer = provider.getSigner();
           
           // Get EOA address
@@ -377,7 +410,7 @@ const useUserOp = () => {
   }, [isConnected, isInitialized, client, builder, checkAAWalletPrefunding]);  
 
   /**
-   * Execute a ticket purchase operation with integrated deployment check
+   * Execute a ticket purchase operation with proper wallet verification
    */
   const executeTicketPurchase = useCallback(async ({
     lotteryId,
@@ -416,6 +449,14 @@ const useUserOp = () => {
       // Make sure the wallet is deployed if not skipping check
       if (!skipDeploymentCheck && !isDeployed) {
         await deployOrWarn();
+        
+        // Double-check deployment was successful
+        if (!isDeployed && provider) {
+          const code = await provider.getCode(aaWalletAddress);
+          if (code === '0x') {
+            throw new Error('Wallet deployment failed. Please try again.');
+          }
+        }
       }
       
       const contractInterface = new ethers.utils.Interface([
@@ -429,7 +470,7 @@ const useUserOp = () => {
       
       builder.resetOp && builder.resetOp();
       
-      // Force Type 1 for better compatibility if Type 0 was selected
+      // Use user-selected payment type
       const finalPaymentType = paymentType;
       const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
       
@@ -509,10 +550,10 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, initSDK, isDevelopmentMode, address, isDeployed, deployOrWarn, ensurePaymasterApproval]);
+  }, [client, builder, initSDK, isDevelopmentMode, address, isDeployed, deployOrWarn, ensurePaymasterApproval, provider, aaWalletAddress]);
 
   /**
-   * Execute a batch ticket purchase operation with integrated deployment check
+   * Execute a batch ticket purchase operation with proper wallet verification
    */
   const executeBatchPurchase = useCallback(async ({ 
     selections, 
@@ -555,6 +596,14 @@ const useUserOp = () => {
       // Make sure wallet is deployed if not skipping check
       if (!skipDeploymentCheck && !isDeployed) {
         await deployOrWarn();
+        
+        // Double-check deployment was successful
+        if (!isDeployed && provider) {
+          const code = await provider.getCode(aaWalletAddress);
+          if (code === '0x') {
+            throw new Error('Wallet deployment failed. Please try again.');
+          }
+        }
       }
       
       // Create contract interface
@@ -576,7 +625,7 @@ const useUserOp = () => {
       // Reset the builder operation
       builder.resetOp && builder.resetOp();
       
-      // Force Type 1 payment since Type 0 may not be supported
+      // Use user-selected payment type
       const finalPaymentType = paymentType;
       const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
       
@@ -655,7 +704,7 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, initSDK, isDevelopmentMode, ensurePaymasterApproval, isDeployed, deployOrWarn]);
+  }, [client, builder, initSDK, isDevelopmentMode, ensurePaymasterApproval, isDeployed, deployOrWarn, provider, aaWalletAddress]);
 
   // Initialize SDK once when wallet is connected and component is mounted
   useEffect(() => {

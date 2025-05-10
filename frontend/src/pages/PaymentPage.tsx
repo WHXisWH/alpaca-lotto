@@ -1,4 +1,3 @@
-// frontend/src/pages/PaymentPage.tsx - Modified version with simplified wallet management
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAccount } from 'wagmi';
@@ -80,34 +79,11 @@ const PaymentPage = () => {
   
   // Payment type change handler
   const handlePaymentTypeChange = (e) => {
+    // Use the selected payment type directly without modification
     setPaymentType(parseInt(e.target.value));
   };
   
-  // Payment token change handler
-  const handlePaymentTokenChange = (selectedToken) => {
-    setPaymentToken(selectedToken);
-  };
-  
-  // Helper to update processing steps
-  const updateProcessingStep = (stepId, newStatus) => {
-    setProcessingSteps(prevSteps => 
-      prevSteps.map(step => 
-        step.id === stepId ? { ...step, status: newStatus } : step
-      )
-    );
-  };
-  
-  // Handle wallet deployment
-  const handleDeployWallet = async () => {
-    try {
-      await deployOrWarn();
-      setDeploymentSuccess(true);
-    } catch (err) {
-      setErrorMessage(err.message || 'Failed to deploy wallet');
-    }
-  };
-  
-  // Transaction submission handler with integrated deployment check
+  // Transaction submission handler with proper wallet deployment check
   const handleSubmitTransaction = async () => {
     if ((!isConnected && !isDevelopmentMode) || !lottery || !token) {
       setErrorMessage('Wallet not connected or missing required information');
@@ -119,6 +95,15 @@ const PaymentPage = () => {
       if (window.confirm('Smart contract wallet not deployed. Deploy it now?')) {
         try {
           await deployOrWarn();
+          
+          // Verify deployment was successful
+          if (provider) {
+            const code = await provider.getCode(aaWalletAddress);
+            if (code === '0x') {
+              throw new Error('Wallet deployment failed. Please try again.');
+            }
+          }
+          
           setDeploymentSuccess(true);
         } catch (err) {
           setErrorMessage(err.message || 'Failed to deploy wallet');
@@ -135,13 +120,13 @@ const PaymentPage = () => {
     updateProcessingStep('submitting', 'pending');
     
     try {
-      // Send the transaction - approval will be handled inside executeTicketPurchase
+      // Send the transaction using the user-selected payment type
       const txHash = await executeTicketPurchase({
         lotteryId: lottery.id,
         tokenAddress: token.address,
         quantity,
-        paymentType,
-        paymentToken: paymentToken?.address,
+        paymentType, // Use the selected payment type directly
+        paymentToken: paymentToken?.address || token.address,
         useSessionKey: hasActiveSessionKey
       });
       

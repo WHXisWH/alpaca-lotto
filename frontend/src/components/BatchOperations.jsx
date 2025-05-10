@@ -34,7 +34,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   
   const [selections, setSelections] = useState([]);
   const [selectedToken, setSelectedToken] = useState(null);
-  const [paymentType, setPaymentType] = useState(1);
+  const [paymentType, setPaymentType] = useState(0); // Default to sponsored (Type 0)
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
   const [totalCost, setTotalCost] = useState(0);
@@ -329,7 +329,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
         <h4>Payment Method</h4>
         
         <div className="payment-types">
-          {/* Type 0 is now included as an option */}
+          {/* Type 0 - Sponsored (Free) */}
           <div 
             className={`payment-type ${paymentType === 0 ? 'selected' : ''}`}
             onClick={() => handlePaymentTypeChange(0)}
@@ -343,6 +343,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
             </div>
           </div>
           
+          {/* Type 1 - Prepay with ERC20 */}
           <div 
             className={`payment-type ${paymentType === 1 ? 'selected' : ''}`}
             onClick={() => handlePaymentTypeChange(1)}
@@ -356,6 +357,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
             </div>
           </div>
           
+          {/* Type 2 - Postpay with ERC20 */}
           <div 
             className={`payment-type ${paymentType === 2 ? 'selected' : ''}`}
             onClick={() => handlePaymentTypeChange(2)}

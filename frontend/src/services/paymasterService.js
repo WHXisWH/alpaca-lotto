@@ -65,6 +65,46 @@ class PaymasterService {
   }
   
   /**
+   * Check if a token is supported by the Paymaster
+   */
+  async isTokenSupported(tokenAddress) {
+    try {
+      const supportedTokens = await this.getSupportedTokens();
+      return supportedTokens.some(token => 
+        token.address.toLowerCase() === tokenAddress.toLowerCase()
+      );
+    } catch (error) {
+      console.warn('Error checking token support:', error.message);
+      return false;
+    }
+  }
+  
+  /**
+   * Check if a token is approved for the Paymaster
+   */
+  async isTokenApproved(tokenAddress, walletAddress) {
+    if (!this.provider) await this.init();
+    
+    try {
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        ['function allowance(address owner, address spender) view returns (uint256)'],
+        this.provider
+      );
+      
+      const allowance = await tokenContract.allowance(
+        walletAddress,
+        this.tokenPaymasterAddress
+      );
+      
+      return allowance.gt(0);
+    } catch (error) {
+      console.warn('Error checking token approval:', error.message);
+      return false;
+    }
+  }
+  
+  /**
    * Get tokens supported by the Paymaster
    */
   async getSupportedTokens(aaWalletAddress) {
@@ -168,22 +208,11 @@ class PaymasterService {
       const isDeployed = await this.isAccountDeployed(userOp.sender);
       
       // If account not deployed and initCode is empty, this will fail
-      if (!isDeployed && !userOp.initCode || userOp.initCode === '0x') {
+      if (!isDeployed && (!userOp.initCode || userOp.initCode === '0x')) {
         throw new Error('AA20 account not deployed');
       }
       
-      // Special handling for Type 0 (sponsored) which might not be supported
-      if (paymasterOptions.type === '0' || paymasterOptions.type === 0) {
-        // Fallback to Type 1 if needed
-        paymasterOptions.type = '1';
-        
-        // If token isn't provided, use USDC by default
-        if (!paymasterOptions.token) {
-          paymasterOptions.token = SUPPORTED_TOKENS.USDC.address;
-        }
-      }
-      
-      // Make the API call to the paymaster
+      // Make the API call to the paymaster with user's preferred payment type
       const res = await fetch(this.rpcUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,6 +241,24 @@ class PaymasterService {
           throw new Error('Smart contract wallet not deployed.');
         } else if (json.error.data?.includes('AA33')) {
           throw new Error('Token approval failed. Please try again or choose a different token.');
+        } else if (json.error.data?.includes('gas type') || 
+                   json.error.message?.includes('Type 0') || 
+                   json.error.message?.includes('sponsored')) {
+          // If Type 0 fails, retry with Type 1 as fallback
+          console.warn('Type 0 (free gas) not supported, automatically trying with Type 1');
+          
+          if (paymasterOptions.type === '0' || paymasterOptions.type === 0) {
+            paymasterOptions.type = '1';
+            
+            // If token isn't provided for Type 1, use USDC by default
+            if (!paymasterOptions.token) {
+              const USDC_ADDRESS = '0xC86Fed58edF0981e927160C50ecB8a8B05B32fed';
+              paymasterOptions.token = USDC_ADDRESS;
+            }
+            
+            // Retry with Type 1
+            return this.sponsorUserOp(userOp, paymasterOptions);
+          }
         }
         
         throw new Error(`Paymaster error: ${json.error.message || json.error.data || 'Unknown error'}`);

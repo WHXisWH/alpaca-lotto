@@ -70,7 +70,7 @@ const PaymentOptimizerView = ({
       <div className="payment-types">
         <div className="section-title">Payment Method</div>
         <div className="payment-type-options">
-          {/* Type 0 - Sponsored (may not be supported but shown for user choice) */}
+          {/* Type 0 - Sponsored (Free) */}
           <div
             className={`payment-type-option ${selectedPaymentType === 0 ? 'selected' : ''}`}
             onClick={() => handlePaymentTypeChange(0)}
@@ -84,6 +84,7 @@ const PaymentOptimizerView = ({
             </div>
           </div>
           
+          {/* Type 1 - Prepay with ERC20 */}
           <div
             className={`payment-type-option ${selectedPaymentType === 1 ? 'selected' : ''}`}
             onClick={() => handlePaymentTypeChange(1)}
@@ -97,6 +98,7 @@ const PaymentOptimizerView = ({
             </div>
           </div>
           
+          {/* Type 2 - Postpay with ERC20 */}
           <div
             className={`payment-type-option ${selectedPaymentType === 2 ? 'selected' : ''}`}
             onClick={() => handlePaymentTypeChange(2)}
@@ -114,9 +116,9 @@ const PaymentOptimizerView = ({
         {/* Warning for Type 0 */}
         {showSponsoredWarning && (
           <div className="payment-type-warning">
-            <div className="warning-icon">⚠️</div>
+            <div className="warning-icon">ℹ️</div>
             <div className="warning-text">
-              Sponsored transactions may not be available on testnet. If this fails, your transaction will automatically try using token payment instead.
+              If sponsored transactions are unavailable, the system will automatically use ERC20 token payment instead.
             </div>
           </div>
         )}
@@ -225,7 +227,7 @@ const PaymentOptimizerView = ({
       <div className="info-box">
         <div className="info-icon">ℹ️</div>
         <div className="info-content">
-          <p>NERO Chain's Account Abstraction lets you pay for gas with any token, not just the native currency. For the most reliable experience, we recommend using token payment (Type 1 or 2).</p>
+          <p>NERO Chain's Account Abstraction lets you pay for gas with any token, not just the native currency. Choose your preferred payment method above.</p>
         </div>
       </div>
     </div>
