@@ -1,5 +1,3 @@
-// CORRECTED: frontend/src/hooks/useUserOp.ts
-
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
@@ -8,23 +6,10 @@ import SUPPORTED_TOKENS from '../constants/tokens';
 import paymasterService from '../services/paymasterService';
 import { EntryPointAbi } from '../constants/abi';
 import testModeUtils from '../utils/testModeUtils';
-import { 
-  NERO_RPC_URL, 
-  BUNDLER_URL, 
-  PAYMASTER_URL, 
-  ENTRYPOINT_ADDRESS, 
-  ACCOUNT_FACTORY_ADDRESS,
-  LOTTERY_CONTRACT_ADDRESS,
-  TOKEN_PAYMASTER_ADDRESS
-} from '../constants/config';
 
 // Global initialization flag to prevent concurrent initializations
 let isInitializing = false;
 
-/**
- * Custom hook for NERO Chain's Account Abstraction functionality
- * Enhanced with integrated deployment workflow and test mode
- */
 const useUserOp = () => {
   const { address, isConnected } = useAccount();
   const [client, setClient] = useState(null);
@@ -848,5 +833,18 @@ const useUserOp = () => {
     enableTestMode
   };
 };
+
+async function ensureWalletAccess() {
+  try {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error('Error requesting account access:', err);
+    return false;
+  }
+}
 
 export default useUserOp;
