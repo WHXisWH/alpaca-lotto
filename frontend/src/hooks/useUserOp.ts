@@ -1,4 +1,4 @@
-// CORRECTED: frontend/src/hooks/useUserOp.ts
+// frontend/src/hooks/useUserOp.ts
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
@@ -39,6 +39,57 @@ const useUserOp = () => {
   const [needsNeroTokens, setNeedsNeroTokens] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [provider, setProvider] = useState(null);
+
+  /**
+   * Create mock objects for test mode
+   */
+  const setupTestModeMocks = () => {
+    // Mock client if not set
+    if (!client) {
+      const mockClient = {
+        sendUserOperation: async () => {
+          return {
+            userOpHash: '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
+            wait: async () => ({ 
+              transactionHash: '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('') 
+            })
+          };
+        },
+        estimateUserOperationGas: async () => ({
+          callGasLimit: '0x88b8',
+          verificationGasLimit: '0x33450',
+          preVerificationGas: '0xc350'
+        })
+      };
+      setClient(mockClient);
+    }
+    
+    // Mock builder if not set
+    if (!builder) {
+      const mockBuilder = {
+        getSender: async () => aaWalletAddress || '0x1234567890123456789012345678901234567890',
+        execute: () => {},
+        executeBatch: () => {},
+        setPaymasterOptions: () => {},
+        resetOp: () => {},
+        getOp: async () => ({ 
+          sender: aaWalletAddress || '0x1234567890123456789012345678901234567890',
+          nonce: { toHexString: () => '0x0' },
+          initCode: '0x',
+          callData: '0x',
+          callGasLimit: { toHexString: () => '0x88b8' },
+          verificationGasLimit: { toHexString: () => '0x33450' },
+          preVerificationGas: { toHexString: () => '0xc350' },
+          maxFeePerGas: { toHexString: () => '0x2162553062' },
+          maxPriorityFeePerGas: { toHexString: () => '0x40dbcf36' },
+          paymasterAndData: '0x',
+          signature: '0x'
+        }),
+        setOp: () => {}
+      };
+      setBuilder(mockBuilder);
+    }
+  };
 
   /**
    * Check if the AA wallet has enough prefunding in the EntryPoint contract
@@ -247,6 +298,39 @@ const useUserOp = () => {
   };
 
   /**
+   * Utility to ensure SDK is initialized before operations
+   */
+  const ensureSDKInitialized = async () => {
+    // If already initialized, return cached result
+    if (isInitialized && client && builder) {
+      return { success: true, client, builder };
+    }
+    
+    // If initialization is in progress, wait for it to complete
+    if (isInitializing) {
+      console.log('SDK initialization already in progress, waiting...');
+      await new Promise(resolve => {
+        const checkInterval = setInterval(() => {
+          if (!isInitializing) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+      });
+      
+      return { 
+        success: isInitialized, 
+        client, 
+        builder,
+        isDevelopmentMode
+      };
+    }
+    
+    // Otherwise, initialize the SDK
+    return await initSDK();
+  };
+
+  /**
    * Main deployment function with verification
    * This serves as the single entry point for deployment checks
    */
@@ -269,6 +353,15 @@ const useUserOp = () => {
         console.log("⚠️ Wallet not deployed - proceeding with deployment");
       }
       
+      // Make sure SDK is initialized before deployment
+      if (!client || !builder) {
+        console.log("SDK not initialized, re-initializing...");
+        const result = await ensureSDKInitialized();
+        if (!result.success) {
+          throw new Error('SDK failed to initialize before deployment');
+        }
+      }
+      
       // Otherwise attempt deployment
       await deployAAWallet();
       return true;
@@ -279,6 +372,8 @@ const useUserOp = () => {
       if (err._fallbackToTestMode || localStorage.getItem('autoFallbackEnabled') === 'true') {
         testModeUtils.enableTestMode('deployment_failure');
         setIsDevelopmentMode(true);
+        // Set up mock objects for test mode
+        setupTestModeMocks();
         return false;
       }
       
@@ -321,9 +416,10 @@ const useUserOp = () => {
       if (testModeUtils.isTestModeEnabled()) {
         setIsDevelopmentMode(true);
         setAaWalletAddress('0x1234567890123456789012345678901234567890');
+        setupTestModeMocks(); // Setup mock client and builder
         setIsInitialized(true);
         isInitializing = false;
-        return { success: true, isDevelopmentMode: true };
+        return { success: true, isDevelopmentMode: true, client, builder };
       }
       setError('Wallet not connected');
       isInitializing = false;
@@ -375,9 +471,10 @@ const useUserOp = () => {
               setNeedsNeroTokens(!isPrefunded);
             }
           } else {
-            // In test mode, set mock address
+            // In test mode, set mock address and client/builder
             setAaWalletAddress('0x1234567890123456789012345678901234567890');
             setIsDevelopmentMode(true);
+            setupTestModeMocks(); // Setup mock client and builder
           }
           
           setIsInitialized(true);
@@ -389,18 +486,20 @@ const useUserOp = () => {
           console.error('Error initializing AA SDK:', err);
           setIsDevelopmentMode(true);
           setAaWalletAddress('0x1234567890123456789012345678901234567890');
+          setupTestModeMocks(); // Setup mock client and builder
           setIsInitialized(true);
           setIsLoading(false);
           isInitializing = false;
-          return { success: true, isDevelopmentMode: true };
+          return { success: true, isDevelopmentMode: true, client, builder };
         }
       } else {
         setIsDevelopmentMode(true);
         setAaWalletAddress('0x1234567890123456789012345678901234567890');
+        setupTestModeMocks(); // Setup mock client and builder
         setIsInitialized(true);
         setIsLoading(false);
         isInitializing = false;
-        return { success: true, isDevelopmentMode: true };
+        return { success: true, isDevelopmentMode: true, client, builder };
       }
     } catch (err) {
       console.error('Error in AA SDK initialization:', err);
@@ -463,7 +562,9 @@ const useUserOp = () => {
         paymentToken = SUPPORTED_TOKENS.USDC.address;
       }
       
+      // If in development mode, return mock transaction hash
       if (isDevelopmentMode) {
+        console.log('Development mode: Simulating ticket purchase transaction');
         await new Promise(resolve => setTimeout(resolve, 1500));
         const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
         setTxHash(mockTxHash);
@@ -471,10 +572,10 @@ const useUserOp = () => {
         return mockTxHash;
       }
       
-      // Only initialize if not already initialized
+      // Make sure SDK is initialized
       if (!client || !builder) {
         console.log('Initializing SDK for transaction...');
-        const initResult = await initSDK();
+        const initResult = await ensureSDKInitialized();
         if (!initResult.success) {
           throw new Error(initResult.error || 'Failed to initialize SDK');
         }
@@ -586,6 +687,7 @@ const useUserOp = () => {
         console.log("Falling back to development mode due to error");
         testModeUtils.enableTestMode('execution_error');
         setIsDevelopmentMode(true);
+        setupTestModeMocks(); // Make sure we have mock objects set up
         
         // Return mock hash
         const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
@@ -618,7 +720,7 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, initSDK, isDevelopmentMode, address, isDeployed, deployOrWarn, ensurePaymasterApproval, provider, aaWalletAddress]);
+  }, [client, builder, ensureSDKInitialized, isDevelopmentMode, address, isDeployed, deployOrWarn, ensurePaymasterApproval, provider, aaWalletAddress]);
 
   /**
    * Execute a batch ticket purchase operation with proper wallet verification
@@ -652,10 +754,10 @@ const useUserOp = () => {
         return mockTxHash;
       }
       
-      // Only initialize if not already initialized
+      // Make sure SDK is initialized
       if (!client || !builder) {
         console.log('Initializing SDK for batch transaction...');
-        const initResult = await initSDK();
+        const initResult = await ensureSDKInitialized();
         if (!initResult.success) {
           throw new Error(initResult.error || 'Failed to initialize SDK');
         }
@@ -772,6 +874,7 @@ const useUserOp = () => {
         console.log("Falling back to development mode due to error");
         testModeUtils.enableTestMode('execution_error');
         setIsDevelopmentMode(true);
+        setupTestModeMocks(); // Set up mock objects
         
         // Return mock hash
         const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
@@ -800,7 +903,7 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, initSDK, isDevelopmentMode, ensurePaymasterApproval, isDeployed, deployOrWarn, provider, aaWalletAddress]);
+  }, [client, builder, ensureSDKInitialized, isDevelopmentMode, ensurePaymasterApproval, isDeployed, deployOrWarn, provider, aaWalletAddress]);
 
   /**
    * Enter test mode
@@ -808,12 +911,13 @@ const useUserOp = () => {
   const enableTestMode = () => {
     testModeUtils.enableTestMode('user_choice');
     setIsDevelopmentMode(true);
+    setupTestModeMocks(); // Make sure we have mock objects set up
     return true;
   };
 
   // Initialize SDK once when wallet is connected
   useEffect(() => {
-    if ((isConnected || testModeUtils.isTestModeEnabled()) && !isInitialized) {
+    if ((isConnected || testModeUtils.isTestModeEnabled()) && !isInitialized && !isInitializing) {
       console.log('Initializing AA SDK...');
       initSDK().catch(console.error);
     }
@@ -845,7 +949,8 @@ const useUserOp = () => {
     checkAAWalletPrefunding,
     checkTokenApproval,
     deployOrWarn,
-    enableTestMode
+    enableTestMode,
+    ensureSDKInitialized
   };
 };
 
