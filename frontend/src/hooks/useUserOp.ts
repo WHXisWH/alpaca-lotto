@@ -1,3 +1,5 @@
+// CORRECTED: frontend/src/hooks/useUserOp.ts
+
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
@@ -6,19 +8,23 @@ import SUPPORTED_TOKENS from '../constants/tokens';
 import paymasterService from '../services/paymasterService';
 import { EntryPointAbi } from '../constants/abi';
 import testModeUtils from '../utils/testModeUtils';
+import { 
+  NERO_RPC_URL, 
+  BUNDLER_URL, 
+  PAYMASTER_URL, 
+  ENTRYPOINT_ADDRESS, 
+  ACCOUNT_FACTORY_ADDRESS,
+  LOTTERY_CONTRACT_ADDRESS,
+  TOKEN_PAYMASTER_ADDRESS
+} from '../constants/config';
 
 // Global initialization flag to prevent concurrent initializations
 let isInitializing = false;
 
-const NERO_RPC_URL = import.meta.env.VITE_NERO_RPC_URL || "https://rpc-testnet.nerochain.io";
-const BUNDLER_URL = import.meta.env.VITE_BUNDLER_URL || "https://bundler-testnet.nerochain.io";
-const PAYMASTER_URL = import.meta.env.VITE_PAYMASTER_URL || "https://paymaster-testnet.nerochain.io";
-const ENTRYPOINT_ADDRESS = import.meta.env.VITE_ENTRYPOINT_ADDRESS || "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
-const ACCOUNT_FACTORY_ADDRESS = import.meta.env.VITE_ACCOUNT_FACTORY_ADDRESS || "0x9406Cc6185a346906296840746125a0E44976454";
-const LOTTERY_CONTRACT_ADDRESS = import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS || "";
-const TOKEN_PAYMASTER_ADDRESS = ethers.utils.getAddress(import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0x5a6680dFd4a77FEea0A7be291147768EaA2414ad");
-const PAYMASTER_API_KEY = import.meta.env.VITE_PAYMASTER_API_KEY || "";
-
+/**
+ * Custom hook for NERO Chain's Account Abstraction functionality
+ * Enhanced with integrated deployment workflow and test mode
+ */
 const useUserOp = () => {
   const { address, isConnected } = useAccount();
   const [client, setClient] = useState(null);
@@ -330,29 +336,6 @@ const useUserOp = () => {
     try {
       if (typeof window !== 'undefined' && window.ethereum) {
         try {
-          // Validate PAYMASTER_URL
-          const paymasterUrlValid = PAYMASTER_URL && 
-                                  (PAYMASTER_URL.startsWith('http://') || 
-                                   PAYMASTER_URL.startsWith('https://'));
-          
-          if (!paymasterUrlValid) {
-            console.warn('Invalid PAYMASTER_URL:', PAYMASTER_URL);
-            throw new Error('Invalid Paymaster URL configuration');
-          }
-          
-          // When initializing paymasterService
-          await paymasterService.init(PAYMASTER_API_KEY);
-          
-          // Test Paymaster connection
-          try {
-            const paymasterRpc = new ethers.providers.JsonRpcProvider(PAYMASTER_URL);
-            await paymasterRpc.getNetwork();
-            console.log('Paymaster RPC connection successful');
-          } catch (paymasterErr) {
-            console.warn('Paymaster RPC connection failed:', paymasterErr);
-            // Don't throw - we'll handle this gracefully when needed
-          }
-
           // Ensure wallet access permissions first
           await window.ethereum.request({ method: 'eth_requestAccounts' });
           
@@ -532,14 +515,6 @@ const useUserOp = () => {
       
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
-      // Configure Paymaster options with PAYMASTER_URL
-      builder.setPaymasterOptions({
-        type: finalPaymentType.toString(),
-        token: (finalPaymentType === 1 || finalPaymentType === 2) ? finalPaymentToken : undefined,
-        apikey: PAYMASTER_API_KEY,
-        rpc: PAYMASTER_URL
-      });
-      
       const rawOp = await builder.getOp();
       const userOp = {
         sender: rawOp.sender,
@@ -579,20 +554,6 @@ const useUserOp = () => {
             };
             return executeTicketPurchase(retryArgs);
           }
-        }
-        
-        // If Paymaster connection fails, switch to test mode
-        if (sponsorError.message?.includes('Paymaster RPC connection failed')) {
-          console.error("Cannot connect to Paymaster service:", sponsorError);
-          console.log("Switching to test mode due to Paymaster connection failure");
-          testModeUtils.enableTestMode('paymaster_connection_failed');
-          setIsDevelopmentMode(true);
-          
-          // Return mock hash
-          const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-          setTxHash(mockTxHash);
-          setIsLoading(false);
-          return mockTxHash;
         }
         
         throw sponsorError;
@@ -662,10 +623,8 @@ const useUserOp = () => {
   /**
    * Execute a batch ticket purchase operation with proper wallet verification
    */
-  const executeBatchPurchase = useCallback(async ({
-    lotteryId,
-    tokenAddress,
-    quantity,
+  const executeBatchPurchase = useCallback(async ({ 
+    selections, 
     paymentType = 1,
     paymentToken = null,
     useSessionKey = false,
@@ -675,12 +634,18 @@ const useUserOp = () => {
     setError(null);
     
     try {
+      // Validate token address for Types 1 & 2
       if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
+        // Use USDC by default if no token specified
         paymentToken = SUPPORTED_TOKENS.USDC.address;
       }
       
+      // In development mode, simulate success
       if (isDevelopmentMode) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        console.log('Development mode: Simulating batch purchase');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Generate mock transaction hash
         const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
         setTxHash(mockTxHash);
         setIsLoading(false);
@@ -696,7 +661,7 @@ const useUserOp = () => {
         }
       }
       
-      // Make sure the wallet is deployed if not skipping check
+      // Make sure wallet is deployed if not skipping check
       if (!skipDeploymentCheck && !isDeployed) {
         await deployOrWarn();
         
@@ -709,54 +674,57 @@ const useUserOp = () => {
         }
       }
       
+      // Create contract interface
       const contractInterface = new ethers.utils.Interface([
-        'function batchPurchaseTickets(uint256 _lotteryId, address _tokenAddress, uint256 _quantity) returns (bool)'
+        'function batchPurchaseTickets(uint256[] _lotteryIds, address[] _tokenAddresses, uint256[] _quantities) returns (bool)'
       ]);
       
+      // Prepare batch arrays
+      const lotteryIds = selections.map(s => s.lotteryId);
+      const tokenAddresses = selections.map(s => s.tokenAddress);
+      const quantities = selections.map(s => s.quantity);
+      
+      // Encode function call
       const callData = contractInterface.encodeFunctionData(
         'batchPurchaseTickets',
-        [lotteryId, tokenAddress, quantity]
+        [lotteryIds, tokenAddresses, quantities]
       );
       
+      // Reset the builder operation
       builder.resetOp && builder.resetOp();
       
       // Use user-selected payment type
       const finalPaymentType = paymentType;
       const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
       
-      // Ensure token is approved for Paymaster with direct EOA approach
+      // Ensure token is approved for Paymaster using direct EOA approach
       if (finalPaymentType !== 0) {
         await ensurePaymasterApproval(finalPaymentToken, builder);
       }
       
+      // Configure the execution
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
-      // Configure Paymaster options with PAYMASTER_URL
-      builder.setPaymasterOptions({
-        type: finalPaymentType.toString(),
-        token: (finalPaymentType === 1 || finalPaymentType === 2) ? finalPaymentToken : undefined,
-        apikey: PAYMASTER_API_KEY,
-        rpc: PAYMASTER_URL
-      });
-      
+      // Get raw operation for sponsoring
       const rawOp = await builder.getOp();
       const userOp = {
-        sender: rawOp.sender,
-        nonce: rawOp.nonce.toHexString(),
-        initCode: rawOp.initCode,
-        callData: rawOp.callData,
-        callGasLimit: rawOp.callGasLimit.toHexString(),
+        sender:               rawOp.sender,
+        nonce:                rawOp.nonce.toHexString(),
+        initCode:             rawOp.initCode,
+        callData:             rawOp.callData,
+        callGasLimit:         rawOp.callGasLimit.toHexString(),
         verificationGasLimit: rawOp.verificationGasLimit.toHexString(),
-        preVerificationGas: rawOp.preVerificationGas.toHexString(),
-        maxFeePerGas: rawOp.maxFeePerGas.toHexString(),
+        preVerificationGas:   rawOp.preVerificationGas.toHexString(),
+        maxFeePerGas:         rawOp.maxFeePerGas.toHexString(),
         maxPriorityFeePerGas: rawOp.maxPriorityFeePerGas.toHexString(),
-        paymasterAndData: rawOp.paymasterAndData,
-        signature: rawOp.signature
+        paymasterAndData:     rawOp.paymasterAndData,
+        signature:            rawOp.signature
       };
-      
-      const paymasterOpts = {
+
+      // Sponsor the operation
+      const paymasterOpts = { 
         type: finalPaymentType.toString(),
-        token: finalPaymentToken
+        token: finalPaymentToken 
       };
       
       try {
@@ -764,7 +732,7 @@ const useUserOp = () => {
         userOp.paymasterAndData = pmData;
         builder.setOp(userOp);
       } catch (sponsorError) {
-        console.error("Error sponsoring operation:", sponsorError);
+        console.error("Error sponsoring batch operation:", sponsorError);
         
         // If it's a nonce error, reset operation and retry
         if (sponsorError.message?.includes('AA25') || sponsorError.message?.includes('nonce')) {
@@ -780,46 +748,26 @@ const useUserOp = () => {
           }
         }
         
-        // If Paymaster connection fails, switch to test mode
-        if (sponsorError.message?.includes('Paymaster RPC connection failed')) {
-          console.error("Cannot connect to Paymaster service:", sponsorError);
-          console.log("Switching to test mode due to Paymaster connection failure");
-          testModeUtils.enableTestMode('paymaster_connection_failed');
-          setIsDevelopmentMode(true);
-          
-          // Return mock hash
-          const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-          setTxHash(mockTxHash);
-          setIsLoading(false);
-          return mockTxHash;
-        }
-        
         throw sponsorError;
       }
       
+      // Send the UserOperation
       const result = await client.sendUserOperation(builder);
-      const receipt = await result.wait();
-      setTxHash(receipt.transactionHash);
+      console.log('Batch UserOperation result:', result);
       
-      try {
-        const apiModule = await import('../services/api');
-        const api = apiModule.default || apiModule.api;
-        if (api && lotteryId) {
-          await api.getLotteryDetails(lotteryId);
-          if (address) {
-            await api.getUserTickets(lotteryId, address);
-          }
-        }
-      } catch (refreshErr) {
-        console.warn('Error refreshing data after batch purchase:', refreshErr);
-      }
+      // Wait for transaction confirmation
+      const receipt = await result.wait();
+      console.log('Batch transaction receipt:', receipt);
+      
+      // Set transaction hash for later reference
+      setTxHash(receipt.transactionHash);
       
       setIsLoading(false);
       return receipt.transactionHash;
     } catch (err) {
       console.error('Error executing batch purchase:', err);
       
-      // If error and auto fallback is enabled, switch to test mode
+      // Enhanced error handling for specific cases
       if (localStorage.getItem('autoFallbackEnabled') === 'true') {
         console.log("Falling back to development mode due to error");
         testModeUtils.enableTestMode('execution_error');
@@ -832,11 +780,12 @@ const useUserOp = () => {
         return mockTxHash;
       }
       
-      let errorMsg = err.message || 'Failed to purchase tickets';
+      // Better error handling for specific messages
+      let errorMsg = err.message || 'Failed to execute batch purchase';
       
-      // Handle specific error messages
+      // Check for specific error messages
       if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
-        errorMsg = 'The selected token is not supported. Please try a different token.';
+        errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
       } else if (errorMsg.includes('insufficient allowance')) {
         errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
       } else if (errorMsg.includes('insufficient balance')) {
@@ -844,19 +793,14 @@ const useUserOp = () => {
       } else if (errorMsg.includes('account not deployed') || errorMsg.includes('AA20')) {
         errorMsg = 'Smart contract wallet not deployed. Please deploy your wallet first.';
       } else if (errorMsg.includes('AA21')) {
-        errorMsg = 'Insufficient funds to deploy your smart wallet.';
-      } else if (errorMsg.includes('AA25') || errorMsg.includes('nonce')) {
-        errorMsg = 'Transaction nonce is invalid. Please try again.';
-      } else if (errorMsg.includes('includes is not a function')) {
-        // Handle the specific TypeError
-        errorMsg = 'Error processing paymaster response. Please try again.';
+        errorMsg = 'Insufficient funds to deploy your smart wallet. Please add some NERO tokens to continue.';
       }
       
       setError(errorMsg);
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, initSDK, isDevelopmentMode, address, isDeployed, deployOrWarn, ensurePaymasterApproval, provider, aaWalletAddress]);
+  }, [client, builder, initSDK, isDevelopmentMode, ensurePaymasterApproval, isDeployed, deployOrWarn, provider, aaWalletAddress]);
 
   /**
    * Enter test mode
@@ -904,18 +848,5 @@ const useUserOp = () => {
     enableTestMode
   };
 };
-
-async function ensureWalletAccess() {
-  try {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      return true;
-    }
-    return false;
-  } catch (err) {
-    console.error('Error requesting account access:', err);
-    return false;
-  }
-}
 
 export default useUserOp;
