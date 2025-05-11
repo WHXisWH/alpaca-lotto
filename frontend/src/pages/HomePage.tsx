@@ -135,8 +135,7 @@ const HomePage = () => {
     
     if (deploy) {
       try {
-        // Attempt to deploy the wallet
-        await deployOrWarn();
+        await deployOrWarn(true);
         setDeploymentSuccess(true);
         
         // Open ticket modal after successful deployment
@@ -149,7 +148,6 @@ const HomePage = () => {
           setShowFundingPrompt(true);
         } else {
           setError(err.message || 'Failed to deploy wallet');
-          // Ask if user wants to enter test mode
           if (window.confirm('Deployment failed. Would you like to enter test mode instead?')) {
             enableTestMode();
             setIsTicketModalOpen(true);

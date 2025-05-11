@@ -369,12 +369,12 @@ const useUserOp = () => {
    * Main deployment function with verification
    * This serves as the single entry point for deployment checks
    */
-  const deployOrWarn = async () => {
+  const deployOrWarn = async (forceRealDeployment = false) => {
     // First check if already deployed
     if (isDeployed) return true;
     
-    // Treat as deployed in test mode
-    if (isDevelopmentMode) {
+    // テストモードでも強制デプロイが指定されていない場合のみスキップ
+    if (isDevelopmentMode && !forceRealDeployment) {
       console.log("🧪 Test mode: Treating wallet as deployed");
       setIsDeployed(true);
       return true;
@@ -385,7 +385,7 @@ const useUserOp = () => {
       if (aaWalletAddress && provider) {
         console.log("🔍 Verifying wallet deployment status at:", aaWalletAddress);
         
-        // Address normalization
+        // アドレスの正規化
         const normalizedAddress = ethers.utils.getAddress(aaWalletAddress);
         const code = await provider.getCode(normalizedAddress);
         
@@ -413,13 +413,34 @@ const useUserOp = () => {
     } catch (err) {
       console.error("❌ Deployment error:", err);
       
-      // If auto fallback is enabled or specifically requested
+      // When user selected force deployment but it failed
+      if (forceRealDeployment) {
+        console.log("⚠️ Force deployment failed, asking user if they want to use test mode");
+        // Ask user for confirmation
+        const useTestMode = window.confirm(
+          "Deployment failed. Would you like to switch to test mode?\n" +
+          "In test mode, the application will use mock data instead of the actual blockchain."
+        );
+        
+        if (useTestMode) {
+          testModeUtils.enableTestMode('deployment_failure');
+          setIsDevelopmentMode(true);
+          setupTestModeMocks();
+          setIsDeployed(true);
+          return true;
+        } else {
+          throw new Error("Deployment failed and test mode switch was rejected.");
+        }
+      }
+      
+      // When auto fallback is enabled
       if (err._fallbackToTestMode || localStorage.getItem('autoFallbackEnabled') === 'true') {
+        console.log("⚠️ Auto fallback is enabled, switching to test mode");
         testModeUtils.enableTestMode('deployment_failure');
         setIsDevelopmentMode(true);
         setupTestModeMocks();
-        setIsDeployed(true); // Explicitly mark as deployed here
-        return true; // Return success
+        setIsDeployed(true);
+        return true;
       }
       
       throw err;
