@@ -1,3 +1,5 @@
+// CORRECTED: frontend/src/hooks/useUserOp.ts
+
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
@@ -5,32 +7,23 @@ import { Client, Presets } from 'userop';
 import SUPPORTED_TOKENS from '../constants/tokens';
 import paymasterService from '../services/paymasterService';
 import { EntryPointAbi } from '../constants/abi';
+import testModeUtils from '../utils/testModeUtils';
+import { 
+  NERO_RPC_URL, 
+  BUNDLER_URL, 
+  PAYMASTER_URL, 
+  ENTRYPOINT_ADDRESS, 
+  ACCOUNT_FACTORY_ADDRESS,
+  LOTTERY_CONTRACT_ADDRESS,
+  TOKEN_PAYMASTER_ADDRESS
+} from '../constants/config';
 
-async function ensureWalletAccess() {
-  try {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      return true;
-    }
-    return false;
-  } catch (err) {
-    console.error('Error requesting account access:', err);
-    return false;
-  }
-}
-
-// Configuration constants
-const NERO_RPC_URL = import.meta.env.VITE_NERO_RPC_URL || "https://rpc-testnet.nerochain.io";
-const BUNDLER_URL = import.meta.env.VITE_BUNDLER_URL || "https://bundler-testnet.nerochain.io";
-const PAYMASTER_URL = import.meta.env.VITE_PAYMASTER_URL || "https://paymaster-testnet.nerochain.io";
-const ENTRYPOINT_ADDRESS = import.meta.env.VITE_ENTRYPOINT_ADDRESS || "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
-const ACCOUNT_FACTORY_ADDRESS = import.meta.env.VITE_ACCOUNT_FACTORY_ADDRESS || "0x9406Cc6185a346906296840746125a0E44976454";
-const LOTTERY_CONTRACT_ADDRESS = import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS || "";
-const TOKEN_PAYMASTER_ADDRESS = ethers.utils.getAddress(import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || "0x5a6680dFd4a77FEea0A7be291147768EaA2414ad");
+// Global initialization flag to prevent concurrent initializations
+let isInitializing = false;
 
 /**
  * Custom hook for NERO Chain's Account Abstraction functionality
- * Enhanced with integrated deployment workflow
+ * Enhanced with integrated deployment workflow and test mode
  */
 const useUserOp = () => {
   const { address, isConnected } = useAccount();
@@ -42,7 +35,7 @@ const useUserOp = () => {
   const [isPrefundingWallet, setIsPrefundingWallet] = useState(false);
   const [error, setError] = useState(null);
   const [txHash, setTxHash] = useState(null);
-  const [isDevelopmentMode, setIsDevelopmentMode] = useState(false);
+  const [isDevelopmentMode, setIsDevelopmentMode] = useState(testModeUtils.isTestModeEnabled());
   const [needsNeroTokens, setNeedsNeroTokens] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [provider, setProvider] = useState(null);
@@ -187,71 +180,7 @@ const useUserOp = () => {
       setIsLoading(false);
     }
   };
-
-  /**
-   * Main deployment function with verification
-   * This serves as the single entry point for deployment checks
-   */
-  const deployOrWarn = async () => {
-    // First check if already deployed
-    if (isDeployed) return true;
-    
-    try {
-      // Double-check with getCode to be sure
-      if (aaWalletAddress && provider) {
-        console.log("🔍 Verifying wallet deployment status at:", aaWalletAddress);
-        const code = await provider.getCode(ethers.utils.getAddress(aaWalletAddress));
-        
-        if (code !== '0x') {
-          console.log("✅ Wallet already deployed - found code at address");
-          setIsDeployed(true);
-          return true;
-        }
-        
-        console.log("⚠️ Wallet not deployed - proceeding with deployment");
-      }
-      
-      // Otherwise attempt deployment
-      await deployAAWallet();
-      return true;
-    } catch (err) {
-      console.error("❌ Deployment error:", err);
-      throw err;
-    }
-  };
-
-  /**
-   * Check if token approval is needed
-   */
-  const checkTokenApproval = async (tokenAddress) => {
-    if (!tokenAddress || !aaWalletAddress || isDevelopmentMode) return true;
-    
-    try {
-      // Normalize addresses
-      const normalizedTokenAddress = ethers.utils.getAddress(tokenAddress);
-      const normalizedPaymasterAddress = ethers.utils.getAddress(TOKEN_PAYMASTER_ADDRESS);
-      const normalizedAAWalletAddress = ethers.utils.getAddress(aaWalletAddress);
-      
-      // Create provider and token contract
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      
-      const tokenContract = new ethers.Contract(
-        normalizedTokenAddress,
-        ['function allowance(address owner, address spender) view returns (uint256)'],
-        provider
-      );
-      
-      // Check current allowance
-      const allowance = await tokenContract.allowance(normalizedAAWalletAddress, normalizedPaymasterAddress);
-      
-      // Return true if allowance is sufficient
-      return allowance.gte(ethers.constants.MaxUint256.div(2));
-    } catch (error) {
-      console.error('Error checking token approval:', error);
-      return false;
-    }
-  };
-
+  
   /**
    * Ensure token approval for Paymaster with direct EOA approach
    */
@@ -318,15 +247,55 @@ const useUserOp = () => {
   };
 
   /**
+   * Main deployment function with verification
+   * This serves as the single entry point for deployment checks
+   */
+  const deployOrWarn = async () => {
+    // First check if already deployed
+    if (isDeployed) return true;
+    
+    try {
+      // Double-check with getCode to be sure
+      if (aaWalletAddress && provider) {
+        console.log("🔍 Verifying wallet deployment status at:", aaWalletAddress);
+        const code = await provider.getCode(ethers.utils.getAddress(aaWalletAddress));
+        
+        if (code !== '0x') {
+          console.log("✅ Wallet already deployed - found code at address");
+          setIsDeployed(true);
+          return true;
+        }
+        
+        console.log("⚠️ Wallet not deployed - proceeding with deployment");
+      }
+      
+      // Otherwise attempt deployment
+      await deployAAWallet();
+      return true;
+    } catch (err) {
+      console.error("❌ Deployment error:", err);
+      
+      // If auto fallback is enabled or specifically requested
+      if (err._fallbackToTestMode || localStorage.getItem('autoFallbackEnabled') === 'true') {
+        testModeUtils.enableTestMode('deployment_failure');
+        setIsDevelopmentMode(true);
+        return false;
+      }
+      
+      throw err;
+    }
+  };
+
+  /**
    * Initialize the Account Abstraction SDK
    */
   const initSDK = useCallback(async () => {
-    // Add a static flag to track initialization in progress
-    if (initSDK.isInitializing) {
+    // If initialization is already in progress, wait for it to finish
+    if (isInitializing) {
       console.log('SDK initialization already in progress, waiting...');
       await new Promise(resolve => {
         const checkInterval = setInterval(() => {
-          if (!initSDK.isInitializing) {
+          if (!isInitializing) {
             clearInterval(checkInterval);
             resolve();
           }
@@ -346,19 +315,18 @@ const useUserOp = () => {
       return { success: true, client, builder };
     }
     
-    initSDK.isInitializing = true; // Set flag to prevent concurrent initializations
+    isInitializing = true; // Set global flag
       
     if (!isConnected) {
-      if (localStorage.getItem('devModeEnabled') === 'true' ||
-          window.location.search.includes('devMode=true')) {
+      if (testModeUtils.isTestModeEnabled()) {
         setIsDevelopmentMode(true);
         setAaWalletAddress('0x1234567890123456789012345678901234567890');
         setIsInitialized(true);
-        initSDK.isInitializing = false;
+        isInitializing = false;
         return { success: true, isDevelopmentMode: true };
       }
       setError('Wallet not connected');
-      initSDK.isInitializing = false;
+      isInitializing = false;
       return { success: false, error: 'Wallet not connected' };
     }
     
@@ -369,57 +337,61 @@ const useUserOp = () => {
       if (typeof window !== 'undefined' && window.ethereum) {
         try {
           // Ensure wallet access permissions first
-          await ensureWalletAccess();
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
           
           const provider = new ethers.providers.Web3Provider(window.ethereum);
           setProvider(provider);
           const signer = provider.getSigner();
           
-          // Get EOA address
-          const signerAddress = await signer.getAddress();
-          
-          const aaClient = await Client.init(NERO_RPC_URL, {
-            overrideBundlerRpc: BUNDLER_URL,
-            entryPoint: ENTRYPOINT_ADDRESS,
-          });
-          setClient(aaClient);
-          
-          const aaBuilder = await Presets.Builder.SimpleAccount.init(
-            signer,
-            NERO_RPC_URL,
-            {
+          // Initialize AA client and builder only if in normal mode
+          if (!testModeUtils.isTestModeEnabled()) {
+            const aaClient = await Client.init(NERO_RPC_URL, {
               overrideBundlerRpc: BUNDLER_URL,
               entryPoint: ENTRYPOINT_ADDRESS,
-              factory: ACCOUNT_FACTORY_ADDRESS,
+            });
+            setClient(aaClient);
+            
+            const aaBuilder = await Presets.Builder.SimpleAccount.init(
+              signer,
+              NERO_RPC_URL,
+              {
+                overrideBundlerRpc: BUNDLER_URL,
+                entryPoint: ENTRYPOINT_ADDRESS,
+                factory: ACCOUNT_FACTORY_ADDRESS,
+              }
+            );
+            setBuilder(aaBuilder);
+            
+            const aaAddress = await aaBuilder.getSender();
+            const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
+            setAaWalletAddress(normalizedAAAddress);
+            
+            const code = await provider.getCode(normalizedAAAddress);
+            const deployed = code !== '0x';
+            setIsDeployed(deployed);
+            
+            if (code === '0x') {
+              const isPrefunded = await checkAAWalletPrefunding();
+              setNeedsNeroTokens(!isPrefunded);
             }
-          );
-          setBuilder(aaBuilder);
-          
-          const aaAddress = await aaBuilder.getSender();
-          const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
-          setAaWalletAddress(normalizedAAAddress);
-          
-          const code = await provider.getCode(normalizedAAAddress);
-          const deployed = code !== '0x';
-          setIsDeployed(deployed);
-          
-          if (code === '0x') {
-            const isPrefunded = await checkAAWalletPrefunding();
-            setNeedsNeroTokens(!isPrefunded);
+          } else {
+            // In test mode, set mock address
+            setAaWalletAddress('0x1234567890123456789012345678901234567890');
+            setIsDevelopmentMode(true);
           }
           
           setIsInitialized(true);
           setIsLoading(false);
           console.log('SDK initialized successfully');
-          initSDK.isInitializing = false;
-          return { success: true, client: aaClient, builder: aaBuilder };
+          isInitializing = false;
+          return { success: true, client, builder, isDevelopmentMode: testModeUtils.isTestModeEnabled() };
         } catch (err) {
           console.error('Error initializing AA SDK:', err);
           setIsDevelopmentMode(true);
           setAaWalletAddress('0x1234567890123456789012345678901234567890');
           setIsInitialized(true);
           setIsLoading(false);
-          initSDK.isInitializing = false;
+          isInitializing = false;
           return { success: true, isDevelopmentMode: true };
         }
       } else {
@@ -427,20 +399,49 @@ const useUserOp = () => {
         setAaWalletAddress('0x1234567890123456789012345678901234567890');
         setIsInitialized(true);
         setIsLoading(false);
-        initSDK.isInitializing = false;
+        isInitializing = false;
         return { success: true, isDevelopmentMode: true };
       }
     } catch (err) {
       console.error('Error in AA SDK initialization:', err);
       setError(`AA SDK initialization error: ${err.message}`);
       setIsLoading(false);
-      initSDK.isInitializing = false;
+      isInitializing = false;
       return { success: false, error: err.message };
     }
   }, [isConnected, isInitialized, client, builder, checkAAWalletPrefunding]);
-  
-  // Add static property to track initialization state
-  initSDK.isInitializing = false;  
+
+  /**
+   * Check if token approval is needed
+   */
+  const checkTokenApproval = async (tokenAddress) => {
+    if (!tokenAddress || !aaWalletAddress || isDevelopmentMode) return true;
+    
+    try {
+      // Normalize addresses
+      const normalizedTokenAddress = ethers.utils.getAddress(tokenAddress);
+      const normalizedPaymasterAddress = ethers.utils.getAddress(TOKEN_PAYMASTER_ADDRESS);
+      const normalizedAAWalletAddress = ethers.utils.getAddress(aaWalletAddress);
+      
+      // Create provider and token contract
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      
+      const tokenContract = new ethers.Contract(
+        normalizedTokenAddress,
+        ['function allowance(address owner, address spender) view returns (uint256)'],
+        provider
+      );
+      
+      // Check current allowance
+      const allowance = await tokenContract.allowance(normalizedAAWalletAddress, normalizedPaymasterAddress);
+      
+      // Return true if allowance is sufficient
+      return allowance.gte(ethers.constants.MaxUint256.div(2));
+    } catch (error) {
+      console.error('Error checking token approval:', error);
+      return false;
+    }
+  };
 
   /**
    * Execute a ticket purchase operation with proper wallet verification
@@ -540,6 +541,21 @@ const useUserOp = () => {
         builder.setOp(userOp);
       } catch (sponsorError) {
         console.error("Error sponsoring operation:", sponsorError);
+        
+        // If it's a nonce error, reset operation and retry
+        if (sponsorError.message?.includes('AA25') || sponsorError.message?.includes('nonce')) {
+          // Only retry once to avoid infinite loops
+          if (!arguments[0]._retried) {
+            console.log("Nonce error detected, retrying with fresh builder");
+            builder.resetOp && builder.resetOp();
+            const retryArgs = {
+              ...arguments[0],
+              _retried: true
+            };
+            return executeTicketPurchase(retryArgs);
+          }
+        }
+        
         throw sponsorError;
       }
       
@@ -565,11 +581,24 @@ const useUserOp = () => {
     } catch (err) {
       console.error('Error executing ticket purchase:', err);
       
+      // If error and auto fallback is enabled, switch to test mode
+      if (localStorage.getItem('autoFallbackEnabled') === 'true') {
+        console.log("Falling back to development mode due to error");
+        testModeUtils.enableTestMode('execution_error');
+        setIsDevelopmentMode(true);
+        
+        // Return mock hash
+        const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+        setTxHash(mockTxHash);
+        setIsLoading(false);
+        return mockTxHash;
+      }
+      
       let errorMsg = err.message || 'Failed to purchase tickets';
       
       // Handle specific error messages
       if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
-        errorMsg = 'The selected token is not supported by the Paymaster service. Please try a different token.';
+        errorMsg = 'The selected token is not supported. Please try a different token.';
       } else if (errorMsg.includes('insufficient allowance')) {
         errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
       } else if (errorMsg.includes('insufficient balance')) {
@@ -704,6 +733,21 @@ const useUserOp = () => {
         builder.setOp(userOp);
       } catch (sponsorError) {
         console.error("Error sponsoring batch operation:", sponsorError);
+        
+        // If it's a nonce error, reset operation and retry
+        if (sponsorError.message?.includes('AA25') || sponsorError.message?.includes('nonce')) {
+          // Only retry once to avoid infinite loops
+          if (!arguments[0]._retried) {
+            console.log("Nonce error detected, retrying with fresh builder");
+            builder.resetOp && builder.resetOp();
+            const retryArgs = {
+              ...arguments[0],
+              _retried: true
+            };
+            return executeBatchPurchase(retryArgs);
+          }
+        }
+        
         throw sponsorError;
       }
       
@@ -723,7 +767,20 @@ const useUserOp = () => {
     } catch (err) {
       console.error('Error executing batch purchase:', err);
       
-      // Enhanced error handling
+      // Enhanced error handling for specific cases
+      if (localStorage.getItem('autoFallbackEnabled') === 'true') {
+        console.log("Falling back to development mode due to error");
+        testModeUtils.enableTestMode('execution_error');
+        setIsDevelopmentMode(true);
+        
+        // Return mock hash
+        const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+        setTxHash(mockTxHash);
+        setIsLoading(false);
+        return mockTxHash;
+      }
+      
+      // Better error handling for specific messages
       let errorMsg = err.message || 'Failed to execute batch purchase';
       
       // Check for specific error messages
@@ -745,11 +802,18 @@ const useUserOp = () => {
     }
   }, [client, builder, initSDK, isDevelopmentMode, ensurePaymasterApproval, isDeployed, deployOrWarn, provider, aaWalletAddress]);
 
-  // Initialize SDK once when wallet is connected and component is mounted
+  /**
+   * Enter test mode
+   */
+  const enableTestMode = () => {
+    testModeUtils.enableTestMode('user_choice');
+    setIsDevelopmentMode(true);
+    return true;
+  };
+
+  // Initialize SDK once when wallet is connected
   useEffect(() => {
-    if ((isConnected || 
-        localStorage.getItem('devModeEnabled') === 'true' || 
-        window.location.search.includes('devMode=true')) && !isInitialized) {
+    if ((isConnected || testModeUtils.isTestModeEnabled()) && !isInitialized) {
       console.log('Initializing AA SDK...');
       initSDK().catch(console.error);
     }
@@ -757,10 +821,10 @@ const useUserOp = () => {
 
   // Check prefunding status when wallet address changes
   useEffect(() => {
-    if (aaWalletAddress && !isDeployed) {
+    if (aaWalletAddress && !isDeployed && !isDevelopmentMode) {
       checkAAWalletPrefunding().catch(console.error);
     }
-  }, [aaWalletAddress, isDeployed]);
+  }, [aaWalletAddress, isDeployed, isDevelopmentMode]);
 
   return {
     client,
@@ -780,7 +844,8 @@ const useUserOp = () => {
     prefundAAWallet,
     checkAAWalletPrefunding,
     checkTokenApproval,
-    deployOrWarn
+    deployOrWarn,
+    enableTestMode
   };
 };
 

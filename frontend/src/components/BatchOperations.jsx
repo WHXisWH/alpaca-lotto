@@ -5,7 +5,7 @@ import useTokens from '../hooks/useTokens';
 import useWagmiWallet from '../hooks/useWagmiWallet';
 import useSessionKeys from '../hooks/useSessionKeys';
 import AAWalletStatus from './AAWalletStatus';
-
+import testModeUtils from '../utils/testModeUtils';
 /**
  * BatchOperations Component
  * 

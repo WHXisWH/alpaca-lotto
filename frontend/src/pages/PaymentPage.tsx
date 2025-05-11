@@ -1,25 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAccount } from 'wagmi';
+import { ethers } from 'ethers';
 import useWagmiWallet from '../hooks/useWagmiWallet';
 import useUserOp from '../hooks/useUserOp';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
 import AAWalletStatus from '../components/AAWalletStatus';
-import { ethers } from 'ethers';
+import testModeUtils from '../utils/testModeUtils';
+import { ENTRYPOINT_ADDRESS, TOKEN_PAYMASTER_ADDRESS } from '../constants/config';
 
 /**
  * Payment processing page
- * Updated with simplified wallet deployment flow
  */
 const PaymentPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { lottery, token, quantity, recommendation } = location.state || {};
+  const { lottery, token, quantity, paymentType: initialPaymentType, txHash: initialTxHash } = location.state || {};
   
   // Using wagmi hooks
   const { address, isConnected } = useAccount();
-  const { connectWallet, isDevelopmentMode } = useWagmiWallet();
+  const { connectWallet } = useWagmiWallet();
   
   const { 
     fetchUserTickets,
@@ -32,26 +33,39 @@ const PaymentPage = () => {
     executeTicketPurchase, 
     isLoading: purchaseLoading, 
     error: purchaseError, 
-    txHash,
-    isDevelopmentMode: userOpDevMode,
+    txHash: hookTxHash,
+    isDevelopmentMode,
     isDeployed,
-    deployOrWarn
+    deployOrWarn,
+    enableTestMode
   } = useUserOp();
   
   const { hasActiveSessionKey } = useSessionKeys();
   
   // State
-  const [paymentType, setPaymentType] = useState(0); // Default is sponsored (Type 0)
+  const [paymentType, setPaymentType] = useState(initialPaymentType || 0);
   const [paymentToken, setPaymentToken] = useState(token);
-  const [transactionStatus, setTransactionStatus] = useState('preparing'); // 'preparing', 'processing', 'success', 'error'
+  const [transactionStatus, setTransactionStatus] = useState(
+    initialTxHash ? 'success' : 'preparing'
+  );
   const [errorMessage, setErrorMessage] = useState('');
   const [deploymentSuccess, setDeploymentSuccess] = useState(false);
+  const [txHash, setTxHash] = useState(initialTxHash || hookTxHash);
   const [processingSteps, setProcessingSteps] = useState([
     { id: 'preparing', label: 'Preparing transaction', status: 'pending' },
     { id: 'submitting', label: 'Submitting to blockchain', status: 'waiting' },
     { id: 'confirming', label: 'Confirming transaction', status: 'waiting' },
     { id: 'finalizing', label: 'Finalizing purchase', status: 'waiting' }
   ]);
+  
+  // Helper to update processing step
+  const updateProcessingStep = (stepId, status) => {
+    setProcessingSteps(prevSteps => 
+      prevSteps.map(step => 
+        step.id === stepId ? { ...step, status } : step
+      )
+    );
+  };
   
   // Reset deployment success message after 5 seconds
   useEffect(() => {
@@ -79,14 +93,58 @@ const PaymentPage = () => {
   
   // Payment type change handler
   const handlePaymentTypeChange = (e) => {
-    // Use the selected payment type directly without modification
     setPaymentType(parseInt(e.target.value));
   };
   
-  // Transaction submission handler with proper wallet deployment check
+  // Handle wallet deployment
+  const handleDeployWallet = async () => {
+    try {
+      await deployOrWarn();
+      setDeploymentSuccess(true);
+      setErrorMessage('');
+    } catch (err) {
+      if (err.message?.includes('AA21') || err.message?.includes('funds')) {
+        setErrorMessage('Not enough NERO balance to deploy. Please add funds first.');
+      } else {
+        setErrorMessage(err.message || 'Failed to deploy wallet');
+        
+        // Offer test mode
+        if (window.confirm('Deployment failed. Would you like to enter test mode instead?')) {
+          enableTestMode();
+        }
+      }
+    }
+  };
+  
+  // Transaction submission handler
   const handleSubmitTransaction = async () => {
     if ((!isConnected && !isDevelopmentMode) || !lottery || !token) {
       setErrorMessage('Wallet not connected or missing required information');
+      return;
+    }
+    
+    // In test mode, simulate success
+    if (isDevelopmentMode) {
+      setTransactionStatus('processing');
+      updateProcessingStep('preparing', 'complete');
+      updateProcessingStep('submitting', 'pending');
+      
+      // Simulate processing time
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      updateProcessingStep('submitting', 'complete');
+      updateProcessingStep('confirming', 'pending');
+      
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      updateProcessingStep('confirming', 'complete');
+      updateProcessingStep('finalizing', 'pending');
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      updateProcessingStep('finalizing', 'complete');
+      
+      // Generate mock transaction hash
+      const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+      setTxHash(mockTxHash);
+      setTransactionStatus('success');
       return;
     }
     
@@ -95,23 +153,36 @@ const PaymentPage = () => {
       if (window.confirm('Smart contract wallet not deployed. Deploy it now?')) {
         try {
           await deployOrWarn();
-          
-          // Verify deployment was successful
-          if (provider) {
-            const code = await provider.getCode(aaWalletAddress);
-            if (code === '0x') {
-              throw new Error('Wallet deployment failed. Please try again.');
-            }
-          }
-          
           setDeploymentSuccess(true);
         } catch (err) {
-          setErrorMessage(err.message || 'Failed to deploy wallet');
+          if (err.message?.includes('AA21') || err.message?.includes('funds')) {
+            setErrorMessage('Not enough NERO balance to deploy. Please add funds first.');
+          } else {
+            setErrorMessage(err.message || 'Failed to deploy wallet');
+            
+            // Offer test mode
+            if (window.confirm('Deployment failed. Would you like to enter test mode instead?')) {
+              enableTestMode();
+              
+              // Retry in test mode
+              setTimeout(() => handleSubmitTransaction(), 500);
+              return;
+            }
+          }
           return;
         }
       } else {
-        setErrorMessage('Smart contract wallet needs to be deployed for successful transactions');
-        return;
+        // User declined deployment, offer test mode
+        if (window.confirm('Smart contract wallet needs to be deployed for transactions. Would you like to use test mode instead?')) {
+          enableTestMode();
+          
+          // Retry in test mode
+          setTimeout(() => handleSubmitTransaction(), 500);
+          return;
+        } else {
+          setErrorMessage('Smart contract wallet needs to be deployed for successful transactions');
+          return;
+        }
       }
     }
     
@@ -125,55 +196,56 @@ const PaymentPage = () => {
         lotteryId: lottery.id,
         tokenAddress: token.address,
         quantity,
-        paymentType, // Use the selected payment type directly
+        paymentType,
         paymentToken: paymentToken?.address || token.address,
         useSessionKey: hasActiveSessionKey
       });
       
-      processSuccessfulTransaction(txHash);
+      updateProcessingStep('submitting', 'complete');
+      updateProcessingStep('confirming', 'pending');
+      
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      updateProcessingStep('confirming', 'complete');
+      updateProcessingStep('finalizing', 'pending');
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      updateProcessingStep('finalizing', 'complete');
+      
+      setTxHash(txHash);
+      setTransactionStatus('success');
     } catch (err) {
-      handleTransactionError(err);
+      console.error('Transaction error:', err);
+      
+      const currentStep = processingSteps.find(step => step.status === 'pending');
+      if (currentStep) {
+        updateProcessingStep(currentStep.id, 'error');
+      }
+      
+      let errorMsg = err.message || 'Transaction failed';
+      
+      if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
+        errorMsg = 'The selected token is not supported. Please try a different token.';
+      } else if (errorMsg.includes('insufficient allowance')) {
+        errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
+      } else if (errorMsg.includes('insufficient balance')) {
+        errorMsg = 'Insufficient token balance for gas payment.';
+      } else if (errorMsg.includes('wallet') || errorMsg.includes('deploy')) {
+        errorMsg = 'Smart contract wallet not deployed. Please deploy your wallet first.';
+      }
+      
+      setErrorMessage(errorMsg);
+      setTransactionStatus('error');
+      
+      // Offer test mode
+      if (window.confirm('Transaction failed. Would you like to switch to test mode instead?')) {
+        enableTestMode();
+        
+        // Retry in test mode
+        setTimeout(() => handleSubmitTransaction(), 500);
+        return;
+      }
     }
-  };
-
-  const processSuccessfulTransaction = async (txHash) => {
-    updateProcessingStep('submitting', 'complete');
-    updateProcessingStep('confirming', 'pending');
-    
-    await new Promise(resolve => setTimeout(resolve, isDevelopmentMode ? 1500 : 3000));
-    
-    updateProcessingStep('confirming', 'complete');
-    updateProcessingStep('finalizing', 'pending');
-    
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    updateProcessingStep('finalizing', 'complete');
-    
-    setTxHash(txHash);
-    setTransactionStatus('success');
-  };
-  
-  const handleTransactionError = (error) => {
-    console.error('Transaction error:', error);
-    
-    const currentStep = processingSteps.find(step => step.status === 'pending');
-    if (currentStep) {
-      updateProcessingStep(currentStep.id, 'error');
-    }
-    
-    let errorMsg = error.message || 'Transaction failed';
-    
-    if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
-      errorMsg = 'The selected token is not supported. Please try a different token.';
-    } else if (errorMsg.includes('insufficient allowance')) {
-      errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
-    } else if (errorMsg.includes('insufficient balance')) {
-      errorMsg = 'Insufficient token balance for gas payment.';
-    } else if (errorMsg.includes('wallet') || errorMsg.includes('deploy')) {
-      errorMsg = 'Smart contract wallet not deployed. Please deploy your wallet first.';
-    }
-    
-    setErrorMessage(errorMsg);
-    setTransactionStatus('error');
   };
   
   // Navigate back to home
@@ -276,7 +348,7 @@ const PaymentPage = () => {
           
           {isDevelopmentMode && (
             <div className="dev-mode-note">
-              <p>Development Mode: Simulating blockchain transaction.</p>
+              <p>Test Mode: Simulating blockchain transaction.</p>
             </div>
           )}
         </div>
@@ -302,7 +374,7 @@ const PaymentPage = () => {
             </div>
             {isDevelopmentMode && (
               <div className="dev-mode-note">
-                <p>Development Mode: This is a simulated transaction.</p>
+                <p>Test Mode: This is a simulated transaction.</p>
               </div>
             )}
           </div>
@@ -353,6 +425,16 @@ const PaymentPage = () => {
             </button>
             
             <button 
+              className="test-mode-button"
+              onClick={() => {
+                enableTestMode();
+                setTimeout(() => handleSubmitTransaction(), 500);
+              }}
+            >
+              Try in Test Mode
+            </button>
+            
+            <button 
               className="home-button"
               onClick={handleGoBack}
             >
@@ -367,6 +449,26 @@ const PaymentPage = () => {
   // Transaction preparation view (default state)
   return (
     <div className="payment-page">
+      {/* Show test mode banner if active */}
+      {isDevelopmentMode && (
+        <div className="test-mode-banner">
+          <div className="banner-content">
+            <span className="banner-icon">🧪</span>
+            <span className="banner-text">Test Mode Active - Transactions are simulated</span>
+            <button 
+              className="exit-test-mode"
+              onClick={() => {
+                if (window.confirm('Exit test mode? This will require a page reload.')) {
+                  testModeUtils.disableTestMode();
+                }
+              }}
+            >
+              Exit Test Mode
+            </button>
+          </div>
+        </div>
+      )}
+      
       <div className="payment-container">
         <div className="back-navigation">
           <button className="back-button" onClick={handleGoBack}>
@@ -385,7 +487,7 @@ const PaymentPage = () => {
         )}
         
         {/* Show wallet status if not deployed */}
-        {!isDeployed && (
+        {!isDeployed && !isDevelopmentMode && (
           <AAWalletStatus minimal className="wallet-status-banner" />
         )}
         
@@ -478,7 +580,7 @@ const PaymentPage = () => {
             
             {isDevelopmentMode && (
               <div className="dev-mode-note">
-                <p>Development Mode: Transaction will be simulated.</p>
+                <p>Test Mode: Transaction will be simulated.</p>
               </div>
             )}
           </div>
@@ -491,7 +593,7 @@ const PaymentPage = () => {
               Cancel
             </button>
             
-            {!isDeployed ? (
+            {!isDeployed && !isDevelopmentMode ? (
               <button 
                 className="deploy-button"
                 onClick={handleDeployWallet}
@@ -538,13 +640,6 @@ const PaymentPage = () => {
           </div>
         </div>
       </div>
-      
-      {/* Full wallet status component for detailed setup if needed */}
-      {!isDeployed && (
-        <div className="wallet-setup-section">
-          <AAWalletStatus />
-        </div>
-      )}
     </div>
   );
 };

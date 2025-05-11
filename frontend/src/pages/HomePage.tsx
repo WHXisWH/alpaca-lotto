@@ -11,10 +11,10 @@ import useUserOp from '../hooks/useUserOp';
 import useTokens from '../hooks/useTokens';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
+import testModeUtils from '../utils/testModeUtils';
 
 /**
  * Home page of the application
- * Updated with simplified wallet deployment flow
  */
 const HomePage = () => {
   const navigate = useNavigate();
@@ -29,7 +29,8 @@ const HomePage = () => {
     isDeployed,
     needsNeroTokens,
     executeTicketPurchase,
-    deployOrWarn
+    deployOrWarn,
+    enableTestMode
   } = useUserOp();
   
   // Using other custom hooks
@@ -63,8 +64,12 @@ const HomePage = () => {
   const [isSessionKeyModalOpen, setIsSessionKeyModalOpen] = useState(false);
   const [ticketQuantity, setTicketQuantity] = useState(1);
   const [error, setError] = useState(null);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [deploymentSuccess, setDeploymentSuccess] = useState(false);
+  
+  // New state for deployment prompts
+  const [showDeploymentPrompt, setShowDeploymentPrompt] = useState(false);
+  const [showFundingPrompt, setShowFundingPrompt] = useState(false);
+  const [fundingAmount, setFundingAmount] = useState('0.05');
   
   // Log component mount and lottery state
   useEffect(() => {
@@ -109,21 +114,79 @@ const HomePage = () => {
   };
   
   /**
-   * Open ticket purchase modal
-   * First check if wallet is deployed
+   * Open ticket purchase modal with wallet deployment check
    */
-  const handleOpenTicketModal = async () => {
-    try {
-      // Check if wallet is deployed and deploy if needed
-      if (!isDeployed) {
-        if (window.confirm('Smart contract wallet is not deployed. Would you like to deploy it first?')) {
-          await deployOrWarn();
-          setDeploymentSuccess(true);
+  const handleOpenTicketModal = () => {
+    // If wallet not deployed, show deployment prompt
+    if (!isDeployed && !isDevelopmentMode) {
+      setShowDeploymentPrompt(true);
+      return;
+    }
+    
+    // Otherwise show ticket modal directly
+    setIsTicketModalOpen(true);
+  };
+  
+  /**
+   * Handle the wallet deployment choice
+   */
+  const handleDeploymentChoice = async (deploy) => {
+    setShowDeploymentPrompt(false);
+    
+    if (deploy) {
+      try {
+        // Attempt to deploy the wallet
+        await deployOrWarn();
+        setDeploymentSuccess(true);
+        
+        // Open ticket modal after successful deployment
+        setTimeout(() => {
+          setIsTicketModalOpen(true);
+        }, 500);
+      } catch (err) {
+        if (err.message?.includes('AA21') || err.message?.includes('funds')) {
+          // Show funding prompt if needed
+          setShowFundingPrompt(true);
+        } else {
+          setError(err.message || 'Failed to deploy wallet');
+          // Ask if user wants to enter test mode
+          if (window.confirm('Deployment failed. Would you like to enter test mode instead?')) {
+            enableTestMode();
+            setIsTicketModalOpen(true);
+          }
         }
       }
+    } else {
+      // User declined to deploy, switch to test mode
+      enableTestMode();
+      
+      // Open ticket modal in test mode
+      setIsTicketModalOpen(true);
+    }
+  };
+  
+  /**
+   * Handle funding the wallet
+   */
+  const handleFundWallet = async () => {
+    setShowFundingPrompt(false);
+    
+    try {
+      await prefundAAWallet(fundingAmount);
+      setDeploymentSuccess(true);
+      
+      // Attempt deployment again
+      await deployOrWarn();
+      
+      // Open ticket modal after successful deployment
       setIsTicketModalOpen(true);
     } catch (err) {
-      setError(err.message || 'Failed to deploy wallet');
+      setError(err.message || 'Failed to fund wallet');
+      // Ask if user wants to enter test mode
+      if (window.confirm('Funding or deployment failed. Would you like to enter test mode instead?')) {
+        enableTestMode();
+        setIsTicketModalOpen(true);
+      }
     }
   };
   
@@ -136,22 +199,17 @@ const HomePage = () => {
   };
   
   /**
-   * Open session key modal
-   * First check if wallet is deployed
+   * Open session key modal with wallet deployment check
    */
   const handleOpenSessionKeyModal = async () => {
-    try {
-      // Check if wallet is deployed and deploy if needed
-      if (!isDeployed) {
-        if (window.confirm('Smart contract wallet is not deployed. Would you like to deploy it first?')) {
-          await deployOrWarn();
-          setDeploymentSuccess(true);
-        }
-      }
-      setIsSessionKeyModalOpen(true);
-    } catch (err) {
-      setError(err.message || 'Failed to deploy wallet');
+    // If wallet not deployed, show deployment prompt
+    if (!isDeployed && !isDevelopmentMode) {
+      setShowDeploymentPrompt(true);
+      return;
     }
+    
+    // Otherwise show session key modal directly
+    setIsSessionKeyModalOpen(true);
   };
   
   /**
@@ -196,6 +254,24 @@ const HomePage = () => {
     } catch (err) {
       console.error('Purchase error:', err);
       setError(err.message || 'Failed to purchase tickets');
+      
+      // If failure, offer test mode
+      if (window.confirm('Purchase failed. Would you like to enter test mode?')) {
+        enableTestMode();
+        
+        // Try again in test mode
+        const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+        navigate('/payment', {
+          state: {
+            lottery: selectedLottery,
+            token,
+            paymentType,
+            quantity: ticketQuantity,
+            txHash: mockTxHash
+          },
+        });
+        handleCloseTicketModal();
+      }
     }
   };
   
@@ -217,13 +293,79 @@ const HomePage = () => {
   const handleRetry = async () => {
     console.log('Retrying data load...');
     setError(null);
-    setIsDataLoaded(false);
     try {
       await fetchLotteries();
     } catch (err) {
       setError(err.message || 'Failed to reload data');
     }
   };
+  
+  // Deployment prompt component
+  const DeploymentPrompt = () => (
+    <div className="modal-overlay">
+      <div className="deployment-prompt modal-content">
+        <h3>Smart Contract Wallet Setup</h3>
+        <p>Your smart wallet has not been deployed yet. Would you like to deploy it now?</p>
+        <p className="info-text">This is a one-time setup that will enhance your experience.</p>
+        
+        <div className="prompt-actions">
+          <button 
+            className="secondary-button"
+            onClick={() => handleDeploymentChoice(false)}
+          >
+            No, Enter Test Mode
+          </button>
+          <button 
+            className="primary-button"
+            onClick={() => handleDeploymentChoice(true)}
+          >
+            Yes, Deploy Now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+  
+  // Funding prompt component
+  const FundingPrompt = () => (
+    <div className="modal-overlay">
+      <div className="funding-prompt modal-content">
+        <h3>Wallet Funding Required</h3>
+        <p>Your wallet needs to be prefunded with NERO tokens to deploy successfully.</p>
+        
+        <div className="funding-input">
+          <label>NERO Amount:</label>
+          <input 
+            type="text" 
+            value={fundingAmount} 
+            onChange={(e) => setFundingAmount(e.target.value)}
+            placeholder="0.05"
+          />
+        </div>
+        
+        <div className="prompt-actions">
+          <button 
+            className="secondary-button"
+            onClick={() => {
+              setShowFundingPrompt(false);
+              if (window.confirm('Would you like to enter test mode instead?')) {
+                enableTestMode();
+                setIsTicketModalOpen(true);
+              }
+            }}
+          >
+            Cancel
+          </button>
+          <button 
+            className="primary-button"
+            onClick={handleFundWallet}
+          >
+            Fund Wallet
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   // Display error state
   if (error) {
@@ -293,8 +435,27 @@ const HomePage = () => {
   // Regular display with active lotteries
   return (
     <div className="home-page">
+      {/* Show test mode banner if in development mode */}
+      {isDevelopmentMode && (
+        <div className="test-mode-banner">
+          <div className="banner-content">
+            <span className="banner-icon">🧪</span>
+            <span className="banner-text">Test Mode Active - Transactions are simulated</span>
+            <button 
+              className="exit-test-mode"
+              onClick={() => {
+                testModeUtils.disableTestMode();
+                window.location.reload();
+              }}
+            >
+              Exit Test Mode
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Display AA wallet status banner if not deployed */}
-      {!isDeployed && <AAWalletStatus minimal className="wallet-status-banner" />}
+      {!isDeployed && !isDevelopmentMode && <AAWalletStatus minimal className="wallet-status-banner" />}
       
       {/* Show success message after deployment */}
       {deploymentSuccess && (
@@ -343,7 +504,7 @@ const HomePage = () => {
               </div>
               
               {/* Show AA wallet status in details panel if not deployed */}
-              {!isDeployed && (
+              {!isDeployed && !isDevelopmentMode && (
                 <div className="wallet-status-panel">
                   <AAWalletStatus />
                 </div>
@@ -376,6 +537,10 @@ const HomePage = () => {
           isDevelopmentMode={isDevelopmentMode}
         />
       )}
+      
+      {/* Special prompts */}
+      {showDeploymentPrompt && <DeploymentPrompt />}
+      {showFundingPrompt && <FundingPrompt />}
     </div>
   );
 };

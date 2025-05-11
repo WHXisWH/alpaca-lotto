@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+// UPDATED: frontend/src/components/AAWalletStatus.jsx
+
+import React, { useState, useEffect } from 'react';
 import useUserOp from '../hooks/useUserOp';
+import testModeUtils from '../utils/testModeUtils';
 
 /**
  * Component to display wallet deployment status and provide actions
@@ -12,7 +15,9 @@ const AAWalletStatus = ({ className = '', minimal = false }) => {
     prefundAAWallet,
     isLoading,
     isPrefundingWallet,
-    error: userOpError
+    error: userOpError,
+    isDevelopmentMode,
+    enableTestMode
   } = useUserOp();
   
   const [prefundAmount, setPrefundAmount] = useState('0.05');
@@ -20,7 +25,7 @@ const AAWalletStatus = ({ className = '', minimal = false }) => {
   const [success, setSuccess] = useState(null);
   
   // If wallet is already deployed, don't show anything
-  if (isDeployed) return null;
+  if (isDeployed || isDevelopmentMode) return null;
   
   // Handle deployment
   const handleDeploy = async () => {
@@ -31,7 +36,16 @@ const AAWalletStatus = ({ className = '', minimal = false }) => {
       await deployAAWallet();
       setSuccess('Smart contract wallet deployed successfully!');
     } catch (err) {
-      setError(err.message || 'Failed to deploy wallet');
+      if (err.message?.includes('AA21') || err.message?.includes('funds')) {
+        setError('Not enough NERO balance. Please add NERO tokens first.');
+      } else {
+        setError(err.message || 'Failed to deploy wallet');
+        
+        // Offer test mode
+        if (window.confirm('Deployment failed. Would you like to enter test mode instead?')) {
+          enableTestMode();
+        }
+      }
     }
   };
   
@@ -48,19 +62,32 @@ const AAWalletStatus = ({ className = '', minimal = false }) => {
     }
   };
   
+  // Enter test mode
+  const handleEnterTestMode = () => {
+    enableTestMode();
+  };
+  
   // In minimal mode, show a simplified banner
   if (minimal) {
     return (
       <div className={`aa-wallet-banner ${className}`}>
         <span className="banner-icon">⚠️</span>
         <span className="banner-text">Smart contract wallet not deployed.</span>
-        <button 
-          className="deploy-button"
-          onClick={handleDeploy}
-          disabled={isLoading}
-        >
-          {isLoading ? 'Deploying...' : 'Deploy Now'}
-        </button>
+        <div className="banner-actions">
+          <button 
+            className="deploy-button"
+            onClick={handleDeploy}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Deploying...' : 'Deploy Now'}
+          </button>
+          <button 
+            className="test-mode-button"
+            onClick={handleEnterTestMode}
+          >
+            Test Mode
+          </button>
+        </div>
       </div>
     );
   }
@@ -117,6 +144,18 @@ const AAWalletStatus = ({ className = '', minimal = false }) => {
               </div>
               <p className="action-description">
                 Manually add NERO tokens to your wallet. Recommended: 0.05 NERO
+              </p>
+            </div>
+            
+            <div className="action-row">
+              <button 
+                className="test-mode-button"
+                onClick={handleEnterTestMode}
+              >
+                Enter Test Mode
+              </button>
+              <p className="action-description">
+                Use test mode to simulate transactions without deploying a wallet.
               </p>
             </div>
           </div>
