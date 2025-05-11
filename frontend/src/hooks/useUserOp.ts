@@ -10,6 +10,15 @@ import testModeUtils from '../utils/testModeUtils';
 // Global initialization flag to prevent concurrent initializations
 let isInitializing = false;
 
+const CONSTANTS = {
+  NERO_RPC_URL: import.meta.env.VITE_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io',
+  BUNDLER_URL: import.meta.env.VITE_BUNDLER_URL || 'https://bundler-testnet.nerochain.io',
+  PAYMASTER_URL: import.meta.env.VITE_PAYMASTER_URL || 'https://paymaster-testnet.nerochain.io',
+  ENTRYPOINT_ADDRESS: import.meta.env.VITE_ENTRYPOINT_ADDRESS || '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
+  ACCOUNT_FACTORY_ADDRESS: import.meta.env.VITE_ACCOUNT_FACTORY_ADDRESS || '0x9406Cc6185a346906296840746125a0E44976454',
+  TOKEN_PAYMASTER_ADDRESS: import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || '0x5a6680dFd4a77FEea0A7be291147768EaA2414ad',
+};
+
 const useUserOp = () => {
   const { address, isConnected } = useAccount();
   const [client, setClient] = useState(null);
