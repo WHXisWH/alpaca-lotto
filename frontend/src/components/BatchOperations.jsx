@@ -199,12 +199,23 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
           await deployOrWarn();
           setDeploymentSuccess(true);
         } catch (err) {
-          setError(err.message || 'Failed to deploy wallet');
-          return;
+          if (err.message?.includes('AA21') || err.message?.includes('funds')) {
+            setError('Not enough NERO balance to deploy wallet');
+            return;
+          } else {
+            setError(err.message || 'Failed to deploy wallet');
+            if (window.confirm('Deployment failed. Would you like to enter test mode instead?')) {
+              enableTestMode();
+            }
+            return;
+          }
         }
       } else {
-        setError('Smart contract wallet needs to be deployed first for successful transactions');
-        return;
+        // User declined to deploy, switch to test mode
+        enableTestMode();
+        
+        // Open ticket modal in test mode
+        setIsTicketModalOpen(true);
       }
     }
     
@@ -212,10 +223,12 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
     setError(null);
     
     try {
+      // KEY FIX: Use executeBatchPurchase with proper paymentType and paymentToken
+      // The SDK's setPaymasterOptions will be called internally
       const txHash = await executeBatchPurchase({
         selections,
-        paymentType,
-        paymentToken: (paymentType === 1 || paymentType === 2) ? selectedToken.address : null,
+        paymentType,  // User-selected payment type
+        paymentToken: selectedToken?.address, // Token for gas payment (if needed)
         useSessionKey: hasActiveSessionKey
       });
       

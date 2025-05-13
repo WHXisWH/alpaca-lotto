@@ -204,7 +204,7 @@ class UserOpSDK {
         return true;
       }
       
-      // Token is not approved, create approval transaction
+      // Token is not approved, create approval transaction using the SDK's built-in approach
       // Create ERC20 interface
       const erc20Interface = new ethers.utils.Interface([
         'function approve(address spender, uint256 amount) returns (bool)'
@@ -219,29 +219,65 @@ class UserOpSDK {
       // Reset the builder
       this.builder.resetOp && this.builder.resetOp();
       
-      // Configure approval operation with Type 0 (free gas)
-      const approvalOptions = {
-        type: 0, // Try with free gas for approval
-        apikey: CONSTANTS.PAYMASTER_API_KEY,
-        rpc: CONSTANTS.PAYMASTER_URL
-      };
+      // Configure approval operation with Type 0 (free gas) or fall back to Type 1
+      // First try with Type 0 (sponsored gas)
+      let approvalSuccess = false;
       
-      this.builder.setPaymasterOptions(approvalOptions);
-      
-      // Add approval call to the builder
-      this.builder.execute(tokenAddress, 0, callData);
-      
-      // Send the approval UserOperation
-      const result = await this.client.sendUserOperation(this.builder);
-      const receipt = await result.wait();
+      try {
+        // Try with free gas first
+        this.builder.setPaymasterOptions({
+          type: 0,
+          apikey: CONSTANTS.PAYMASTER_API_KEY,
+          rpc: CONSTANTS.PAYMASTER_URL
+        });
+        
+        // Add approval call to the builder
+        this.builder.execute(tokenAddress, 0, callData);
+        
+        // Send the approval UserOperation
+        const result = await this.client.sendUserOperation(this.builder);
+        const receipt = await result.wait();
+        approvalSuccess = true;
+      } catch (typeZeroError) {
+        console.warn("Type 0 (free gas) approval failed, trying with Type 1:", typeZeroError);
+        
+        // Fall back to Type 1 with a different token
+        // For this fallback, we need to use a token that is already approved or native token
+        this.builder.resetOp && this.builder.resetOp();
+        
+        try {
+          // For the fallback, we'll use a direct EOA transaction which doesn't require paymaster
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
+          const signer = provider.getSigner();
+          
+          // Create token contract with direct signer
+          const tokenContract = new ethers.Contract(
+            tokenAddress,
+            ['function approve(address spender, uint256 amount) returns (bool)'],
+            signer
+          );
+          
+          // Send direct EOA transaction for approval
+          const tx = await tokenContract.approve(CONSTANTS.TOKEN_PAYMASTER_ADDRESS, ethers.constants.MaxUint256);
+          const receipt = await tx.wait();
+          approvalSuccess = true;
+        } catch (directError) {
+          console.error("Direct EOA approval also failed:", directError);
+          throw directError;
+        }
+      }
       
       // Check if approval was successful
-      const newApproval = await paymasterService.isTokenApproved(
-        tokenAddress,
-        this.aaWalletAddress
-      );
+      if (approvalSuccess) {
+        const newApproval = await paymasterService.isTokenApproval(
+          tokenAddress,
+          this.aaWalletAddress
+        );
+        
+        return newApproval;
+      }
       
-      return newApproval;
+      return false;
     } catch (error) {
       console.error('Error ensuring token approval:', error);
       return false;
@@ -333,17 +369,11 @@ class UserOpSDK {
       await this.init(this.signer);
     }
     
-    // Check if Type 0 (free gas) is selected
-    if (type === 0) {
-      console.warn('Free gas model is not supported, switching to ERC20 prepayment.');
-      type = 1;
-      
-      // Store preference for future use
-      localStorage.setItem('sponsoredPaymentsDisabled', 'true');
-    }
+    console.log(`Setting paymaster options: type=${type}, token=${token}`);
     
+    // Prepare options object for setPaymasterOptions
     const options = {
-      type,
+      type, // User-selected payment type: 0 (free), 1 (prepay), 2 (postpay)
       apikey: CONSTANTS.PAYMASTER_API_KEY,
       rpc: CONSTANTS.PAYMASTER_URL
     };
@@ -353,17 +383,33 @@ class UserOpSDK {
       // Check if token is supported
       const isSupported = await paymasterService.isTokenSupported(token);
       if (!isSupported) {
+        console.warn(`Token ${token} is not supported by paymaster`);
         throw new Error('Token is not supported by the Paymaster service');
       }
       
       options.token = token;
       
-      // Ensure token is approved for Paymaster
-      await this.ensureTokenApproval(token);
+      // Ensure token is approved for Paymaster if needed
+      // This approval check is still necessary
+      const isApproved = await paymasterService.isTokenApproved(token, this.aaWalletAddress);
+      if (!isApproved) {
+        console.log(`Token ${token} needs approval for paymaster`);
+        await this.ensureTokenApproval(token);
+      }
+    } else if (type !== 0) {
+      // If type is not 0 but no token provided, throw error
+      throw new Error('Token address required for ERC20 payment types');
     }
     
-    // Set options in builder
-    this.builder.setPaymasterOptions(options);
+    console.log('Setting paymaster options:', options);
+    
+    // Set options in builder using the SDK's built-in method
+    if (this.builder && typeof this.builder.setPaymasterOptions === 'function') {
+      this.builder.setPaymasterOptions(options);
+    } else {
+      console.error('Builder missing or setPaymasterOptions not available');
+      throw new Error('Builder not properly initialized');
+    }
     
     return this.builder;
   }

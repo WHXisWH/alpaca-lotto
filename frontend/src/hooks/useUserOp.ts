@@ -256,7 +256,7 @@ const useUserOp = () => {
         throw new Error("Not enough NERO balance to deploy the AA wallet. Please deposit funds into the EntryPoint contract first.");
       }
       
-      // より豊富なエラー情報を提供
+
       if (err.message?.includes('No code found') || err.message?.includes('failed - no code')) {
         throw new Error("Wallet deployment verification failed. The transaction was mined but no code was found at the wallet address.");
       }
@@ -373,7 +373,6 @@ const useUserOp = () => {
     // First check if already deployed
     if (isDeployed) return true;
     
-    // テストモードでも強制デプロイが指定されていない場合のみスキップ
     if (isDevelopmentMode && !forceRealDeployment) {
       console.log("🧪 Test mode: Treating wallet as deployed");
       setIsDeployed(true);
@@ -385,7 +384,6 @@ const useUserOp = () => {
       if (aaWalletAddress && provider) {
         console.log("🔍 Verifying wallet deployment status at:", aaWalletAddress);
         
-        // アドレスの正規化
         const normalizedAddress = ethers.utils.getAddress(aaWalletAddress);
         const code = await provider.getCode(normalizedAddress);
         
@@ -615,7 +613,7 @@ const useUserOp = () => {
     lotteryId,
     tokenAddress,
     quantity,
-    paymentType = 1,
+    paymentType = 0,
     paymentToken = null,
     useSessionKey = false,
     skipDeploymentCheck = false 
@@ -669,67 +667,27 @@ const useUserOp = () => {
         [lotteryId, tokenAddress, quantity]
       );
       
+      // Reset any previous operations
       builder.resetOp && builder.resetOp();
       
-      // Use user-selected payment type
-      const finalPaymentType = paymentType;
-      const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
-      
-      // Ensure token is approved for Paymaster with direct EOA approach
-      if (finalPaymentType !== 0) {
-        await ensurePaymasterApproval(finalPaymentToken, builder);
-      }
-      
+      // Configure the transaction
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
-      const rawOp = await builder.getOp();
-      const userOp = {
-        sender: rawOp.sender,
-        nonce: rawOp.nonce.toHexString(),
-        initCode: rawOp.initCode,
-        callData: rawOp.callData,
-        callGasLimit: rawOp.callGasLimit.toHexString(),
-        verificationGasLimit: rawOp.verificationGasLimit.toHexString(),
-        preVerificationGas: rawOp.preVerificationGas.toHexString(),
-        maxFeePerGas: rawOp.maxFeePerGas.toHexString(),
-        maxPriorityFeePerGas: rawOp.maxPriorityFeePerGas.toHexString(),
-        paymasterAndData: rawOp.paymasterAndData,
-        signature: rawOp.signature
-      };
+      // Use builder's setPaymasterOptions to configure gas payment
+      // This is the key fix - using SDK's native method instead of custom sponsorUserOp
+      builder.setPaymasterOptions({
+        type: paymentType,
+        token: paymentType !== 0 ? paymentToken : undefined,
+        apikey: PAYMASTER_API_KEY,
+        rpc: PAYMASTER_URL
+      });
       
-      const paymasterOpts = {
-        type: finalPaymentType.toString(),
-        token: finalPaymentToken
-      };
-      
-      try {
-        const pmData = await paymasterService.sponsorUserOp(userOp, paymasterOpts);
-        userOp.paymasterAndData = pmData;
-        builder.setOp(userOp);
-      } catch (sponsorError) {
-        console.error("Error sponsoring operation:", sponsorError);
-        
-        // If it's a nonce error, reset operation and retry
-        if (sponsorError.message?.includes('AA25') || sponsorError.message?.includes('nonce')) {
-          // Only retry once to avoid infinite loops
-          if (!arguments[0]._retried) {
-            console.log("Nonce error detected, retrying with fresh builder");
-            builder.resetOp && builder.resetOp();
-            const retryArgs = {
-              ...arguments[0],
-              _retried: true
-            };
-            return executeTicketPurchase(retryArgs);
-          }
-        }
-        
-        throw sponsorError;
-      }
-      
+      // Send the UserOperation
       const result = await client.sendUserOperation(builder);
       const receipt = await result.wait();
       setTxHash(receipt.transactionHash);
       
+      // Refresh data if needed
       try {
         const apiModule = await import('../services/api');
         const api = apiModule.default || apiModule.api;
@@ -748,12 +706,12 @@ const useUserOp = () => {
     } catch (err) {
       console.error('Error executing ticket purchase:', err);
       
-      // If error and auto fallback is enabled, switch to test mode
+      // Handle auto fallback to test mode if enabled
       if (localStorage.getItem('autoFallbackEnabled') === 'true') {
         console.log("Falling back to development mode due to error");
         testModeUtils.enableTestMode('execution_error');
         setIsDevelopmentMode(true);
-        setupTestModeMocks(); // Make sure we have mock objects set up
+        setupTestModeMocks();
         
         // Return mock hash
         const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
@@ -762,9 +720,9 @@ const useUserOp = () => {
         return mockTxHash;
       }
       
+      // Improved error handling
       let errorMsg = err.message || 'Failed to purchase tickets';
       
-      // Handle specific error messages
       if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
         errorMsg = 'The selected token is not supported. Please try a different token.';
       } else if (errorMsg.includes('insufficient allowance')) {
@@ -775,18 +733,13 @@ const useUserOp = () => {
         errorMsg = 'Smart contract wallet not deployed. Please deploy your wallet first.';
       } else if (errorMsg.includes('AA21')) {
         errorMsg = 'Insufficient funds to deploy your smart wallet.';
-      } else if (errorMsg.includes('AA25') || errorMsg.includes('nonce')) {
-        errorMsg = 'Transaction nonce is invalid. Please try again.';
-      } else if (errorMsg.includes('includes is not a function')) {
-        // Handle the specific TypeError
-        errorMsg = 'Error processing paymaster response. Please try again.';
       }
       
       setError(errorMsg);
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, ensureSDKInitialized, isDevelopmentMode, address, isDeployed, deployOrWarn, ensurePaymasterApproval, provider, aaWalletAddress]);
+  }, [client, builder, ensureSDKInitialized, isDevelopmentMode, address, isDeployed, deployOrWarn, provider, aaWalletAddress]);
 
   /**
    * Execute a batch ticket purchase operation with proper wallet verification

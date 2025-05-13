@@ -192,12 +192,14 @@ const PaymentPage = () => {
     
     try {
       // Send the transaction using the user-selected payment type
+      // KEY FIX: Pass the payment type and token to executeTicketPurchase
+      // This will be used by setPaymasterOptions inside the function
       const txHash = await executeTicketPurchase({
         lotteryId: lottery.id,
         tokenAddress: token.address,
         quantity,
-        paymentType,
-        paymentToken: paymentToken?.address || token.address,
+        paymentType, // User selected payment type
+        paymentToken: paymentToken?.address || token.address, // Selected payment token
         useSessionKey: hasActiveSessionKey
       });
       

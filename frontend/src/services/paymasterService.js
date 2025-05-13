@@ -136,43 +136,46 @@ class PaymasterService {
         signature: "0x"
       };
       
-      // Try getting supported tokens from the Paymaster API
-      try {
-        const tokensResponse = await this.paymasterRpc.send("pm_supported_tokens", [
-          minimalUserOp,
-          this.apiKey,
-          this.entryPoint
-        ]);
-        
-        // Process response
-        let tokens = [];
-        if (tokensResponse?.tokens) tokens = tokensResponse.tokens;
-        else if (Array.isArray(tokensResponse)) tokens = tokensResponse;
-        else if (typeof tokensResponse === 'object') {
-          const possibleTokensArray = Object.values(tokensResponse).find(val => Array.isArray(val));
-          if (possibleTokensArray) tokens = possibleTokensArray;
+      // Call the pm_supported_tokens method
+      const tokensResponse = await this.paymasterRpc.send("pm_supported_tokens", [
+        minimalUserOp,
+        this.apiKey,
+        this.entryPoint
+      ]);
+      
+      // Process response with robust handling of different response formats
+      let tokens = [];
+      
+      if (tokensResponse?.tokens) {
+        tokens = tokensResponse.tokens;
+      } else if (Array.isArray(tokensResponse)) {
+        tokens = tokensResponse;
+      } else if (typeof tokensResponse === 'object') {
+        // Try to find tokens in the response object
+        const possibleTokensArray = Object.values(tokensResponse).find(val => Array.isArray(val));
+        if (possibleTokensArray) {
+          tokens = possibleTokensArray;
         }
-        
-        // Normalize token structure
-        const normalizedTokens = tokens.map(token => ({
-          address: ethers.utils.getAddress(token.token || token.address),
-          decimals: token.decimals || 18,
-          symbol: token.symbol || 'Unknown',
-          type: token.type || 'erc20'
-        }));
-        
-        if (normalizedTokens.length > 0) {
-          this.supportedTokensCache.set(cacheKey, {
-            tokens: normalizedTokens,
-            timestamp: Date.now()
-          });
-          return normalizedTokens;
-        }
-      } catch (apiError) {
-        console.warn("Error fetching tokens from Paymaster API:", apiError.message);
       }
       
-      // Fallback to known supported tokens
+      // Format tokens consistently
+      const normalizedTokens = tokens.map(token => ({
+        address: ethers.utils.getAddress(token.token || token.address),
+        decimals: token.decimals || 18,
+        symbol: token.symbol || 'Unknown',
+        type: token.type || 'erc20'
+      }));
+      
+      // Cache the results
+      if (normalizedTokens.length > 0) {
+        this.supportedTokensCache.set(cacheKey, {
+          tokens: normalizedTokens,
+          timestamp: Date.now()
+        });
+        return normalizedTokens;
+      }
+      
+      // Fallback to known supported tokens if API returns empty
       const fallbackTokens = Object.values(SUPPORTED_TOKENS).map(token => ({
         address: ethers.utils.getAddress(token.address),
         decimals: token.decimals,
