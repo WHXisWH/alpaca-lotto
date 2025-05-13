@@ -118,33 +118,8 @@ const PaymentPage = () => {
   
   // Transaction submission handler
   const handleSubmitTransaction = async () => {
-    if ((!isConnected && !isDevelopmentMode) || !lottery || !token) {
+    if (!isConnected || !lottery || !token) {
       setErrorMessage('Wallet not connected or missing required information');
-      return;
-    }
-    
-    // In test mode, simulate success
-    if (isDevelopmentMode) {
-      setTransactionStatus('processing');
-      updateProcessingStep('preparing', 'complete');
-      updateProcessingStep('submitting', 'pending');
-      
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      updateProcessingStep('submitting', 'complete');
-      updateProcessingStep('confirming', 'pending');
-      
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      updateProcessingStep('confirming', 'complete');
-      updateProcessingStep('finalizing', 'pending');
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      updateProcessingStep('finalizing', 'complete');
-      
-      // Generate mock transaction hash
-      const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-      setTxHash(mockTxHash);
-      setTransactionStatus('success');
       return;
     }
     
@@ -159,30 +134,12 @@ const PaymentPage = () => {
             setErrorMessage('Not enough NERO balance to deploy. Please add funds first.');
           } else {
             setErrorMessage(err.message || 'Failed to deploy wallet');
-            
-            // Offer test mode
-            if (window.confirm('Deployment failed. Would you like to enter test mode instead?')) {
-              enableTestMode();
-              
-              // Retry in test mode
-              setTimeout(() => handleSubmitTransaction(), 500);
-              return;
-            }
           }
           return;
         }
       } else {
-        // User declined deployment, offer test mode
-        if (window.confirm('Smart contract wallet needs to be deployed for transactions. Would you like to use test mode instead?')) {
-          enableTestMode();
-          
-          // Retry in test mode
-          setTimeout(() => handleSubmitTransaction(), 500);
-          return;
-        } else {
-          setErrorMessage('Smart contract wallet needs to be deployed for successful transactions');
-          return;
-        }
+        setErrorMessage('Smart contract wallet needs to be deployed for successful transactions');
+        return;
       }
     }
     
@@ -238,15 +195,6 @@ const PaymentPage = () => {
       
       setErrorMessage(errorMsg);
       setTransactionStatus('error');
-      
-      // Offer test mode
-      if (window.confirm('Transaction failed. Would you like to switch to test mode instead?')) {
-        enableTestMode();
-        
-        // Retry in test mode
-        setTimeout(() => handleSubmitTransaction(), 500);
-        return;
-      }
     }
   };
   

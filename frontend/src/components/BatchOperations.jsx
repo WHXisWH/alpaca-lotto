@@ -177,7 +177,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   
   // Execute batch operation with deployment check
   const handleExecuteBatch = async () => {
-    if (!isConnected && !isDevelopmentMode) {
+    if (!isConnected) {
       setError('Wallet not connected');
       return;
     }
@@ -204,18 +204,11 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
             return;
           } else {
             setError(err.message || 'Failed to deploy wallet');
-            if (window.confirm('Deployment failed. Would you like to enter test mode instead?')) {
-              enableTestMode();
-            }
             return;
           }
         }
       } else {
-        // User declined to deploy, switch to test mode
-        enableTestMode();
-        
-        // Open ticket modal in test mode
-        setIsTicketModalOpen(true);
+        return;
       }
     }
     

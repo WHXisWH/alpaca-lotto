@@ -4,10 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
 import { Client, Presets } from 'userop';
-import SUPPORTED_TOKENS from '../constants/tokens';
 import paymasterService from '../services/paymasterService';
 import { EntryPointAbi } from '../constants/abi';
-import testModeUtils from '../utils/testModeUtils';
 import { 
   NERO_RPC_URL, 
   BUNDLER_URL, 
@@ -15,7 +13,8 @@ import {
   ENTRYPOINT_ADDRESS, 
   ACCOUNT_FACTORY_ADDRESS,
   LOTTERY_CONTRACT_ADDRESS,
-  TOKEN_PAYMASTER_ADDRESS
+  TOKEN_PAYMASTER_ADDRESS,
+  PAYMASTER_API_KEY
 } from '../constants/config';
 
 // Global initialization flag to prevent concurrent initializations
@@ -23,7 +22,6 @@ let isInitializing = false;
 
 /**
  * Custom hook for NERO Chain's Account Abstraction functionality
- * Enhanced with integrated deployment workflow and test mode
  */
 const useUserOp = () => {
   const { address, isConnected } = useAccount();
@@ -35,61 +33,9 @@ const useUserOp = () => {
   const [isPrefundingWallet, setIsPrefundingWallet] = useState(false);
   const [error, setError] = useState(null);
   const [txHash, setTxHash] = useState(null);
-  const [isDevelopmentMode, setIsDevelopmentMode] = useState(testModeUtils.isTestModeEnabled());
   const [needsNeroTokens, setNeedsNeroTokens] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [provider, setProvider] = useState(null);
-
-  /**
-   * Create mock objects for test mode
-   */
-  const setupTestModeMocks = () => {
-    // Mock client if not set
-    if (!client) {
-      const mockClient = {
-        sendUserOperation: async () => {
-          return {
-            userOpHash: '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
-            wait: async () => ({ 
-              transactionHash: '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('') 
-            })
-          };
-        },
-        estimateUserOperationGas: async () => ({
-          callGasLimit: '0x88b8',
-          verificationGasLimit: '0x33450',
-          preVerificationGas: '0xc350'
-        })
-      };
-      setClient(mockClient);
-    }
-    
-    // Mock builder if not set
-    if (!builder) {
-      const mockBuilder = {
-        getSender: async () => aaWalletAddress || '0x1234567890123456789012345678901234567890',
-        execute: () => {},
-        executeBatch: () => {},
-        setPaymasterOptions: () => {},
-        resetOp: () => {},
-        getOp: async () => ({ 
-          sender: aaWalletAddress || '0x1234567890123456789012345678901234567890',
-          nonce: { toHexString: () => '0x0' },
-          initCode: '0x',
-          callData: '0x',
-          callGasLimit: { toHexString: () => '0x88b8' },
-          verificationGasLimit: { toHexString: () => '0x33450' },
-          preVerificationGas: { toHexString: () => '0xc350' },
-          maxFeePerGas: { toHexString: () => '0x2162553062' },
-          maxPriorityFeePerGas: { toHexString: () => '0x40dbcf36' },
-          paymasterAndData: '0x',
-          signature: '0x'
-        }),
-        setOp: () => {}
-      };
-      setBuilder(mockBuilder);
-    }
-  };
 
   /**
    * Check if the AA wallet has enough prefunding in the EntryPoint contract
@@ -187,16 +133,6 @@ const useUserOp = () => {
       throw new Error('SDK not initialized');
     }
   
-    // Return mock success in test mode
-    if (isDevelopmentMode) {
-      console.log("🧪 Test mode: Simulating wallet deployment");
-      setIsDeployed(true);
-      setNeedsNeroTokens(false);
-      return {
-        transactionHash: '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('')
-      };
-    }
-  
     setIsLoading(true);
     setError(null);
   
@@ -226,18 +162,6 @@ const useUserOp = () => {
         
         if (code === '0x') {
           console.error("❌ No code found at wallet address after deployment");
-          
-          // Auto switch to test mode
-          if (localStorage.getItem('autoFallbackEnabled') === 'true') {
-            console.log("🔄 Falling back to test mode due to deployment verification failure");
-            testModeUtils.enableTestMode('deployment_verification_failure');
-            setIsDevelopmentMode(true);
-            setupTestModeMocks();
-            setIsDeployed(true);
-            setNeedsNeroTokens(false);
-            return receipt;
-          }
-          
           throw new Error('Wallet deployment failed - no code at wallet address');
         }
         
@@ -256,7 +180,6 @@ const useUserOp = () => {
         throw new Error("Not enough NERO balance to deploy the AA wallet. Please deposit funds into the EntryPoint contract first.");
       }
       
-
       if (err.message?.includes('No code found') || err.message?.includes('failed - no code')) {
         throw new Error("Wallet deployment verification failed. The transaction was mined but no code was found at the wallet address.");
       }
@@ -271,7 +194,7 @@ const useUserOp = () => {
    * Ensure token approval for Paymaster with direct EOA approach
    */
   const ensurePaymasterApproval = async (tokenAddress, builder) => {
-    if (!tokenAddress || isDevelopmentMode) return true;
+    if (!tokenAddress) return true;
     
     try {
       // Normalize addresses
@@ -316,11 +239,6 @@ const useUserOp = () => {
     } catch (error) {
       console.error('Error ensuring token approval for Paymaster:', error);
       
-      // If in development mode, assume approval success
-      if (isDevelopmentMode) {
-        return true;
-      }
-      
       // Check if user rejected the transaction
       if (error.message?.includes('User denied') || 
           error.message?.includes('user rejected') ||
@@ -356,8 +274,7 @@ const useUserOp = () => {
       return { 
         success: isInitialized, 
         client, 
-        builder,
-        isDevelopmentMode
+        builder
       };
     }
     
@@ -369,15 +286,9 @@ const useUserOp = () => {
    * Main deployment function with verification
    * This serves as the single entry point for deployment checks
    */
-  const deployOrWarn = async (forceRealDeployment = false) => {
+  const deployOrWarn = async () => {
     // First check if already deployed
     if (isDeployed) return true;
-    
-    if (isDevelopmentMode && !forceRealDeployment) {
-      console.log("🧪 Test mode: Treating wallet as deployed");
-      setIsDeployed(true);
-      return true;
-    }
     
     try {
       // Double-check with getCode to be sure
@@ -410,40 +321,10 @@ const useUserOp = () => {
       return true;
     } catch (err) {
       console.error("❌ Deployment error:", err);
-      
-      // When user selected force deployment but it failed
-      if (forceRealDeployment) {
-        console.log("⚠️ Force deployment failed, asking user if they want to use test mode");
-        // Ask user for confirmation
-        const useTestMode = window.confirm(
-          "Deployment failed. Would you like to switch to test mode?\n" +
-          "In test mode, the application will use mock data instead of the actual blockchain."
-        );
-        
-        if (useTestMode) {
-          testModeUtils.enableTestMode('deployment_failure');
-          setIsDevelopmentMode(true);
-          setupTestModeMocks();
-          setIsDeployed(true);
-          return true;
-        } else {
-          throw new Error("Deployment failed and test mode switch was rejected.");
-        }
-      }
-      
-      // When auto fallback is enabled
-      if (err._fallbackToTestMode || localStorage.getItem('autoFallbackEnabled') === 'true') {
-        console.log("⚠️ Auto fallback is enabled, switching to test mode");
-        testModeUtils.enableTestMode('deployment_failure');
-        setIsDevelopmentMode(true);
-        setupTestModeMocks();
-        setIsDeployed(true);
-        return true;
-      }
-      
       throw err;
     }
   };
+  
   /**
    * Initialize the Account Abstraction SDK
    */
@@ -463,8 +344,7 @@ const useUserOp = () => {
       return { 
         success: isInitialized, 
         client, 
-        builder,
-        isDevelopmentMode
+        builder
       };
     }
     
@@ -476,15 +356,6 @@ const useUserOp = () => {
     isInitializing = true; // Set global flag
       
     if (!isConnected) {
-      if (testModeUtils.isTestModeEnabled()) {
-        setIsDevelopmentMode(true);
-        setAaWalletAddress('0x1234567890123456789012345678901234567890');
-        setupTestModeMocks(); 
-        setIsDeployed(true); 
-        setIsInitialized(true);
-        isInitializing = false;
-        return { success: true, isDevelopmentMode: true, client, builder };
-      }
       setError('Wallet not connected');
       isInitializing = false;
       return { success: false, error: 'Wallet not connected' };
@@ -503,67 +374,54 @@ const useUserOp = () => {
           setProvider(provider);
           const signer = provider.getSigner();
           
-          // Initialize AA client and builder only if in normal mode
-          if (!testModeUtils.isTestModeEnabled()) {
-            const aaClient = await Client.init(NERO_RPC_URL, {
+          // Initialize AA client
+          const aaClient = await Client.init(NERO_RPC_URL, {
+            overrideBundlerRpc: BUNDLER_URL,
+            entryPoint: ENTRYPOINT_ADDRESS,
+          });
+          setClient(aaClient);
+          
+          const aaBuilder = await Presets.Builder.SimpleAccount.init(
+            signer,
+            NERO_RPC_URL,
+            {
               overrideBundlerRpc: BUNDLER_URL,
               entryPoint: ENTRYPOINT_ADDRESS,
-            });
-            setClient(aaClient);
-            
-            const aaBuilder = await Presets.Builder.SimpleAccount.init(
-              signer,
-              NERO_RPC_URL,
-              {
-                overrideBundlerRpc: BUNDLER_URL,
-                entryPoint: ENTRYPOINT_ADDRESS,
-                factory: ACCOUNT_FACTORY_ADDRESS,
-              }
-            );
-            setBuilder(aaBuilder);
-            
-            const aaAddress = await aaBuilder.getSender();
-            const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
-            setAaWalletAddress(normalizedAAAddress);
-            
-            const code = await provider.getCode(normalizedAAAddress);
-            const deployed = code !== '0x';
-            setIsDeployed(deployed);
-            
-            if (code === '0x') {
-              const isPrefunded = await checkAAWalletPrefunding();
-              setNeedsNeroTokens(!isPrefunded);
+              factory: ACCOUNT_FACTORY_ADDRESS,
             }
-          } else {
-            // In test mode, set mock address and client/builder
-            setAaWalletAddress('0x1234567890123456789012345678901234567890');
-            setIsDevelopmentMode(true);
-            setupTestModeMocks(); // Setup mock client and builder
+          );
+          setBuilder(aaBuilder);
+          
+          const aaAddress = await aaBuilder.getSender();
+          const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
+          setAaWalletAddress(normalizedAAAddress);
+          
+          const code = await provider.getCode(normalizedAAAddress);
+          const deployed = code !== '0x';
+          setIsDeployed(deployed);
+          
+          if (code === '0x') {
+            const isPrefunded = await checkAAWalletPrefunding();
+            setNeedsNeroTokens(!isPrefunded);
           }
           
           setIsInitialized(true);
           setIsLoading(false);
           console.log('SDK initialized successfully');
           isInitializing = false;
-          return { success: true, client, builder, isDevelopmentMode: testModeUtils.isTestModeEnabled() };
+          return { success: true, client: aaClient, builder: aaBuilder };
         } catch (err) {
           console.error('Error initializing AA SDK:', err);
-          setIsDevelopmentMode(true);
-          setAaWalletAddress('0x1234567890123456789012345678901234567890');
-          setupTestModeMocks(); // Setup mock client and builder
-          setIsInitialized(true);
+          setError(`Failed to initialize AA SDK: ${err.message}`);
           setIsLoading(false);
           isInitializing = false;
-          return { success: true, isDevelopmentMode: true, client, builder };
+          return { success: false, error: err.message };
         }
       } else {
-        setIsDevelopmentMode(true);
-        setAaWalletAddress('0x1234567890123456789012345678901234567890');
-        setupTestModeMocks(); // Setup mock client and builder
-        setIsInitialized(true);
+        setError('Ethereum provider not available');
         setIsLoading(false);
         isInitializing = false;
-        return { success: true, isDevelopmentMode: true, client, builder };
+        return { success: false, error: 'Ethereum provider not available' };
       }
     } catch (err) {
       console.error('Error in AA SDK initialization:', err);
@@ -578,7 +436,7 @@ const useUserOp = () => {
    * Check if token approval is needed
    */
   const checkTokenApproval = async (tokenAddress) => {
-    if (!tokenAddress || !aaWalletAddress || isDevelopmentMode) return true;
+    if (!tokenAddress || !aaWalletAddress) return true;
     
     try {
       // Normalize addresses
@@ -623,17 +481,7 @@ const useUserOp = () => {
     
     try {
       if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
-        paymentToken = SUPPORTED_TOKENS.USDC.address;
-      }
-      
-      // If in development mode, return mock transaction hash
-      if (isDevelopmentMode) {
-        console.log('Development mode: Simulating ticket purchase transaction');
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-        setTxHash(mockTxHash);
-        setIsLoading(false);
-        return mockTxHash;
+        throw new Error('Payment token is required for token-based gas payment');
       }
       
       // Make sure SDK is initialized
@@ -706,20 +554,6 @@ const useUserOp = () => {
     } catch (err) {
       console.error('Error executing ticket purchase:', err);
       
-      // Handle auto fallback to test mode if enabled
-      if (localStorage.getItem('autoFallbackEnabled') === 'true') {
-        console.log("Falling back to development mode due to error");
-        testModeUtils.enableTestMode('execution_error');
-        setIsDevelopmentMode(true);
-        setupTestModeMocks();
-        
-        // Return mock hash
-        const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-        setTxHash(mockTxHash);
-        setIsLoading(false);
-        return mockTxHash;
-      }
-      
       // Improved error handling
       let errorMsg = err.message || 'Failed to purchase tickets';
       
@@ -739,14 +573,14 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, ensureSDKInitialized, isDevelopmentMode, address, isDeployed, deployOrWarn, provider, aaWalletAddress]);
+  }, [client, builder, ensureSDKInitialized, address, isDeployed, deployOrWarn, provider, aaWalletAddress]);
 
   /**
    * Execute a batch ticket purchase operation with proper wallet verification
    */
   const executeBatchPurchase = useCallback(async ({ 
     selections, 
-    paymentType = 1,
+    paymentType = 0,
     paymentToken = null,
     useSessionKey = false,
     skipDeploymentCheck = false
@@ -757,20 +591,7 @@ const useUserOp = () => {
     try {
       // Validate token address for Types 1 & 2
       if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
-        // Use USDC by default if no token specified
-        paymentToken = SUPPORTED_TOKENS.USDC.address;
-      }
-      
-      // In development mode, simulate success
-      if (isDevelopmentMode) {
-        console.log('Development mode: Simulating batch purchase');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Generate mock transaction hash
-        const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-        setTxHash(mockTxHash);
-        setIsLoading(false);
-        return mockTxHash;
+        throw new Error('Payment token is required for token-based gas payment');
       }
       
       // Make sure SDK is initialized
@@ -814,63 +635,21 @@ const useUserOp = () => {
       // Reset the builder operation
       builder.resetOp && builder.resetOp();
       
-      // Use user-selected payment type
-      const finalPaymentType = paymentType;
-      const finalPaymentToken = paymentToken || SUPPORTED_TOKENS.USDC.address;
-      
       // Ensure token is approved for Paymaster using direct EOA approach
-      if (finalPaymentType !== 0) {
-        await ensurePaymasterApproval(finalPaymentToken, builder);
+      if (paymentType !== 0 && paymentToken) {
+        await ensurePaymasterApproval(paymentToken, builder);
       }
       
       // Configure the execution
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
-      // Get raw operation for sponsoring
-      const rawOp = await builder.getOp();
-      const userOp = {
-        sender:               rawOp.sender,
-        nonce:                rawOp.nonce.toHexString(),
-        initCode:             rawOp.initCode,
-        callData:             rawOp.callData,
-        callGasLimit:         rawOp.callGasLimit.toHexString(),
-        verificationGasLimit: rawOp.verificationGasLimit.toHexString(),
-        preVerificationGas:   rawOp.preVerificationGas.toHexString(),
-        maxFeePerGas:         rawOp.maxFeePerGas.toHexString(),
-        maxPriorityFeePerGas: rawOp.maxPriorityFeePerGas.toHexString(),
-        paymasterAndData:     rawOp.paymasterAndData,
-        signature:            rawOp.signature
-      };
-
-      // Sponsor the operation
-      const paymasterOpts = { 
-        type: finalPaymentType.toString(),
-        token: finalPaymentToken 
-      };
-      
-      try {
-        const pmData = await paymasterService.sponsorUserOp(userOp, paymasterOpts);
-        userOp.paymasterAndData = pmData;
-        builder.setOp(userOp);
-      } catch (sponsorError) {
-        console.error("Error sponsoring batch operation:", sponsorError);
-        
-        // If it's a nonce error, reset operation and retry
-        if (sponsorError.message?.includes('AA25') || sponsorError.message?.includes('nonce')) {
-          // Only retry once to avoid infinite loops
-          if (!arguments[0]._retried) {
-            console.log("Nonce error detected, retrying with fresh builder");
-            builder.resetOp && builder.resetOp();
-            const retryArgs = {
-              ...arguments[0],
-              _retried: true
-            };
-            return executeBatchPurchase(retryArgs);
-          }
-        }
-        
-        throw sponsorError;
-      }
+      // Set the paymaster options directly with the SDK
+      builder.setPaymasterOptions({
+        type: paymentType,
+        token: paymentType !== 0 ? paymentToken : undefined, 
+        apikey: PAYMASTER_API_KEY,
+        rpc: PAYMASTER_URL
+      });
       
       // Send the UserOperation
       const result = await client.sendUserOperation(builder);
@@ -887,20 +666,6 @@ const useUserOp = () => {
       return receipt.transactionHash;
     } catch (err) {
       console.error('Error executing batch purchase:', err);
-      
-      // Enhanced error handling for specific cases
-      if (localStorage.getItem('autoFallbackEnabled') === 'true') {
-        console.log("Falling back to development mode due to error");
-        testModeUtils.enableTestMode('execution_error');
-        setIsDevelopmentMode(true);
-        setupTestModeMocks(); // Set up mock objects
-        
-        // Return mock hash
-        const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-        setTxHash(mockTxHash);
-        setIsLoading(false);
-        return mockTxHash;
-      }
       
       // Better error handling for specific messages
       let errorMsg = err.message || 'Failed to execute batch purchase';
@@ -922,21 +687,11 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, ensureSDKInitialized, isDevelopmentMode, ensurePaymasterApproval, isDeployed, deployOrWarn, provider, aaWalletAddress]);
-
-  /**
-   * Enter test mode
-   */
-  const enableTestMode = () => {
-    testModeUtils.enableTestMode('user_choice');
-    setIsDevelopmentMode(true);
-    setupTestModeMocks(); // Make sure we have mock objects set up
-    return true;
-  };
+  }, [client, builder, ensureSDKInitialized, ensurePaymasterApproval, isDeployed, deployOrWarn, provider, aaWalletAddress]);
 
   // Initialize SDK once when wallet is connected
   useEffect(() => {
-    if ((isConnected || testModeUtils.isTestModeEnabled()) && !isInitialized && !isInitializing) {
+    if (isConnected && !isInitialized && !isInitializing) {
       console.log('Initializing AA SDK...');
       initSDK().catch(console.error);
     }
@@ -944,10 +699,10 @@ const useUserOp = () => {
 
   // Check prefunding status when wallet address changes
   useEffect(() => {
-    if (aaWalletAddress && !isDeployed && !isDevelopmentMode) {
+    if (aaWalletAddress && !isDeployed) {
       checkAAWalletPrefunding().catch(console.error);
     }
-  }, [aaWalletAddress, isDeployed, isDevelopmentMode]);
+  }, [aaWalletAddress, isDeployed]);
 
   return {
     client,
@@ -957,7 +712,6 @@ const useUserOp = () => {
     isLoading,
     error,
     txHash,
-    isDevelopmentMode,
     needsNeroTokens,
     isPrefundingWallet,
     initSDK,
@@ -968,7 +722,6 @@ const useUserOp = () => {
     checkAAWalletPrefunding,
     checkTokenApproval,
     deployOrWarn,
-    enableTestMode,
     ensureSDKInitialized
   };
 };

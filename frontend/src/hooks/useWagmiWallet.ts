@@ -1,3 +1,5 @@
+// frontend/src/hooks/useWagmiWallet.ts
+
 import { useState, useEffect, useCallback } from 'react';
 import { 
   useAccount, 
@@ -57,50 +59,6 @@ const ERC20_ABI = [
   },
 ] as const;
 
-// Mock tokens for development
-const MOCK_TOKENS = [
-  {
-    address: '0x6b175474e89094c44da98b954eedeac495271d0f',
-    symbol: 'DAI',
-    name: 'Dai Stablecoin',
-    decimals: 18,
-    balance: '125.75',
-    rawBalance: '125750000000000000000'
-  },
-  {
-    address: '0xC86Fed58edF0981e927160C50ecB8a8B05B32fed',
-    symbol: 'USDC',
-    name: 'USD Coin',
-    decimals: 6,
-    balance: '350.5',
-    rawBalance: '350500000'
-  },
-  {
-    address: '0xdac17f958d2ee523a2206206994597c13d831ec7',
-    symbol: 'USDT',
-    name: 'Tether USD',
-    decimals: 6,
-    balance: '200.0',
-    rawBalance: '200000000'
-  },
-  {
-    address: '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599',
-    symbol: 'WBTC',
-    name: 'Wrapped Bitcoin',
-    decimals: 8,
-    balance: '0.015',
-    rawBalance: '1500000'
-  },
-  {
-    address: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
-    symbol: 'WETH',
-    name: 'Wrapped Ether',
-    decimals: 18,
-    balance: '0.25',
-    rawBalance: '250000000000000000'
-  }
-];
-
 interface Token {
   address: string;
   symbol: string;
@@ -116,7 +74,6 @@ interface UseWagmiWalletReturn {
   connectionError: string | null;
   chainId: number | undefined;
   aaWalletAddress: string | null;
-  isDevelopmentMode: boolean;
   signer: null;
   provider: null;
   connectWallet: () => Promise<{ account: string; provider: null; signer: null; }>;
@@ -142,23 +99,16 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [aaWalletAddress, setAaWalletAddress] = useState<string | null>(null);
-  const [isDevelopmentMode, setIsDevelopmentMode] = useState<boolean>(false);
 
   // Handle AA wallet address derivation
   useEffect(() => {
     if (address) {
-      // FIX: Instead of creating an invalid format address, we'll use the EOA address for now
-      // This solves the checksum validation errors until a proper AA address generation is implemented
+      // For now, use the EOA address until a proper AA address generation is implemented
       setAaWalletAddress(address);
     } else {
-      // In development mode, provide a valid mock AA address
-      if (isDevelopmentMode) {
-        setAaWalletAddress("0x8901b77345cC8936Bd6E142570AdE93f5ccF3417");
-      } else {
-        setAaWalletAddress(null);
-      }
+      setAaWalletAddress(null);
     }
-  }, [address, isDevelopmentMode]);
+  }, [address]);
 
   // Check for MetaMask or any other injected provider
   const isMetaMaskAvailable = useCallback((): boolean => {
@@ -174,7 +124,6 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     }
   }, []);
   
-  // 76-95行目を以下に置き換え
   const connectWallet = useCallback(async () => {
     setIsConnecting(true);
     setConnectionError(null);
@@ -182,15 +131,10 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     try {
       // Check for MetaMask with error handling
       if (!isMetaMaskAvailable()) {
-        console.log('MetaMask not detected - activating development mode');
-        setIsDevelopmentMode(true);
+        console.log('MetaMask not detected');
+        setConnectionError('No wallet detected. Please install MetaMask or another Ethereum wallet.');
         setIsConnecting(false);
-        
-        return {
-          account: '0x1234567890123456789012345678901234567890',
-          provider: null,
-          signer: null
-        };
+        throw new Error('No wallet detected');
       }
   
       // Retry logic with exponential backoff
@@ -221,15 +165,7 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     } catch (err) {
       console.error('Wallet connection error:', err);
       setConnectionError(err.message || 'Wallet connection error');
-      
-      // Fall back to development mode
-      setIsDevelopmentMode(true);
-      
-      return {
-        account: '0x1234567890123456789012345678901234567890',
-        provider: null,
-        signer: null
-      };
+      throw err;
     } finally {
       setIsConnecting(false);
     }
@@ -240,7 +176,6 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
    */
   const disconnectWallet = useCallback(() => {
     disconnect();
-    setIsDevelopmentMode(false);
   }, [disconnect]);
 
   /**
@@ -249,10 +184,8 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
    * @returns {Array} - Array of token objects with balances and metadata
    */
   const getTokens = useCallback(async (tokenAddresses: string[], chainIdParam?: number): Promise<Token[]> => {
-    // Development mode check - immediately return mock tokens if in development mode
-    if (isDevelopmentMode || !isConnected) {
-      console.log('Using mock tokens in development mode');
-      return MOCK_TOKENS;
+    if (!isConnected) {
+      throw new Error('Wallet not connected');
     }
 
     if (!address) {
@@ -346,37 +279,24 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
         }
       }
 
-      // If no tokens found and in development mode, return mock tokens
-      if (tokens.length === 0 && isDevelopmentMode) {
-        return MOCK_TOKENS;
-      }
-
       return tokens;
     } catch (err) {
       console.error('Error fetching tokens:', err);
-      if (isDevelopmentMode) {
-        return MOCK_TOKENS;
-      }
       throw err;
     }
-  }, [address, aaWalletAddress, isConnected, isDevelopmentMode, chainId]);
+  }, [address, aaWalletAddress, isConnected, chainId]);
 
   /**
    * Switch to NERO Chain
    */
   const switchToNeroChain = useCallback(async () => {
-    if (isDevelopmentMode) {
-      console.log('Development mode: Pretending to switch to NERO Chain');
-      return;
-    }
-
     try {
       await switchChain({ chainId: neroTestnet.id });
     } catch (err) {
       console.error('Error switching to NERO Chain:', err);
       throw err;
     }
-  }, [isDevelopmentMode, switchChain]);
+  }, [switchChain]);
 
   /**
    * Add NERO Chain to wallet
@@ -391,7 +311,6 @@ export const useWagmiWallet = (): UseWagmiWalletReturn => {
     connectionError,
     chainId,
     aaWalletAddress,
-    isDevelopmentMode,
     signer: null, 
     provider: null, 
     connectWallet,
