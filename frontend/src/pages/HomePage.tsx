@@ -11,7 +11,6 @@ import useUserOp from '../hooks/useUserOp';
 import useTokens from '../hooks/useTokens';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
-import testModeUtils from '../utils/testModeUtils';
 
 /**
  * Home page of the application
@@ -21,7 +20,6 @@ const HomePage = () => {
   
   // Using wagmi hooks
   const { address, isConnected } = useAccount();
-  const { isDevelopmentMode } = useWagmiWallet();
   
   // Using user operation hook
   const { 
@@ -29,8 +27,7 @@ const HomePage = () => {
     isDeployed,
     needsNeroTokens,
     executeTicketPurchase,
-    deployOrWarn,
-    enableTestMode
+    deployOrWarn
   } = useUserOp();
   
   // Using other custom hooks
@@ -118,7 +115,7 @@ const HomePage = () => {
    */
   const handleOpenTicketModal = () => {
     // If wallet not deployed, show deployment prompt
-    if (!isDeployed && !isDevelopmentMode) {
+    if (!isDeployed) {
       setShowDeploymentPrompt(true);
       return;
     }
@@ -148,18 +145,11 @@ const HomePage = () => {
           setShowFundingPrompt(true);
         } else {
           setError(err.message || 'Failed to deploy wallet');
-          if (window.confirm('Deployment failed. Would you like to enter test mode instead?')) {
-            enableTestMode();
-            setIsTicketModalOpen(true);
-          }
         }
       }
     } else {
-      // User declined to deploy, switch to test mode
-      enableTestMode();
-      
-      // Open ticket modal in test mode
-      setIsTicketModalOpen(true);
+      // Just close the modal if user declines
+      setShowDeploymentPrompt(false);
     }
   };
   
@@ -180,11 +170,6 @@ const HomePage = () => {
       setIsTicketModalOpen(true);
     } catch (err) {
       setError(err.message || 'Failed to fund wallet');
-      // Ask if user wants to enter test mode
-      if (window.confirm('Funding or deployment failed. Would you like to enter test mode instead?')) {
-        enableTestMode();
-        setIsTicketModalOpen(true);
-      }
     }
   };
   
@@ -201,7 +186,7 @@ const HomePage = () => {
    */
   const handleOpenSessionKeyModal = async () => {
     // If wallet not deployed, show deployment prompt
-    if (!isDeployed && !isDevelopmentMode) {
+    if (!isDeployed) {
       setShowDeploymentPrompt(true);
       return;
     }
@@ -252,24 +237,6 @@ const HomePage = () => {
     } catch (err) {
       console.error('Purchase error:', err);
       setError(err.message || 'Failed to purchase tickets');
-      
-      // If failure, offer test mode
-      if (window.confirm('Purchase failed. Would you like to enter test mode?')) {
-        enableTestMode();
-        
-        // Try again in test mode
-        const mockTxHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-        navigate('/payment', {
-          state: {
-            lottery: selectedLottery,
-            token,
-            paymentType,
-            quantity: ticketQuantity,
-            txHash: mockTxHash
-          },
-        });
-        handleCloseTicketModal();
-      }
     }
   };
   
@@ -311,7 +278,7 @@ const HomePage = () => {
             className="secondary-button"
             onClick={() => handleDeploymentChoice(false)}
           >
-            No, Enter Test Mode
+            Cancel
           </button>
           <button 
             className="primary-button"
@@ -344,13 +311,7 @@ const HomePage = () => {
         <div className="prompt-actions">
           <button 
             className="secondary-button"
-            onClick={() => {
-              setShowFundingPrompt(false);
-              if (window.confirm('Would you like to enter test mode instead?')) {
-                enableTestMode();
-                setIsTicketModalOpen(true);
-              }
-            }}
+            onClick={() => setShowFundingPrompt(false)}
           >
             Cancel
           </button>
@@ -380,7 +341,7 @@ const HomePage = () => {
   }
   
   // Landing page when wallet is not connected
-  if (!isConnected && !isDevelopmentMode) {
+  if (!isConnected) {
     return (
       <div className="home-landing">
         <div className="landing-content">
@@ -433,27 +394,8 @@ const HomePage = () => {
   // Regular display with active lotteries
   return (
     <div className="home-page">
-      {/* Show test mode banner if in development mode */}
-      {isDevelopmentMode && (
-        <div className="test-mode-banner">
-          <div className="banner-content">
-            <span className="banner-icon">🧪</span>
-            <span className="banner-text">Test Mode Active - Transactions are simulated</span>
-            <button 
-              className="exit-test-mode"
-              onClick={() => {
-                testModeUtils.disableTestMode();
-                window.location.reload();
-              }}
-            >
-              Exit Test Mode
-            </button>
-          </div>
-        </div>
-      )}
-      
       {/* Display AA wallet status banner if not deployed */}
-      {!isDeployed && !isDevelopmentMode && <AAWalletStatus minimal className="wallet-status-banner" />}
+      {!isDeployed && <AAWalletStatus minimal className="wallet-status-banner" />}
       
       {/* Show success message after deployment */}
       {deploymentSuccess && (
@@ -502,7 +444,7 @@ const HomePage = () => {
               </div>
               
               {/* Show AA wallet status in details panel if not deployed */}
-              {!isDeployed && !isDevelopmentMode && (
+              {!isDeployed && (
                 <div className="wallet-status-panel">
                   <AAWalletStatus />
                 </div>
@@ -523,7 +465,6 @@ const HomePage = () => {
           onPurchase={handlePurchaseTickets}
           onClose={handleCloseTicketModal}
           hasSessionKey={hasActiveSessionKey}
-          isDevelopmentMode={isDevelopmentMode}
         />
       )}
       
@@ -532,7 +473,6 @@ const HomePage = () => {
           onCreate={handleCreateSessionKey}
           onClose={handleCloseSessionKeyModal}
           isLoading={sessionKeyLoading}
-          isDevelopmentMode={isDevelopmentMode}
         />
       )}
       

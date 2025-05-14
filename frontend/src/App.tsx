@@ -13,15 +13,13 @@ import './styles/global.css';
 
 /**
  * Root component for the AlpacaLotto application
- * Enhanced with development mode and error handling
  */
-const App: React.FC = () => {
+const App = () => {
   const { 
     account, 
     isConnecting, 
     connectWallet, 
     aaWalletAddress,
-    isDevelopmentMode,
     connectionError
   } = useWagmiWallet(); 
   
@@ -32,10 +30,9 @@ const App: React.FC = () => {
     isExpiringWithin
   } = useSessionKeys();
   
-  const [showSessionWarning, setShowSessionWarning] = useState<boolean>(false);
-  const [showDevBanner, setShowDevBanner] = useState<boolean>(false);
-  const [showErrorBanner, setShowErrorBanner] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [showSessionWarning, setShowSessionWarning] = useState(false);
+  const [showErrorBanner, setShowErrorBanner] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   
   // Show warning when session key is about to expire
   useEffect(() => {
@@ -57,15 +54,6 @@ const App: React.FC = () => {
     return () => clearInterval(checkInterval);
   }, [hasActiveSessionKey, isExpiringWithin]);
   
-  // Show development mode banner
-  useEffect(() => {
-    if (isDevelopmentMode) {
-      setShowDevBanner(true);
-    } else {
-      setShowDevBanner(false);
-    }
-  }, [isDevelopmentMode]);
-  
   // Show error banner if connection error
   useEffect(() => {
     if (connectionError) {
@@ -81,11 +69,6 @@ const App: React.FC = () => {
     setShowSessionWarning(false);
   };
   
-  // Close development banner
-  const dismissDevBanner = () => {
-    setShowDevBanner(false);
-  };
-  
   // Close error banner
   const dismissErrorBanner = () => {
     setShowErrorBanner(false);
@@ -95,7 +78,7 @@ const App: React.FC = () => {
   const handleConnectWallet = async () => {
     try {
       await connectWallet();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Failed to connect wallet:", err);
       setErrorMessage(err.message || "Failed to connect wallet");
       setShowErrorBanner(true);
@@ -105,18 +88,6 @@ const App: React.FC = () => {
   return (
     <Router>
       <div className="app-container">
-        {showDevBanner && (
-          <div className="dev-mode-banner">
-            <div className="banner-content">
-              <span className="banner-icon">⚙️</span>
-              <span className="banner-text">
-                Development Mode: Using mock data and simulated transactions
-              </span>
-              <button className="banner-close" onClick={dismissDevBanner}>×</button>
-            </div>
-          </div>
-        )}
-        
         {showErrorBanner && (
           <div className="error-banner">
             <div className="banner-content">
@@ -132,12 +103,10 @@ const App: React.FC = () => {
         <Header 
           hasSessionKey={hasActiveSessionKey} 
           onRevokeSessionKey={revokeSessionKey}
-          isDevelopmentMode={isDevelopmentMode}
         />
         
         <div className="wallet-bar">
           <WalletConnect 
-            isDevelopmentMode={isDevelopmentMode}
             aaWalletAddress={aaWalletAddress}
           />
           {hasActiveSessionKey && (
