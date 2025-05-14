@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
 import { Client, Presets } from 'userop';
-import paymasterService from '../services/paymasterService';
 import { EntryPointAbi } from '../constants/abi';
 import { 
   NERO_RPC_URL, 
@@ -121,6 +120,38 @@ const useUserOp = () => {
     } finally {
       setIsPrefundingWallet(false);
     }
+  };
+
+  /**
+   * Utility to ensure SDK is initialized before operations
+   */
+  const ensureSDKInitialized = async () => {
+    // If already initialized, return cached result
+    if (isInitialized && client && builder) {
+      return { success: true, client, builder };
+    }
+    
+    // If initialization is in progress, wait for it to complete
+    if (isInitializing) {
+      console.log('SDK initialization already in progress, waiting...');
+      await new Promise(resolve => {
+        const checkInterval = setInterval(() => {
+          if (!isInitializing) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+      });
+      
+      return { 
+        success: isInitialized, 
+        client, 
+        builder
+      };
+    }
+    
+    // Otherwise, initialize the SDK
+    return await initSDK();
   };
 
   /**
@@ -256,38 +287,6 @@ const useUserOp = () => {
   };
 
   /**
-   * Utility to ensure SDK is initialized before operations
-   */
-  const ensureSDKInitialized = async () => {
-    // If already initialized, return cached result
-    if (isInitialized && client && builder) {
-      return { success: true, client, builder };
-    }
-    
-    // If initialization is in progress, wait for it to complete
-    if (isInitializing) {
-      console.log('SDK initialization already in progress, waiting...');
-      await new Promise(resolve => {
-        const checkInterval = setInterval(() => {
-          if (!isInitializing) {
-            clearInterval(checkInterval);
-            resolve();
-          }
-        }, 100);
-      });
-      
-      return { 
-        success: isInitialized, 
-        client, 
-        builder
-      };
-    }
-    
-    // Otherwise, initialize the SDK
-    return await initSDK();
-  };
-
-  /**
    * Main deployment function with verification
    * This serves as the single entry point for deployment checks
    */
@@ -329,113 +328,6 @@ const useUserOp = () => {
       throw err;
     }
   };
-  
-  /**
-   * Initialize the Account Abstraction SDK
-   */
-  const initSDK = useCallback(async () => {
-    // If initialization is already in progress, wait for it to finish
-    if (isInitializing) {
-      console.log('SDK initialization already in progress, waiting...');
-      await new Promise(resolve => {
-        const checkInterval = setInterval(() => {
-          if (!isInitializing) {
-            clearInterval(checkInterval);
-            resolve();
-          }
-        }, 100);
-      });
-      
-      return { 
-        success: isInitialized, 
-        client, 
-        builder
-      };
-    }
-    
-    // Return cached result if already initialized
-    if (isInitialized && client && builder) {
-      return { success: true, client, builder };
-    }
-    
-    isInitializing = true; // Set global flag
-      
-    if (!isConnected) {
-      setError('Wallet not connected');
-      isInitializing = false;
-      return { success: false, error: 'Wallet not connected' };
-    }
-    
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      if (typeof window !== 'undefined' && window.ethereum) {
-        try {
-          // Ensure wallet access permissions first
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
-          
-          const provider = new ethers.providers.Web3Provider(window.ethereum);
-          setProvider(provider);
-          const signer = provider.getSigner();
-          
-          // Initialize AA client
-          const aaClient = await Client.init(NERO_RPC_URL, {
-            overrideBundlerRpc: BUNDLER_URL,
-            entryPoint: ENTRYPOINT_ADDRESS,
-          });
-          setClient(aaClient);
-          
-          const aaBuilder = await Presets.Builder.SimpleAccount.init(
-            signer,
-            NERO_RPC_URL,
-            {
-              overrideBundlerRpc: BUNDLER_URL,
-              entryPoint: ENTRYPOINT_ADDRESS,
-              factory: ACCOUNT_FACTORY_ADDRESS,
-            }
-          );
-          setBuilder(aaBuilder);
-          
-          const aaAddress = await aaBuilder.getSender();
-          const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
-          setAaWalletAddress(normalizedAAAddress);
-          
-          const code = await provider.getCode(normalizedAAAddress);
-          const deployed = code !== '0x';
-          setIsDeployed(deployed);
-          
-          if (code === '0x') {
-            const isPrefunded = await checkAAWalletPrefunding();
-            setNeedsNeroTokens(!isPrefunded);
-          }
-          
-          setIsInitialized(true);
-          setIsLoading(false);
-          console.log('SDK initialized successfully');
-          isInitializing = false;
-          return { success: true, client: aaClient, builder: aaBuilder };
-        } catch (err) {
-          console.error('Error initializing AA SDK:', err);
-          setError(`Failed to initialize AA SDK: ${err.message}`);
-          setIsLoading(false);
-          isInitializing = false;
-          return { success: false, error: err.message };
-        }
-      } else {
-        setError('Ethereum provider not available');
-        setIsLoading(false);
-        isInitializing = false;
-        return { success: false, error: 'Ethereum provider not available' };
-      }
-    } catch (err) {
-      console.error('Error in AA SDK initialization:', err);
-      setError(`AA SDK initialization error: ${err.message}`);
-      setIsLoading(false);
-      isInitializing = false;
-      return { success: false, error: err.message };
-    }
-  }, [isConnected, isInitialized, client, builder, checkAAWalletPrefunding]);
 
   /**
    * Check if token approval is needed
@@ -485,7 +377,6 @@ const useUserOp = () => {
     setError(null);
     
     try {
-
       const tokenToUse = paymentToken || tokenAddress;
 
       if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
@@ -596,10 +487,10 @@ const useUserOp = () => {
     setError(null);
     
     try {
-
       const tokenToUse = paymentToken || (selections.length > 0 ? selections[0].tokenAddress : null);
+      
       // Validate token address for Types 1 & 2
-      if (!tokenToUse) {
+      if ((paymentType === 1 || paymentType === 2) && !tokenToUse) {
         throw new Error('Payment token is required for token-based gas payment');
       }
       
@@ -697,6 +588,113 @@ const useUserOp = () => {
       throw new Error(errorMsg);
     }
   }, [client, builder, ensureSDKInitialized, ensurePaymasterApproval, isDeployed, deployOrWarn, provider, aaWalletAddress]);
+
+  /**
+   * Initialize the Account Abstraction SDK
+   */
+  const initSDK = useCallback(async () => {
+    // If initialization is already in progress, wait for it to finish
+    if (isInitializing) {
+      console.log('SDK initialization already in progress, waiting...');
+      await new Promise(resolve => {
+        const checkInterval = setInterval(() => {
+          if (!isInitializing) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+      });
+      
+      return { 
+        success: isInitialized, 
+        client, 
+        builder
+      };
+    }
+    
+    // Return cached result if already initialized
+    if (isInitialized && client && builder) {
+      return { success: true, client, builder };
+    }
+    
+    isInitializing = true; // Set global flag
+      
+    if (!isConnected) {
+      setError('Wallet not connected');
+      isInitializing = false;
+      return { success: false, error: 'Wallet not connected' };
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      if (typeof window !== 'undefined' && window.ethereum) {
+        try {
+          // Ensure wallet access permissions first
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
+          setProvider(provider);
+          const signer = provider.getSigner();
+          
+          // Initialize AA client
+          const aaClient = await Client.init(NERO_RPC_URL, {
+            overrideBundlerRpc: BUNDLER_URL,
+            entryPoint: ENTRYPOINT_ADDRESS,
+          });
+          setClient(aaClient);
+          
+          const aaBuilder = await Presets.Builder.SimpleAccount.init(
+            signer,
+            NERO_RPC_URL,
+            {
+              overrideBundlerRpc: BUNDLER_URL,
+              entryPoint: ENTRYPOINT_ADDRESS,
+              factory: ACCOUNT_FACTORY_ADDRESS,
+            }
+          );
+          setBuilder(aaBuilder);
+          
+          const aaAddress = await aaBuilder.getSender();
+          const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
+          setAaWalletAddress(normalizedAAAddress);
+          
+          const code = await provider.getCode(normalizedAAAddress);
+          const deployed = code !== '0x';
+          setIsDeployed(deployed);
+          
+          if (code === '0x') {
+            const isPrefunded = await checkAAWalletPrefunding();
+            setNeedsNeroTokens(!isPrefunded);
+          }
+          
+          setIsInitialized(true);
+          setIsLoading(false);
+          console.log('SDK initialized successfully');
+          isInitializing = false;
+          return { success: true, client: aaClient, builder: aaBuilder };
+        } catch (err) {
+          console.error('Error initializing AA SDK:', err);
+          setError(`Failed to initialize AA SDK: ${err.message}`);
+          setIsLoading(false);
+          isInitializing = false;
+          return { success: false, error: err.message };
+        }
+      } else {
+        setError('Ethereum provider not available');
+        setIsLoading(false);
+        isInitializing = false;
+        return { success: false, error: 'Ethereum provider not available' };
+      }
+    } catch (err) {
+      console.error('Error in AA SDK initialization:', err);
+      setError(`AA SDK initialization error: ${err.message}`);
+      setIsLoading(false);
+      isInitializing = false;
+      return { success: false, error: err.message };
+    }
+  }, [isConnected, isInitialized, client, builder, checkAAWalletPrefunding]);
 
   // Initialize SDK once when wallet is connected
   useEffect(() => {

@@ -111,8 +111,11 @@ class PaymasterService {
     if (!this.paymasterRpc) await this.init();
     
     try {
+      // Use a default address if none is provided
+      const address = aaWalletAddress || '0x1234567890123456789012345678901234567890';
+      
       // Normalize address
-      const normalizedWalletAddress = ethers.utils.getAddress(aaWalletAddress);
+      const normalizedWalletAddress = ethers.utils.getAddress(address);
       
       // Check cache first
       const cacheKey = `tokens-${normalizedWalletAddress}`;

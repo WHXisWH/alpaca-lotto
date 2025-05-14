@@ -175,12 +175,13 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
     setError(null);
     
     try {
-      // Execute ticket purchase with session key
+      // Execute ticket purchase with session key using proper payment parameters
       const txHash = await executeTicketPurchase({
         lotteryId: lottery.id,
         tokenAddress: selectedToken.address,
         quantity: purchaseQuantity,
         paymentType: 0, // Use sponsored gas for simplicity
+        paymentToken: selectedToken.address,
         useSessionKey: hasActiveSessionKey
       });
       

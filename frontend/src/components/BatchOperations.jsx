@@ -195,6 +195,11 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
         try {
           await deployOrWarn();
           setDeploymentSuccess(true);
+          
+          // Open ticket modal after successful deployment
+          setTimeout(() => {
+            setIsTicketModalOpen(true);
+          }, 500);
         } catch (err) {
           if (err.message?.includes('AA21') || err.message?.includes('funds')) {
             setError('Not enough NERO balance to deploy wallet');

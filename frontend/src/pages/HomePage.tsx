@@ -214,7 +214,7 @@ const HomePage = () => {
    */
   const handlePurchaseTickets = async ({ token, paymentType }) => {
     try {
-      // Try to purchase tickets, deployOrWarn will be called internally
+      // Use the updated executeTicketPurchase with proper payment arguments
       const txHash = await executeTicketPurchase({
         lotteryId: selectedLottery.id,
         tokenAddress: token.address,

@@ -1,4 +1,3 @@
-// frontend/src/components/TicketPurchase.tsx
 import React from 'react';
 import EnhancedPaymentUI from './PaymentOptimizer/EnhancedPaymentUI';
 import formatUtils from '../utils/formatUtils';
