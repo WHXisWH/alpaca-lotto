@@ -326,7 +326,10 @@ const HomePage = () => {
                   </button>
                 )}
               </div>
-              
+            </div>
+          )}
+        </div>
+      </div>
       
       {/* Modals */}
       {isTicketModalOpen && selectedLottery && (
