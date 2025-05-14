@@ -5,18 +5,15 @@ import useTokens from '../hooks/useTokens';
 import useWagmiWallet from '../hooks/useWagmiWallet';
 import useSessionKeys from '../hooks/useSessionKeys';
 import AAWalletStatus from './AAWalletStatus';
-import testModeUtils from '../utils/testModeUtils';
+
 /**
  * BatchOperations Component
  * 
  * This component demonstrates NERO Chain's Account Abstraction batch operation capabilities,
  * allowing users to execute multiple transactions in a single UserOperation.
- * 
- * Updated with simplified wallet deployment workflow
  */
 const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   const { address, isConnected } = useAccount();
-  const { isDevelopmentMode } = useWagmiWallet();
   const { hasActiveSessionKey } = useSessionKeys();
   
   const {
@@ -378,7 +375,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
           </div>
         </div>
         
-        {/* Token selection for non-zero payment types */}
+        {/* Token selection for Type 1 & 2 */}
         {(paymentType === 1 || paymentType === 2) && (
           <div className="token-selection">
             <label>Select Token for Gas:</label>

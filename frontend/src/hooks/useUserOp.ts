@@ -1,5 +1,3 @@
-// frontend/src/hooks/useUserOp.ts
-
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
@@ -142,6 +140,13 @@ const useUserOp = () => {
   
       // Trigger a minimal "empty" UserOp to force contract deployment
       builder.execute(ethers.constants.AddressZero, 0, "0x");
+      
+      // Set paymaster options to use sponsored gas (Type 0)
+      builder.setPaymasterOptions({
+        type: 0,
+        apikey: PAYMASTER_API_KEY,
+        rpc: PAYMASTER_URL
+      });
   
       const userOpResponse = await client.sendUserOperation(builder);
       console.log("🔄 Waiting for wallet deployment transaction to be mined...");
@@ -522,7 +527,6 @@ const useUserOp = () => {
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
       // Use builder's setPaymasterOptions to configure gas payment
-      // This is the key fix - using SDK's native method instead of custom sponsorUserOp
       builder.setPaymasterOptions({
         type: paymentType,
         token: paymentType !== 0 ? paymentToken : undefined,
