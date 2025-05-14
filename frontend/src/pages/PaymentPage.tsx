@@ -7,7 +7,6 @@ import useUserOp from '../hooks/useUserOp';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
 import AAWalletStatus from '../components/AAWalletStatus';
-import testModeUtils from '../utils/testModeUtils';
 import { ENTRYPOINT_ADDRESS, TOKEN_PAYMASTER_ADDRESS } from '../constants/config';
 
 /**
@@ -30,14 +29,13 @@ const PaymentPage = () => {
   
   // Custom hooks with integrated deployment features
   const { 
-    executeTicketPurchase, 
+    executeTicketPurchase,
+    prefundAAWallet, 
     isLoading: purchaseLoading, 
     error: purchaseError, 
     txHash: hookTxHash,
-    isDevelopmentMode,
     isDeployed,
-    deployOrWarn,
-    enableTestMode
+    deployOrWarn
   } = useUserOp();
   
   const { hasActiveSessionKey } = useSessionKeys();
@@ -86,10 +84,10 @@ const PaymentPage = () => {
   
   // Connect wallet if not connected
   useEffect(() => {
-    if (!isConnected && !isDevelopmentMode) {
+    if (!isConnected) {
       connectWallet();
     }
-  }, [isConnected, connectWallet, isDevelopmentMode]);
+  }, [isConnected, connectWallet]);
   
   // Payment type change handler
   const handlePaymentTypeChange = (e) => {
@@ -107,11 +105,6 @@ const PaymentPage = () => {
         setErrorMessage('Not enough NERO balance to deploy. Please add funds first.');
       } else {
         setErrorMessage(err.message || 'Failed to deploy wallet');
-        
-        // Offer test mode
-        if (window.confirm('Deployment failed. Would you like to enter test mode instead?')) {
-          enableTestMode();
-        }
       }
     }
   };
@@ -295,12 +288,6 @@ const PaymentPage = () => {
           ) : (
             <p className="session-note">Check your wallet for confirmation requests.</p>
           )}
-          
-          {isDevelopmentMode && (
-            <div className="dev-mode-note">
-              <p>Test Mode: Simulating blockchain transaction.</p>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -322,24 +309,17 @@ const PaymentPage = () => {
               <span>Transaction Hash:</span>
               <span className="tx-hash">{txHash}</span>
             </div>
-            {isDevelopmentMode && (
-              <div className="dev-mode-note">
-                <p>Test Mode: This is a simulated transaction.</p>
-              </div>
-            )}
           </div>
           
           <div className="action-buttons">
-            {!isDevelopmentMode && (
-              <a 
-                href={`https://testnet.neroscan.io/tx/${txHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="explorer-link"
-              >
-                View in Explorer
-              </a>
-            )}
+            <a 
+              href={`https://testnet.neroscan.io/tx/${txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="explorer-link"
+            >
+              View in Explorer
+            </a>
             
             <button 
               className="home-button"
@@ -375,16 +355,6 @@ const PaymentPage = () => {
             </button>
             
             <button 
-              className="test-mode-button"
-              onClick={() => {
-                enableTestMode();
-                setTimeout(() => handleSubmitTransaction(), 500);
-              }}
-            >
-              Try in Test Mode
-            </button>
-            
-            <button 
               className="home-button"
               onClick={handleGoBack}
             >
@@ -399,26 +369,6 @@ const PaymentPage = () => {
   // Transaction preparation view (default state)
   return (
     <div className="payment-page">
-      {/* Show test mode banner if active */}
-      {isDevelopmentMode && (
-        <div className="test-mode-banner">
-          <div className="banner-content">
-            <span className="banner-icon">🧪</span>
-            <span className="banner-text">Test Mode Active - Transactions are simulated</span>
-            <button 
-              className="exit-test-mode"
-              onClick={() => {
-                if (window.confirm('Exit test mode? This will require a page reload.')) {
-                  testModeUtils.disableTestMode();
-                }
-              }}
-            >
-              Exit Test Mode
-            </button>
-          </div>
-        </div>
-      )}
-      
       <div className="payment-container">
         <div className="back-navigation">
           <button className="back-button" onClick={handleGoBack}>
@@ -437,7 +387,7 @@ const PaymentPage = () => {
         )}
         
         {/* Show wallet status if not deployed */}
-        {!isDeployed && !isDevelopmentMode && (
+        {!isDeployed && (
           <AAWalletStatus minimal className="wallet-status-banner" />
         )}
         
@@ -527,12 +477,6 @@ const PaymentPage = () => {
                 </div>
               </div>
             )}
-            
-            {isDevelopmentMode && (
-              <div className="dev-mode-note">
-                <p>Test Mode: Transaction will be simulated.</p>
-              </div>
-            )}
           </div>
           
           <div className="action-buttons">
@@ -543,7 +487,7 @@ const PaymentPage = () => {
               Cancel
             </button>
             
-            {!isDeployed && !isDevelopmentMode ? (
+            {!isDeployed ? (
               <button 
                 className="deploy-button"
                 onClick={handleDeployWallet}
