@@ -110,26 +110,7 @@ const HomePage = () => {
   };
   
     
-  /**
-   * Handle funding the wallet
-   */
-  const handleFundWallet = async () => {
-    setShowFundingPrompt(false);
-    
-    try {
-      await prefundAAWallet(fundingAmount);
-      setDeploymentSuccess(true);
-      
-      // Attempt deployment again
-      await deployOrWarn();
-      
-      // Open ticket modal after successful deployment
-      setIsTicketModalOpen(true);
-    } catch (err) {
-      setError(err.message || 'Failed to fund wallet');
-    }
-  };
-  
+ 
   /**
    * Close ticket purchase modal
    */
@@ -352,10 +333,6 @@ const HomePage = () => {
           isLoading={sessionKeyLoading}
         />
       )}
-      
-      {/* Special prompts */}
-      {showDeploymentPrompt && <DeploymentPrompt />}
-      {showFundingPrompt && <FundingPrompt />}
     </div>
   );
 };
