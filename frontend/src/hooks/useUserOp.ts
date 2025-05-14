@@ -126,32 +126,38 @@ const useUserOp = () => {
    * Utility to ensure SDK is initialized before operations
    */
   const ensureSDKInitialized = async () => {
-    // If already initialized, return cached result
     if (isInitialized && client && builder) {
       return { success: true, client, builder };
     }
     
-    // If initialization is in progress, wait for it to complete
     if (isInitializing) {
       console.log('SDK initialization already in progress, waiting...');
-      await new Promise(resolve => {
+      return new Promise(resolve => {
         const checkInterval = setInterval(() => {
           if (!isInitializing) {
             clearInterval(checkInterval);
-            resolve();
+            if (isInitialized && client && builder) {
+              resolve({ success: true, client, builder });
+            } else {
+              resolve({ success: false, error: 'Initialization completed but SDK not ready' });
+            }
           }
         }, 100);
       });
-      
-      return { 
-        success: isInitialized, 
-        client, 
-        builder
-      };
     }
     
-    // Otherwise, initialize the SDK
-    return await initSDK();
+    try {
+      const result = await initSDK();
+      return { 
+        success: result.success, 
+        client: result.success ? result.client : null,
+        builder: result.success ? result.builder : null,
+        error: result.error
+      };
+    } catch (err) {
+      console.error("Error initializing SDK:", err);
+      return { success: false, error: err.message || 'Unknown initialization error' };
+    }
   };
 
   /**
@@ -291,37 +297,45 @@ const useUserOp = () => {
    * This serves as the single entry point for deployment checks
    */
   const deployOrWarn = async () => {
-    // First check if already deployed
     if (isDeployed) return true;
     
     try {
-      // Double-check with getCode to be sure
       if (aaWalletAddress && provider) {
         console.log("🔍 Verifying wallet deployment status at:", aaWalletAddress);
         
-        const normalizedAddress = ethers.utils.getAddress(aaWalletAddress);
-        const code = await provider.getCode(normalizedAddress);
-        
-        if (code !== '0x') {
-          console.log("✅ Wallet already deployed - found code at address");
-          setIsDeployed(true);
-          return true;
+        try {
+          const normalizedAddress = ethers.utils.getAddress(aaWalletAddress);
+          const code = await provider.getCode(normalizedAddress);
+          
+          if (code !== '0x') {
+            console.log("✅ Wallet already deployed - found code at address");
+            setIsDeployed(true);
+            return true;
+          }
+          
+          console.log("⚠️ Wallet not deployed - proceeding with deployment");
+        } catch (checkErr) {
+          console.error("Error checking deployment status:", checkErr);
         }
-        
-        console.log("⚠️ Wallet not deployed - proceeding with deployment");
       }
       
-      // Make sure SDK is initialized before deployment
       if (!client || !builder) {
         console.log("SDK not initialized, re-initializing...");
         const result = await ensureSDKInitialized();
-        if (!result.success) {
+        
+        if (result.success && result.client && result.builder) {
+          if (!client) setClient(result.client);
+          if (!builder) setBuilder(result.builder);
+        } else {
+          console.error("SDK initialization failed:", result.error);
           throw new Error('SDK failed to initialize before deployment');
         }
+        
+        if (!client || !builder) {
+          throw new Error('SDK client or builder still not available after initialization');
+        }
       }
-      
-      // Otherwise attempt deployment
-      await deployAAWallet();
+            await deployAAWallet();
       return true;
     } catch (err) {
       console.error("❌ Deployment error:", err);
@@ -593,32 +607,35 @@ const useUserOp = () => {
    * Initialize the Account Abstraction SDK
    */
   const initSDK = useCallback(async () => {
-    // If initialization is already in progress, wait for it to finish
     if (isInitializing) {
       console.log('SDK initialization already in progress, waiting...');
-      await new Promise(resolve => {
+      return new Promise(resolve => {
         const checkInterval = setInterval(() => {
           if (!isInitializing) {
             clearInterval(checkInterval);
-            resolve();
+            if (isInitialized && client && builder) {
+              resolve({ 
+                success: true, 
+                client, 
+                builder 
+              });
+            } else {
+              resolve({ 
+                success: false, 
+                error: 'Initialization completed but SDK not ready' 
+              });
+            }
           }
         }, 100);
       });
-      
-      return { 
-        success: isInitialized, 
-        client, 
-        builder
-      };
     }
     
-    // Return cached result if already initialized
     if (isInitialized && client && builder) {
       return { success: true, client, builder };
     }
     
-    isInitializing = true; // Set global flag
-      
+    isInitializing = true; 
+    
     if (!isConnected) {
       setError('Wallet not connected');
       isInitializing = false;
@@ -631,14 +648,12 @@ const useUserOp = () => {
     try {
       if (typeof window !== 'undefined' && window.ethereum) {
         try {
-          // Ensure wallet access permissions first
           await window.ethereum.request({ method: 'eth_requestAccounts' });
           
-          const provider = new ethers.providers.Web3Provider(window.ethereum);
-          setProvider(provider);
-          const signer = provider.getSigner();
+          const providerInstance = new ethers.providers.Web3Provider(window.ethereum);
+          setProvider(providerInstance);
+          const signer = providerInstance.getSigner();
           
-          // Initialize AA client
           const aaClient = await Client.init(NERO_RPC_URL, {
             overrideBundlerRpc: BUNDLER_URL,
             entryPoint: ENTRYPOINT_ADDRESS,
@@ -660,7 +675,7 @@ const useUserOp = () => {
           const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
           setAaWalletAddress(normalizedAAAddress);
           
-          const code = await provider.getCode(normalizedAAAddress);
+          const code = await providerInstance.getCode(normalizedAAAddress);
           const deployed = code !== '0x';
           setIsDeployed(deployed);
           
@@ -673,7 +688,12 @@ const useUserOp = () => {
           setIsLoading(false);
           console.log('SDK initialized successfully');
           isInitializing = false;
-          return { success: true, client: aaClient, builder: aaBuilder };
+          
+          return { 
+            success: true, 
+            client: aaClient, 
+            builder: aaBuilder 
+          };
         } catch (err) {
           console.error('Error initializing AA SDK:', err);
           setError(`Failed to initialize AA SDK: ${err.message}`);
@@ -695,21 +715,6 @@ const useUserOp = () => {
       return { success: false, error: err.message };
     }
   }, [isConnected, isInitialized, client, builder, checkAAWalletPrefunding]);
-
-  // Initialize SDK once when wallet is connected
-  useEffect(() => {
-    if (isConnected && !isInitialized && !isInitializing) {
-      console.log('Initializing AA SDK...');
-      initSDK().catch(console.error);
-    }
-  }, [isConnected, initSDK, isInitialized]);
-
-  // Check prefunding status when wallet address changes
-  useEffect(() => {
-    if (aaWalletAddress && !isDeployed) {
-      checkAAWalletPrefunding().catch(console.error);
-    }
-  }, [aaWalletAddress, isDeployed]);
 
   return {
     client,
