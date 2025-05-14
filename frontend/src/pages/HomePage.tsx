@@ -63,11 +63,7 @@ const HomePage = () => {
   const [error, setError] = useState(null);
   const [deploymentSuccess, setDeploymentSuccess] = useState(false);
   
-  // New state for deployment prompts
-  const [showDeploymentPrompt, setShowDeploymentPrompt] = useState(false);
-  const [showFundingPrompt, setShowFundingPrompt] = useState(false);
-  const [fundingAmount, setFundingAmount] = useState('0.05');
-  
+ 
   // Log component mount and lottery state
   useEffect(() => {
     console.log('HomePage mounted, lottery state:');
@@ -110,49 +106,11 @@ const HomePage = () => {
     setSelectedLottery(lottery);
   };
   
-  /**
-   * Open ticket purchase modal with wallet deployment check
-   */
   const handleOpenTicketModal = () => {
-    // If wallet not deployed, show deployment prompt
-    if (!isDeployed) {
-      setShowDeploymentPrompt(true);
-      return;
-    }
-    
-    // Otherwise show ticket modal directly
     setIsTicketModalOpen(true);
   };
   
-  /**
-   * Handle the wallet deployment choice
-   */
-  const handleDeploymentChoice = async (deploy) => {
-    setShowDeploymentPrompt(false);
     
-    if (deploy) {
-      try {
-        await deployOrWarn(true);
-        setDeploymentSuccess(true);
-        
-        // Open ticket modal after successful deployment
-        setTimeout(() => {
-          setIsTicketModalOpen(true);
-        }, 500);
-      } catch (err) {
-        if (err.message?.includes('AA21') || err.message?.includes('funds')) {
-          // Show funding prompt if needed
-          setShowFundingPrompt(true);
-        } else {
-          setError(err.message || 'Failed to deploy wallet');
-        }
-      }
-    } else {
-      // Just close the modal if user declines
-      setShowDeploymentPrompt(false);
-    }
-  };
-  
   /**
    * Handle funding the wallet
    */
@@ -181,18 +139,9 @@ const HomePage = () => {
     setTicketQuantity(1);
   };
   
-  /**
-   * Open session key modal with wallet deployment check
-   */
   const handleOpenSessionKeyModal = async () => {
-    // If wallet not deployed, show deployment prompt
-    if (!isDeployed) {
-      setShowDeploymentPrompt(true);
-      return;
-    }
-    
-    // Otherwise show session key modal directly
     setIsSessionKeyModalOpen(true);
+    setError(null);
   };
   
   /**
@@ -265,67 +214,6 @@ const HomePage = () => {
     }
   };
   
-  // Deployment prompt component
-  const DeploymentPrompt = () => (
-    <div className="modal-overlay">
-      <div className="deployment-prompt modal-content">
-        <h3>Smart Contract Wallet Setup</h3>
-        <p>Your smart wallet has not been deployed yet. Would you like to deploy it now?</p>
-        <p className="info-text">This is a one-time setup that will enhance your experience.</p>
-        
-        <div className="prompt-actions">
-          <button 
-            className="secondary-button"
-            onClick={() => handleDeploymentChoice(false)}
-          >
-            Cancel
-          </button>
-          <button 
-            className="primary-button"
-            onClick={() => handleDeploymentChoice(true)}
-          >
-            Yes, Deploy Now
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-  
-  // Funding prompt component
-  const FundingPrompt = () => (
-    <div className="modal-overlay">
-      <div className="funding-prompt modal-content">
-        <h3>Wallet Funding Required</h3>
-        <p>Your wallet needs to be prefunded with NERO tokens to deploy successfully.</p>
-        
-        <div className="funding-input">
-          <label>NERO Amount:</label>
-          <input 
-            type="text" 
-            value={fundingAmount} 
-            onChange={(e) => setFundingAmount(e.target.value)}
-            placeholder="0.05"
-          />
-        </div>
-        
-        <div className="prompt-actions">
-          <button 
-            className="secondary-button"
-            onClick={() => setShowFundingPrompt(false)}
-          >
-            Cancel
-          </button>
-          <button 
-            className="primary-button"
-            onClick={handleFundWallet}
-          >
-            Fund Wallet
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
   // Display error state
   if (error) {
     return (
@@ -393,10 +281,7 @@ const HomePage = () => {
   
   // Regular display with active lotteries
   return (
-    <div className="home-page">
-      {/* Display AA wallet status banner if not deployed */}
-      {!isDeployed && <AAWalletStatus minimal className="wallet-status-banner" />}
-      
+    <div className="home-page">    
       {/* Show success message after deployment */}
       {deploymentSuccess && (
         <div className="deployment-success">

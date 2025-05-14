@@ -6,8 +6,6 @@ import useWagmiWallet from '../hooks/useWagmiWallet';
 import useUserOp from '../hooks/useUserOp';
 import useLotteries from '../hooks/useLotteries';
 import useSessionKeys from '../hooks/useSessionKeys';
-import AAWalletStatus from '../components/AAWalletStatus';
-import { ENTRYPOINT_ADDRESS, TOKEN_PAYMASTER_ADDRESS } from '../constants/config';
 
 /**
  * Payment processing page
@@ -115,35 +113,13 @@ const PaymentPage = () => {
       setErrorMessage('Wallet not connected or missing required information');
       return;
     }
-    
-    // Check if wallet is deployed
-    if (!isDeployed) {
-      if (window.confirm('Smart contract wallet not deployed. Deploy it now?')) {
-        try {
-          await deployOrWarn();
-          setDeploymentSuccess(true);
-        } catch (err) {
-          if (err.message?.includes('AA21') || err.message?.includes('funds')) {
-            setErrorMessage('Not enough NERO balance to deploy. Please add funds first.');
-          } else {
-            setErrorMessage(err.message || 'Failed to deploy wallet');
-          }
-          return;
-        }
-      } else {
-        setErrorMessage('Smart contract wallet needs to be deployed for successful transactions');
-        return;
-      }
-    }
-    
+      
     setTransactionStatus('processing');
     updateProcessingStep('preparing', 'complete');
     updateProcessingStep('submitting', 'pending');
-    
+      
     try {
       // Send the transaction using the user-selected payment type
-      // KEY FIX: Pass the payment type and token to executeTicketPurchase
-      // This will be used by setPaymasterOptions inside the function
       const txHash = await executeTicketPurchase({
         lotteryId: lottery.id,
         tokenAddress: token.address,
@@ -153,14 +129,12 @@ const PaymentPage = () => {
         useSessionKey: hasActiveSessionKey
       });
       
+      // Update UI state
       updateProcessingStep('submitting', 'complete');
       updateProcessingStep('confirming', 'pending');
-      
       await new Promise(resolve => setTimeout(resolve, 3000));
-      
       updateProcessingStep('confirming', 'complete');
       updateProcessingStep('finalizing', 'pending');
-      
       await new Promise(resolve => setTimeout(resolve, 1000));
       updateProcessingStep('finalizing', 'complete');
       
@@ -174,19 +148,7 @@ const PaymentPage = () => {
         updateProcessingStep(currentStep.id, 'error');
       }
       
-      let errorMsg = err.message || 'Transaction failed';
-      
-      if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
-        errorMsg = 'The selected token is not supported. Please try a different token.';
-      } else if (errorMsg.includes('insufficient allowance')) {
-        errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
-      } else if (errorMsg.includes('insufficient balance')) {
-        errorMsg = 'Insufficient token balance for gas payment.';
-      } else if (errorMsg.includes('wallet') || errorMsg.includes('deploy')) {
-        errorMsg = 'Smart contract wallet not deployed. Please deploy your wallet first.';
-      }
-      
-      setErrorMessage(errorMsg);
+      setErrorMessage(err.message || 'Transaction failed');
       setTransactionStatus('error');
     }
   };
@@ -387,10 +349,7 @@ const PaymentPage = () => {
         )}
         
         {/* Show wallet status if not deployed */}
-        {!isDeployed && (
-          <AAWalletStatus minimal className="wallet-status-banner" />
-        )}
-        
+       
         <div className="payment-card">
           <h2>Confirm Ticket Purchase</h2>
           
@@ -486,24 +445,13 @@ const PaymentPage = () => {
             >
               Cancel
             </button>
-            
-            {!isDeployed ? (
-              <button 
-                className="deploy-button"
-                onClick={handleDeployWallet}
-                disabled={purchaseLoading}
-              >
-                Deploy Wallet First
-              </button>
-            ) : (
-              <button 
-                className="confirm-button"
-                onClick={handleSubmitTransaction}
-                disabled={purchaseLoading}
-              >
-                {purchaseLoading ? 'Processing...' : 'Confirm Purchase'}
-              </button>
-            )}
+            <button 
+              className="confirm-button"
+              onClick={handleSubmitTransaction}
+              disabled={purchaseLoading}
+            >
+              {purchaseLoading ? 'Processing...' : 'Confirm Purchase'}
+            </button>
           </div>
           
           {errorMessage && (

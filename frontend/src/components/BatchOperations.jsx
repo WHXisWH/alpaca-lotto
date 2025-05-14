@@ -4,7 +4,6 @@ import useUserOp from '../hooks/useUserOp';
 import useTokens from '../hooks/useTokens';
 import useWagmiWallet from '../hooks/useWagmiWallet';
 import useSessionKeys from '../hooks/useSessionKeys';
-import AAWalletStatus from './AAWalletStatus';
 
 /**
  * BatchOperations Component
@@ -178,77 +177,42 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
       setError('Wallet not connected');
       return;
     }
-    
+      
     if (selections.length === 0) {
       setError('No selections made');
       return;
     }
-    
+      
     if ((paymentType === 1 || paymentType === 2) && !selectedToken) {
       setError('Please select a token for gas payment');
       return;
     }
-    
-    // Check if wallet is deployed
-    if (!isDeployed) {
-      if (window.confirm('Smart contract wallet not deployed. Deploy it now?')) {
-        try {
-          await deployOrWarn();
-          setDeploymentSuccess(true);
-          
-          // Open ticket modal after successful deployment
-          setTimeout(() => {
-            setIsTicketModalOpen(true);
-          }, 500);
-        } catch (err) {
-          if (err.message?.includes('AA21') || err.message?.includes('funds')) {
-            setError('Not enough NERO balance to deploy wallet');
-            return;
-          } else {
-            setError(err.message || 'Failed to deploy wallet');
-            return;
-          }
-        }
-      } else {
-        return;
-      }
-    }
-    
+      
     setIsProcessing(true);
     setError(null);
-    
+      
     try {
-      // KEY FIX: Use executeBatchPurchase with proper paymentType and paymentToken
-      // The SDK's setPaymasterOptions will be called internally
+      // Use executeBatchPurchase with proper paymentType and paymentToken
       const txHash = await executeBatchPurchase({
         selections,
         paymentType,  // User-selected payment type
         paymentToken: selectedToken?.address, // Token for gas payment (if needed)
         useSessionKey: hasActiveSessionKey
       });
-      
+        
       setTxHash(txHash);
       setError(null);
       setSelections([]);
-      
+        
       if (onBatchComplete) {
         onBatchComplete(txHash);
       }
-      
+        
       setIsProcessing(false);
     } catch (err) {
       console.error('Batch operation error:', err);
-      
+        
       let errorMsg = err.message || 'Error executing batch operation';
-      
-      if (errorMsg.includes('token not supported') || errorMsg.includes('price error')) {
-        errorMsg = 'The selected token is not supported. Please try a different token.';
-      } else if (errorMsg.includes('insufficient allowance')) {
-        errorMsg = 'Insufficient token allowance for gas payment. Please approve the token first.';
-      } else if (errorMsg.includes('insufficient balance')) {
-        errorMsg = 'Insufficient token balance for gas payment.';
-      }
-      
       setError(errorMsg);
       setIsProcessing(false);
     }
@@ -450,38 +414,12 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   const renderExecuteButton = () => {
     return (
       <div className="execute-section">
-        {/* Show deployment success message if needed */}
-        {deploymentSuccess && (
-          <div className="deployment-success">
-            <div className="success-icon">✓</div>
-            <div className="success-message">
-              Smart contract wallet deployed successfully!
-            </div>
-          </div>
-        )}
-        
-        {/* Show wallet deployment button if needed */}
-        {!isDeployed && (
-          <div className="wallet-deployment-prompt">
-            <div className="prompt-message">
-              Smart contract wallet needs to be deployed first.
-            </div>
-            <button 
-              className="deploy-button"
-              onClick={handleDeployWallet}
-              disabled={isProcessing || userOpLoading}
-            >
-              {userOpLoading ? 'Deploying...' : 'Deploy Wallet'}
-            </button>
-          </div>
-        )}
-        
         {error && (
           <div className="error-message">
             {error}
           </div>
         )}
-        
+          
         <button 
           className="execute-button"
           onClick={handleExecuteBatch}
@@ -489,7 +427,7 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
         >
           {isProcessing ? 'Processing...' : `Execute Batch (${selections.length} operations)`}
         </button>
-        
+          
         <div className="batch-note">
           <div className="note-icon">ℹ️</div>
           <div className="note-text">
@@ -510,10 +448,6 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
         </div>
       </div>
       
-      {/* Show wallet status if not deployed */}
-      {!isDeployed && (
-        <AAWalletStatus minimal className="wallet-status-banner" />
-      )}
       
       <div className="batch-content">
         <div className="batch-column">

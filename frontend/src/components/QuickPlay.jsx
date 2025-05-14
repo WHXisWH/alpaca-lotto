@@ -4,7 +4,6 @@ import useSessionKeys from '../hooks/useSessionKeys';
 import useUserOp from '../hooks/useUserOp';
 import useTokens from '../hooks/useTokens';
 import useWagmiWallet from '../hooks/useWagmiWallet';
-import AAWalletStatus from './AAWalletStatus';
 
 /**
  * QuickPlay Component
@@ -154,26 +153,15 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
       setError('Missing lottery or token information');
       return;
     }
-    
+      
     if (!hasActiveSessionKey && !isDevelopmentMode) {
       setError('No active session key. Please enable Quick Play first.');
       return;
     }
-    
-    // Make sure wallet is deployed first
-    if (!isDeployed) {
-      try {
-        await deployOrWarn();
-        setDeploymentSuccess(true);
-      } catch (err) {
-        setError(err.message || 'Failed to deploy wallet');
-        return;
-      }
-    }
-    
+      
     setIsPurchasing(true);
     setError(null);
-    
+      
     try {
       // Execute ticket purchase with session key using proper payment parameters
       const txHash = await executeTicketPurchase({
@@ -184,7 +172,7 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
         paymentToken: selectedToken.address,
         useSessionKey: hasActiveSessionKey
       });
-      
+        
       // Add to purchase history
       setPurchaseHistory([
         ...purchaseHistory,
@@ -196,30 +184,20 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
           txHash
         }
       ]);
-      
+        
       // Reset quantity
       setPurchaseQuantity(1);
-      
+        
       // Callback if provided
       if (onPurchaseComplete) {
         onPurchaseComplete(txHash);
       }
-      
-      // Success notification
-      console.log('Ticket purchase successful:', txHash);
     } catch (err) {
       console.error('Ticket purchase error:', err);
       setError(err.message || 'Error purchasing tickets');
     } finally {
       setIsPurchasing(false);
     }
-  };
-  
-  // Handle token selection
-  const handleTokenChange = (event) => {
-    const tokenAddress = event.target.value;
-    const token = tokens.find(t => t.address === tokenAddress);
-    setSelectedToken(token);
   };
   
   // Handle quantity change
@@ -430,11 +408,7 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
         )}
       </div>
       
-      {/* Show wallet status if not deployed */}
-      {!isDeployed && (
-        <AAWalletStatus minimal className="wallet-status-banner" />
-      )}
-      
+     
       {/* Show deployment success message if needed */}
       {deploymentSuccess && (
         <div className="deployment-success">

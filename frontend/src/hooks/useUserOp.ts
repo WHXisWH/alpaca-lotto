@@ -729,11 +729,7 @@ const useUserOp = () => {
     initSDK,
     executeTicketPurchase,
     executeBatchPurchase,
-    deployAAWallet,
-    prefundAAWallet,
     checkAAWalletPrefunding,
-    checkTokenApproval,
-    deployOrWarn,
     ensureSDKInitialized
   };
 };
