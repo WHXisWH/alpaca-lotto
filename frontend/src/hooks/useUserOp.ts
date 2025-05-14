@@ -485,6 +485,9 @@ const useUserOp = () => {
     setError(null);
     
     try {
+
+      const tokenToUse = paymentToken || tokenAddress;
+
       if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
         throw new Error('Payment token is required for token-based gas payment');
       }
@@ -529,7 +532,7 @@ const useUserOp = () => {
       // Use builder's setPaymasterOptions to configure gas payment
       builder.setPaymasterOptions({
         type: paymentType,
-        token: paymentType !== 0 ? paymentToken : undefined,
+        token: tokenToUse,
         apikey: PAYMASTER_API_KEY,
         rpc: PAYMASTER_URL
       });
@@ -593,8 +596,10 @@ const useUserOp = () => {
     setError(null);
     
     try {
+
+      const tokenToUse = paymentToken || (selections.length > 0 ? selections[0].tokenAddress : null);
       // Validate token address for Types 1 & 2
-      if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
+      if (!tokenToUse) {
         throw new Error('Payment token is required for token-based gas payment');
       }
       
@@ -650,7 +655,7 @@ const useUserOp = () => {
       // Set the paymaster options directly with the SDK
       builder.setPaymasterOptions({
         type: paymentType,
-        token: paymentType !== 0 ? paymentToken : undefined, 
+        token: tokenToUse,
         apikey: PAYMASTER_API_KEY,
         rpc: PAYMASTER_URL
       });

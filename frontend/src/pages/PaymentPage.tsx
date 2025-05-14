@@ -148,8 +148,8 @@ const PaymentPage = () => {
         lotteryId: lottery.id,
         tokenAddress: token.address,
         quantity,
-        paymentType, // User selected payment type
-        paymentToken: paymentToken?.address || token.address, // Selected payment token
+        paymentType,
+        paymentToken: token.address,
         useSessionKey: hasActiveSessionKey
       });
       
