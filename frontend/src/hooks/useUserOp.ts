@@ -159,6 +159,116 @@ const useUserOp = () => {
       return { success: false, error: err.message || 'Unknown initialization error' };
     }
   };
+  
+  const initSDK = useCallback(async () => {
+    if (isInitializing) {
+      console.log('SDK initialization already in progress, waiting...');
+      return new Promise(resolve => {
+        const checkInterval = setInterval(() => {
+          if (!isInitializing) {
+            clearInterval(checkInterval);
+            if (isInitialized && client && builder) {
+              resolve({ 
+                success: true, 
+                client, 
+                builder 
+              });
+            } else {
+              resolve({ 
+                success: false, 
+                error: 'Initialization completed but SDK not ready' 
+              });
+            }
+          }
+        }, 100);
+      });
+    }
+    
+    if (isInitialized && client && builder) {
+      return { success: true, client, builder };
+    }
+    
+    isInitializing = true; 
+    
+    if (!isConnected) {
+      setError('Wallet not connected');
+      isInitializing = false;
+      return { success: false, error: 'Wallet not connected' };
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      if (typeof window !== 'undefined' && window.ethereum) {
+        try {
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          
+          const providerInstance = new ethers.providers.Web3Provider(window.ethereum);
+          setProvider(providerInstance);
+          const signer = providerInstance.getSigner();
+          
+          const aaClient = await Client.init(NERO_RPC_URL, {
+            overrideBundlerRpc: BUNDLER_URL,
+            entryPoint: ENTRYPOINT_ADDRESS,
+          });
+          setClient(aaClient);
+          
+          const aaBuilder = await Presets.Builder.SimpleAccount.init(
+            signer,
+            NERO_RPC_URL,
+            {
+              overrideBundlerRpc: BUNDLER_URL,
+              entryPoint: ENTRYPOINT_ADDRESS,
+              factory: ACCOUNT_FACTORY_ADDRESS,
+            }
+          );
+          setBuilder(aaBuilder);
+          
+          const aaAddress = await aaBuilder.getSender();
+          const normalizedAAAddress = ethers.utils.getAddress(aaAddress);
+          setAaWalletAddress(normalizedAAAddress);
+          
+          const code = await providerInstance.getCode(normalizedAAAddress);
+          const deployed = code !== '0x';
+          setIsDeployed(deployed);
+          
+          if (code === '0x') {
+            const isPrefunded = await checkAAWalletPrefunding();
+            setNeedsNeroTokens(!isPrefunded);
+          }
+          
+          setIsInitialized(true);
+          setIsLoading(false);
+          console.log('SDK initialized successfully');
+          isInitializing = false;
+          
+          return { 
+            success: true, 
+            client: aaClient, 
+            builder: aaBuilder 
+          };
+        } catch (err) {
+          console.error('Error initializing AA SDK:', err);
+          setError(`Failed to initialize AA SDK: ${err.message}`);
+          setIsLoading(false);
+          isInitializing = false;
+          return { success: false, error: err.message };
+        }
+      } else {
+        setError('Ethereum provider not available');
+        setIsLoading(false);
+        isInitializing = false;
+        return { success: false, error: 'Ethereum provider not available' };
+      }
+    } catch (err) {
+      console.error('Error in AA SDK initialization:', err);
+      setError(`AA SDK initialization error: ${err.message}`);
+      setIsLoading(false);
+      isInitializing = false;
+      return { success: false, error: err.message };
+    }
+  }, [isConnected, isInitialized, client, builder, checkAAWalletPrefunding]);
 
   /**
    * Deploy AA wallet with integrated verification
@@ -232,66 +342,7 @@ const useUserOp = () => {
     }
   };
   
-  /**
-   * Ensure token approval for Paymaster with direct EOA approach
-   */
-  const ensurePaymasterApproval = async (tokenAddress, builder) => {
-    if (!tokenAddress) return true;
-    
-    try {
-      // Normalize addresses
-      const normalizedTokenAddress = ethers.utils.getAddress(tokenAddress);
-      const normalizedPaymasterAddress = ethers.utils.getAddress(TOKEN_PAYMASTER_ADDRESS);
-      
-      // Create provider and token contract - use direct EOA approach
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-      const eoaAddress = await signer.getAddress();
-      
-      const tokenContract = new ethers.Contract(
-        normalizedTokenAddress,
-        ['function allowance(address owner, address spender) view returns (uint256)',
-         'function approve(address spender, uint256 amount) returns (bool)'],
-        signer
-      );
-      
-      // Check current allowance
-      console.log(`Checking allowance for token ${normalizedTokenAddress} to paymaster ${normalizedPaymasterAddress}`);
-      const allowance = await tokenContract.allowance(eoaAddress, normalizedPaymasterAddress);
-      
-      // If allowance is sufficient, no need to approve
-      if (allowance.gte(ethers.constants.MaxUint256.div(2))) {
-        console.log('Token already approved for Paymaster');
-        return true;
-      }
-      
-      console.log('Insufficient allowance, approving token for Paymaster with direct EOA transaction...');
-      
-      // Direct EOA transaction to approve token
-      const tx = await tokenContract.approve(normalizedPaymasterAddress, ethers.constants.MaxUint256);
-      console.log('Approval transaction sent:', tx.hash);
-      
-      // Wait for transaction confirmation
-      const receipt = await tx.wait();
-      console.log('Approval transaction complete:', receipt);
-      
-      // Verify approval was successful
-      const newAllowance = await tokenContract.allowance(eoaAddress, normalizedPaymasterAddress);
-      return newAllowance.gt(allowance);
-    } catch (error) {
-      console.error('Error ensuring token approval for Paymaster:', error);
-      
-      // Check if user rejected the transaction
-      if (error.message?.includes('User denied') || 
-          error.message?.includes('user rejected') ||
-          error.message?.includes('rejected the request')) {
-        throw new Error('You canceled the approval transaction.');
-      }
-      
-      throw new Error('Failed to approve token for gas payment. Please try again or choose a different token.');
-    }
-  };
-
+  
   /**
    * Main deployment function with verification
    * This serves as the single entry point for deployment checks
@@ -375,9 +426,7 @@ const useUserOp = () => {
     }
   };
 
-  /**
-   * Execute a ticket purchase operation with proper wallet verification
-   */
+
   const executeTicketPurchase = useCallback(async ({
     lotteryId,
     tokenAddress,
@@ -392,7 +441,7 @@ const useUserOp = () => {
     
     try {
       const tokenToUse = paymentToken || tokenAddress;
-
+  
       if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
         throw new Error('Payment token is required for token-based gas payment');
       }
@@ -409,14 +458,6 @@ const useUserOp = () => {
       // Make sure the wallet is deployed if not skipping check
       if (!skipDeploymentCheck && !isDeployed) {
         await deployOrWarn();
-        
-        // Double-check deployment was successful
-        if (!isDeployed && provider) {
-          const code = await provider.getCode(aaWalletAddress);
-          if (code === '0x') {
-            throw new Error('Wallet deployment failed. Please try again.');
-          }
-        }
       }
       
       const contractInterface = new ethers.utils.Interface([
@@ -447,20 +488,6 @@ const useUserOp = () => {
       const receipt = await result.wait();
       setTxHash(receipt.transactionHash);
       
-      // Refresh data if needed
-      try {
-        const apiModule = await import('../services/api');
-        const api = apiModule.default || apiModule.api;
-        if (api && lotteryId) {
-          await api.getLotteryDetails(lotteryId);
-          if (address) {
-            await api.getUserTickets(lotteryId, address);
-          }
-        }
-      } catch (refreshErr) {
-        console.warn('Error refreshing data after purchase:', refreshErr);
-      }
-      
       setIsLoading(false);
       return receipt.transactionHash;
     } catch (err) {
@@ -486,7 +513,6 @@ const useUserOp = () => {
       throw new Error(errorMsg);
     }
   }, [client, builder, ensureSDKInitialized, address, isDeployed, deployOrWarn, provider, aaWalletAddress]);
-
   /**
    * Execute a batch ticket purchase operation with proper wallet verification
    */
@@ -520,14 +546,6 @@ const useUserOp = () => {
       // Make sure wallet is deployed if not skipping check
       if (!skipDeploymentCheck && !isDeployed) {
         await deployOrWarn();
-        
-        // Double-check deployment was successful
-        if (!isDeployed && provider) {
-          const code = await provider.getCode(aaWalletAddress);
-          if (code === '0x') {
-            throw new Error('Wallet deployment failed. Please try again.');
-          }
-        }
       }
       
       // Create contract interface
@@ -548,11 +566,6 @@ const useUserOp = () => {
       
       // Reset the builder operation
       builder.resetOp && builder.resetOp();
-      
-      // Ensure token is approved for Paymaster using direct EOA approach
-      if (paymentType !== 0 && paymentToken) {
-        await ensurePaymasterApproval(paymentToken, builder);
-      }
       
       // Configure the execution
       builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
@@ -601,8 +614,7 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, ensureSDKInitialized, ensurePaymasterApproval, isDeployed, deployOrWarn, provider, aaWalletAddress]);
-
+  }, [client, builder, ensureSDKInitialized, isDeployed, deployOrWarn, provider, aaWalletAddress]);
   /**
    * Initialize the Account Abstraction SDK
    */
