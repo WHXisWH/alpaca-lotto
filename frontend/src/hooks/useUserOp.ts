@@ -208,12 +208,17 @@ const useUserOp = () => {
           setProvider(providerInstance);
           const signer = providerInstance.getSigner();
           
+          // Initialize AA Client - MODIFIED: Store in window global
           const aaClient = await Client.init(NERO_RPC_URL, {
             overrideBundlerRpc: BUNDLER_URL,
             entryPoint: ENTRYPOINT_ADDRESS,
           });
+          
+          // Store in global window object for persistence
+          window.aaClient = aaClient;
           setClient(aaClient);
           
+          // Initialize SimpleAccount builder - MODIFIED: Store in window global
           const aaBuilder = await Presets.Builder.SimpleAccount.init(
             signer,
             NERO_RPC_URL,
@@ -223,6 +228,9 @@ const useUserOp = () => {
               factory: ACCOUNT_FACTORY_ADDRESS,
             }
           );
+          
+          // Store in global window object for persistence
+          window.aaBuilder = aaBuilder;
           setBuilder(aaBuilder);
           
           const aaAddress = await aaBuilder.getSender();
@@ -240,7 +248,6 @@ const useUserOp = () => {
           
           setIsInitialized(true);
           setIsLoading(false);
-          console.log('SDK initialized successfully');
           isInitializing = false;
           
           return { 
@@ -446,6 +453,15 @@ const useUserOp = () => {
         throw new Error('Payment token is required for token-based gas payment');
       }
       
+      // MODIFIED: Check global window objects for client and builder if not available
+      if (!client && window.aaClient) {
+        setClient(window.aaClient);
+      }
+      
+      if (!builder && window.aaBuilder) {
+        setBuilder(window.aaBuilder);
+      }
+      
       // Make sure SDK is initialized
       if (!client || !builder) {
         console.log('Initializing SDK for transaction...');
@@ -453,6 +469,11 @@ const useUserOp = () => {
         if (!initResult.success) {
           throw new Error(initResult.error || 'Failed to initialize SDK');
         }
+      }
+      
+      // ADDED: Final check that client and builder are available
+      if (!client || !builder) {
+        throw new Error('SDK components not available after initialization');
       }
       
       // Make sure the wallet is deployed if not skipping check
@@ -513,6 +534,7 @@ const useUserOp = () => {
       throw new Error(errorMsg);
     }
   }, [client, builder, ensureSDKInitialized, address, isDeployed, deployOrWarn, provider, aaWalletAddress]);
+
   /**
    * Execute a batch ticket purchase operation with proper wallet verification
    */
@@ -534,6 +556,15 @@ const useUserOp = () => {
         throw new Error('Payment token is required for token-based gas payment');
       }
       
+      // MODIFIED: Check global window objects for client and builder if not available
+      if (!client && window.aaClient) {
+        setClient(window.aaClient);
+      }
+      
+      if (!builder && window.aaBuilder) {
+        setBuilder(window.aaBuilder);
+      }
+      
       // Make sure SDK is initialized
       if (!client || !builder) {
         console.log('Initializing SDK for batch transaction...');
@@ -541,6 +572,11 @@ const useUserOp = () => {
         if (!initResult.success) {
           throw new Error(initResult.error || 'Failed to initialize SDK');
         }
+      }
+      
+      // ADDED: Final check that client and builder are available
+      if (!client || !builder) {
+        throw new Error('SDK components not available after initialization');
       }
       
       // Make sure wallet is deployed if not skipping check
@@ -615,7 +651,6 @@ const useUserOp = () => {
       throw new Error(errorMsg);
     }
   }, [client, builder, ensureSDKInitialized, isDeployed, deployOrWarn, provider, aaWalletAddress]);
-  
 
   return {
     client,
