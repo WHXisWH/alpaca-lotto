@@ -453,28 +453,15 @@ const useUserOp = () => {
         throw new Error('Payment token is required for token-based gas payment');
       }
       
-      // MODIFIED: Check global window objects for client and builder if not available
-      if (!client && window.aaClient) {
-        setClient(window.aaClient);
-      }
-      
-      if (!builder && window.aaBuilder) {
-        setBuilder(window.aaBuilder);
-      }
-      
       // Make sure SDK is initialized
-      if (!client || !builder) {
-        console.log('Initializing SDK for transaction...');
-        const initResult = await ensureSDKInitialized();
-        if (!initResult.success) {
-          throw new Error(initResult.error || 'Failed to initialize SDK');
-        }
+      console.log('Initializing SDK for transaction...');
+      const initResult = await ensureSDKInitialized();
+      if (!initResult.success) {
+        throw new Error(initResult.error || 'Failed to initialize SDK');
       }
       
-      // ADDED: Final check that client and builder are available
-      if (!client || !builder) {
-        throw new Error('SDK components not available after initialization');
-      }
+      // Use the client and builder from initialization result directly
+      const aaClient = initResult.client, aaBuilder = initResult.builder;
       
       // Make sure the wallet is deployed if not skipping check
       if (!skipDeploymentCheck && !isDeployed) {
@@ -491,13 +478,13 @@ const useUserOp = () => {
       );
       
       // Reset any previous operations
-      builder.resetOp && builder.resetOp();
+      aaBuilder.resetOp && aaBuilder.resetOp();
       
       // Configure the transaction
-      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
+      aaBuilder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
       // Use builder's setPaymasterOptions to configure gas payment
-      builder.setPaymasterOptions({
+      aaBuilder.setPaymasterOptions({
         type: paymentType,
         token: tokenToUse,
         apikey: PAYMASTER_API_KEY,
@@ -505,7 +492,7 @@ const useUserOp = () => {
       });
       
       // Send the UserOperation
-      const result = await client.sendUserOperation(builder);
+      const result = await aaClient.sendUserOperation(aaBuilder);
       const receipt = await result.wait();
       setTxHash(receipt.transactionHash);
       
@@ -533,7 +520,7 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, ensureSDKInitialized, address, isDeployed, deployOrWarn, provider, aaWalletAddress]);
+  }, [ensureSDKInitialized, isDeployed, deployOrWarn]);
 
   /**
    * Execute a batch ticket purchase operation with proper wallet verification
@@ -556,28 +543,15 @@ const useUserOp = () => {
         throw new Error('Payment token is required for token-based gas payment');
       }
       
-      // MODIFIED: Check global window objects for client and builder if not available
-      if (!client && window.aaClient) {
-        setClient(window.aaClient);
-      }
-      
-      if (!builder && window.aaBuilder) {
-        setBuilder(window.aaBuilder);
-      }
-      
       // Make sure SDK is initialized
-      if (!client || !builder) {
-        console.log('Initializing SDK for batch transaction...');
-        const initResult = await ensureSDKInitialized();
-        if (!initResult.success) {
-          throw new Error(initResult.error || 'Failed to initialize SDK');
-        }
+      console.log('Initializing SDK for batch transaction...');
+      const initResult = await ensureSDKInitialized();
+      if (!initResult.success) {
+        throw new Error(initResult.error || 'Failed to initialize SDK');
       }
       
-      // ADDED: Final check that client and builder are available
-      if (!client || !builder) {
-        throw new Error('SDK components not available after initialization');
-      }
+      // Use the client and builder from initialization result directly
+      const aaClient = initResult.client, aaBuilder = initResult.builder;
       
       // Make sure wallet is deployed if not skipping check
       if (!skipDeploymentCheck && !isDeployed) {
@@ -601,13 +575,13 @@ const useUserOp = () => {
       );
       
       // Reset the builder operation
-      builder.resetOp && builder.resetOp();
+      aaBuilder.resetOp && aaBuilder.resetOp();
       
       // Configure the execution
-      builder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
+      aaBuilder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
       // Set the paymaster options directly with the SDK
-      builder.setPaymasterOptions({
+      aaBuilder.setPaymasterOptions({
         type: paymentType,
         token: tokenToUse,
         apikey: PAYMASTER_API_KEY,
@@ -615,7 +589,7 @@ const useUserOp = () => {
       });
       
       // Send the UserOperation
-      const result = await client.sendUserOperation(builder);
+      const result = await aaClient.sendUserOperation(aaBuilder);
       console.log('Batch UserOperation result:', result);
       
       // Wait for transaction confirmation
@@ -650,7 +624,7 @@ const useUserOp = () => {
       setIsLoading(false);
       throw new Error(errorMsg);
     }
-  }, [client, builder, ensureSDKInitialized, isDeployed, deployOrWarn, provider, aaWalletAddress]);
+  }, [ensureSDKInitialized, isDeployed, deployOrWarn]);
 
   return {
     client,
@@ -666,7 +640,9 @@ const useUserOp = () => {
     executeTicketPurchase,
     executeBatchPurchase,
     checkAAWalletPrefunding,
-    ensureSDKInitialized
+    ensureSDKInitialized,
+    deployOrWarn,
+    checkTokenApproval
   };
 };
 

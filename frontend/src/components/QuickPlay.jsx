@@ -153,17 +153,17 @@ const QuickPlay = ({ lottery, onPurchaseComplete }) => {
       setError('Missing lottery or token information');
       return;
     }
-      
+        
     if (!hasActiveSessionKey && !isDevelopmentMode) {
       setError('No active session key. Please enable Quick Play first.');
       return;
     }
-      
+        
     setIsPurchasing(true);
     setError(null);
-      
+        
     try {
-      // Execute ticket purchase with session key using proper payment parameters
+      // 直接使用executeTicketPurchase并等待结果
       const txHash = await executeTicketPurchase({
         lotteryId: lottery.id,
         tokenAddress: selectedToken.address,

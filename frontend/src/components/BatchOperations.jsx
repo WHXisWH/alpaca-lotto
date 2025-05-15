@@ -172,51 +172,50 @@ const BatchOperations = ({ lotteries = [], onBatchComplete }) => {
   };
   
   // Execute batch operation with deployment check
-  const handleExecuteBatch = async () => {
-    if (!isConnected) {
-      setError('Wallet not connected');
-      return;
-    }
+const handleExecuteBatch = async () => {
+  if (!isConnected) {
+    setError('Wallet not connected');
+    return;
+  }
       
-    if (selections.length === 0) {
-      setError('No selections made');
-      return;
-    }
+  if (selections.length === 0) {
+    setError('No selections made');
+    return;
+  }
       
-    if ((paymentType === 1 || paymentType === 2) && !selectedToken) {
-      setError('Please select a token for gas payment');
-      return;
-    }
+  if ((paymentType === 1 || paymentType === 2) && !selectedToken) {
+    setError('Please select a token for gas payment');
+    return;
+  }
       
-    setIsProcessing(true);
+  setIsProcessing(true);
+  setError(null);
+      
+  try {
+    const txHash = await executeBatchPurchase({
+      selections,
+      paymentType,
+      paymentToken: selectedToken?.address,
+      useSessionKey: hasActiveSessionKey
+    });
+      
+    setTxHash(txHash);
     setError(null);
+    setSelections([]);
       
-    try {
-      // Use executeBatchPurchase with proper paymentType and paymentToken
-      const txHash = await executeBatchPurchase({
-        selections,
-        paymentType,  // User-selected payment type
-        paymentToken: selectedToken?.address, // Token for gas payment (if needed)
-        useSessionKey: hasActiveSessionKey
-      });
-        
-      setTxHash(txHash);
-      setError(null);
-      setSelections([]);
-        
-      if (onBatchComplete) {
-        onBatchComplete(txHash);
-      }
-        
-      setIsProcessing(false);
-    } catch (err) {
-      console.error('Batch operation error:', err);
-        
-      let errorMsg = err.message || 'Error executing batch operation';
-      setError(errorMsg);
-      setIsProcessing(false);
+    if (onBatchComplete) {
+      onBatchComplete(txHash);
     }
-  };
+      
+    setIsProcessing(false);
+  } catch (err) {
+    console.error('Batch operation error:', err);
+      
+    let errorMsg = err.message || 'Error executing batch operation';
+    setError(errorMsg);
+    setIsProcessing(false);
+  }
+};
 
   // Batch summary component
   const renderBatchSummary = () => {
