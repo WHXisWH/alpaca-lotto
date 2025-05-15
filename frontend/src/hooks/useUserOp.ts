@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
 import { Client, Presets } from 'userop';
@@ -34,6 +34,8 @@ const useUserOp = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [provider, setProvider] = useState(null);
 
+const clientRef = useRef(null);
+const builderRef = useRef(null);
   /**
    * Check if the AA wallet has enough prefunding in the EntryPoint contract
    */
@@ -136,8 +138,8 @@ const useUserOp = () => {
         const checkInterval = setInterval(() => {
           if (!isInitializing) {
             clearInterval(checkInterval);
-            if (isInitialized && client && builder) {
-              resolve({ success: true, client, builder });
+            if (isInitialized && clientRef.current && builderRef.current) {
+              resolve({ success: true, client: clientRef.current, builder: builderRef.current });
             } else {
               resolve({ success: false, error: 'Initialization completed but SDK not ready' });
             }
@@ -148,6 +150,10 @@ const useUserOp = () => {
     
     try {
       const result = await initSDK();
+      if (result.success) {
+        clientRef.current = result.client;
+        builderRef.current = result.builder;
+      }
       return { 
         success: result.success, 
         client: result.success ? result.client : null,
@@ -377,23 +383,26 @@ const useUserOp = () => {
         }
       }
       
-      if (!client || !builder) {
+      if (!clientRef.current || !builderRef.current) {
         console.log("SDK not initialized, re-initializing...");
         const result = await ensureSDKInitialized();
         
         if (result.success && result.client && result.builder) {
-          if (!client) setClient(result.client);
-          if (!builder) setBuilder(result.builder);
+          const aaClient = result.client;
+          const aaBuilder = result.builder;
+          
+          setClient(aaClient);
+          setBuilder(aaBuilder);
+          
+          clientRef.current = aaClient;
+          builderRef.current = aaBuilder;
         } else {
           console.error("SDK initialization failed:", result.error);
           throw new Error('SDK failed to initialize before deployment');
         }
-        
-        if (!client || !builder) {
-          throw new Error('SDK client or builder still not available after initialization');
-        }
       }
-            await deployAAWallet();
+      
+      await deployAAWallet();
       return true;
     } catch (err) {
       console.error("❌ Deployment error:", err);

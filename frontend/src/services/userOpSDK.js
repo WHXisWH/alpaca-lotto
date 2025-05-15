@@ -14,6 +14,9 @@ const CONSTANTS = {
   TOKEN_PAYMASTER_ADDRESS: import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || '0x5a6680dFd4a77FEea0A7be291147768EaA2414ad',
 };
 
+// Global initialization flag to prevent concurrent initializations
+let isInitializing = false;
+
 /**
  * UserOpSDK - A service to handle Account Abstraction functionality
  * Based on NERO Chain's AA specifications
@@ -29,6 +32,30 @@ class UserOpSDK {
   }
 
   async init(signer) {
+    if (isInitializing) {
+      console.log('SDK initialization already in progress, waiting...');
+      return new Promise(resolve => {
+        const checkInterval = setInterval(() => {
+          if (!isInitializing) {
+            clearInterval(checkInterval);
+            resolve({ 
+              success: this.initialized, 
+              client: this.client, 
+              builder: this.builder,
+              error: this.initError
+            });
+          }
+        }, 100);
+      });
+    }
+    
+    if (this.initialized && this.client && this.builder) {
+      return { success: true, client: this.client, builder: this.builder };
+    }
+    
+    isInitializing = true;
+    this.initError = null;
+    
     try {
       console.log("Initializing UserOpSDK with parameters:", CONSTANTS);
       
@@ -50,6 +77,7 @@ class UserOpSDK {
         }
       }
       
+      // Initialize the AA Client
       try {
         // Initialize the AA Client with proper error handling
         if (typeof Client.init === 'function') {
@@ -64,12 +92,10 @@ class UserOpSDK {
         }
       } catch (clientErr) {
         console.error("Error initializing AA Client:", clientErr);
-        
-        // Fallback client implementation
-        this.client = this._createMockClient();
-        console.log("Using fallback client implementation");
+        this.initError = `AA Client initialization failed: ${clientErr.message}`;
+        throw clientErr;
       }
-
+  
       try {
         if (Presets && Presets.Builder && typeof Presets.Builder.SimpleAccount === 'object' && 
             typeof Presets.Builder.SimpleAccount.init === 'function') {
@@ -89,10 +115,8 @@ class UserOpSDK {
         }
       } catch (builderErr) {
         console.error("Error initializing SimpleAccount builder:", builderErr);
-        
-        // Fallback builder implementation
-        this.builder = this._createMockBuilder();
-        console.log("Using fallback builder implementation");
+        this.initError = `SimpleAccount builder initialization failed: ${builderErr.message}`;
+        throw builderErr;
       }
       
       try {
@@ -100,30 +124,33 @@ class UserOpSDK {
         console.log("AA wallet address retrieved:", this.aaWalletAddress);
       } catch (addressErr) {
         console.error("Error retrieving AA wallet address:", addressErr);
-        this.aaWalletAddress = this._createMockAddress();
-        console.log("Using fallback AA wallet address:", this.aaWalletAddress);
+        this.initError = `AA wallet address retrieval failed: ${addressErr.message}`;
+        throw addressErr; 
       }
       
       this.initialized = true;
+      console.log("UserOpSDK initialization complete");
+      
+      isInitializing = false;
       
       return {
+        success: true,
         client: this.client,
         builder: this.builder,
         aaWalletAddress: this.aaWalletAddress
       };
     } catch (error) {
       console.error('Error initializing UserOpSDK:', error);
+      this.initError = error.message || 'Unknown UserOpSDK initialization error';
       
-      // Final fallback - create mock implementations for everything
-      this.client = this._createMockClient();
-      this.builder = this._createMockBuilder();
-      this.aaWalletAddress = this._createMockAddress();
-      this.initialized = true;
+      isInitializing = false;
       
       return {
-        client: this.client,
-        builder: this.builder,
-        aaWalletAddress: this.aaWalletAddress
+        success: false,
+        client: null,
+        builder: null,
+        aaWalletAddress: null,
+        error: this.initError
       };
     }
   }

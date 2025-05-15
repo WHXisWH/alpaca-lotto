@@ -104,6 +104,41 @@ class PaymasterService {
     }
   }
   
+  async checkTokenDepositAndApproval(tokenAddress, walletAddress, amount = null) {
+    if (!this.provider) await this.init();
+    
+    try {
+      const normalizedTokenAddress = ethers.utils.getAddress(tokenAddress);
+      const normalizedWalletAddress = ethers.utils.getAddress(walletAddress);
+      const normalizedPaymasterAddress = ethers.utils.getAddress(this.tokenPaymasterAddress);
+      
+      // 1. Check approval
+      const tokenContract = new ethers.Contract(
+        normalizedTokenAddress,
+        ['function allowance(address owner, address spender) view returns (uint256)'],
+        this.provider
+      );
+      
+      const allowance = await tokenContract.allowance(
+        normalizedWalletAddress,
+        normalizedPaymasterAddress
+      );
+      
+      const requiredAmount = amount ? ethers.utils.parseUnits(amount, 18) : ethers.constants.MaxUint256.div(2);
+      
+      if (allowance.lt(requiredAmount)) {
+        console.log(`Token approval insufficient: ${allowance.toString()} < ${requiredAmount.toString()}`);
+        return false;
+      }
+      
+      // 2. For Type 1, we'd also check deposit to EntryPoint, but this is simplified for now
+      return true;
+    } catch (error) {
+      console.warn('Error checking token deposit and approval:', error.message);
+      return false;
+    }
+  }
+  
   /**
    * Get tokens supported by the Paymaster
    */
@@ -139,12 +174,15 @@ class PaymasterService {
         signature: "0x"
       };
       
+      console.log("Requesting supported tokens from Paymaster");
       // Call the pm_supported_tokens method
       const tokensResponse = await this.paymasterRpc.send("pm_supported_tokens", [
         minimalUserOp,
         this.apiKey,
         this.entryPoint
       ]);
+      
+      console.log("Received token response:", tokensResponse);
       
       // Process response with robust handling of different response formats
       let tokens = [];

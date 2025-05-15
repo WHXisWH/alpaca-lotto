@@ -66,12 +66,33 @@ const TicketPurchase = ({
 
   // Handler for executing the purchase.
   const handlePurchase = () => {
-    if (selectedToken && onPurchase) {
+    // 修正: Type 0の場合はトークン選択不要
+    if (paymentType !== 0 && !selectedToken) {
+      // エラーメッセージを表示できる場合は表示
+      // setErrorMessage も存在しない場合はそのままスキップ
+      if (typeof setErrorMessage === 'function') {
+        setErrorMessage('Please select a token for payment');
+      }
+      return;
+    }
+    
+    if (onPurchase) {
       onPurchase({
         token: selectedToken,
         paymentType: paymentType
       });
     }
+  };
+
+  // Check if purchase button should be enabled
+  const isPurchaseButtonEnabled = () => {
+  // Type 0 (Sponsored) doesn't require token selection
+    if (paymentType === 0) {
+    return !isLoading;
+  }
+  
+  // Type 1 & 2 require token selection
+    return !isLoading && selectedToken !== null;
   };
 
   return (
