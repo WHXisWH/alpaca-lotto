@@ -299,7 +299,10 @@ const deployAAWallet = useCallback(async () => {
   if (!_builder == null || _client == null) {
     throw new Error('SDK still not ready');
   }
-
+  
+  const walletAddr = await _builder.getSender();   // counter-factual address
+  setAaWalletAddress(walletAddr);  
+  
   setIsLoading(true);
   setError(null);
 
@@ -464,7 +467,7 @@ const deployAAWallet = useCallback(async () => {
       );
       
       // Reset any previous operations
-      aaBuilder.resetOp && aaBuilder.resetOp();
+      builder.resetOp && builder.resetOp();.resetOp && aaBuilder.resetOp();
       
       // Configure the transaction
       aaBuilder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
