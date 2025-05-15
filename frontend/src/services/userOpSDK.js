@@ -14,8 +14,8 @@ const CONSTANTS = {
   TOKEN_PAYMASTER_ADDRESS: import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS || '0x5a6680dFd4a77FEea0A7be291147768EaA2414ad',
 };
 
-// Global initialization flag to prevent concurrent initializations
-let isInitializing = false;
+// Use ref for initialization flag instead of global variable
+const isInitializingRef = { current: false };
 
 /**
  * UserOpSDK - A service to handle Account Abstraction functionality
@@ -32,11 +32,11 @@ class UserOpSDK {
   }
 
   async init(signer) {
-    if (isInitializing) {
+    if (isInitializingRef.current) {
       console.log('SDK initialization already in progress, waiting...');
       return new Promise(resolve => {
         const checkInterval = setInterval(() => {
-          if (!isInitializing) {
+          if (!isInitializingRef.current) {
             clearInterval(checkInterval);
             resolve({ 
               success: this.initialized, 
@@ -53,11 +53,15 @@ class UserOpSDK {
       return { success: true, client: this.client, builder: this.builder };
     }
     
-    isInitializing = true;
+    isInitializingRef.current = true;
     this.initError = null;
     
     try {
       console.log("Initializing UserOpSDK with parameters:", CONSTANTS);
+      
+      if (!signer) {
+        throw new Error('Signer is required to initialize the SDK');
+      }
       
       this.signer = signer;
       
@@ -131,7 +135,7 @@ class UserOpSDK {
       this.initialized = true;
       console.log("UserOpSDK initialization complete");
       
-      isInitializing = false;
+      isInitializingRef.current = false;
       
       return {
         success: true,
@@ -143,7 +147,7 @@ class UserOpSDK {
       console.error('Error initializing UserOpSDK:', error);
       this.initError = error.message || 'Unknown UserOpSDK initialization error';
       
-      isInitializing = false;
+      isInitializingRef.current = false;
       
       return {
         success: false,
@@ -161,7 +165,10 @@ class UserOpSDK {
   
   _createMockClient() {
     return {
-      sendUserOperation: async () => {
+      sendUserOperation: async (userOp) => {
+        // Log the user operation for debugging
+        console.log('Mock sendUserOperation with:', JSON.stringify(userOp, null, 2));
+        
         return {
           userOpHash: '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
           wait: async () => ({ transactionHash: '0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('') })
@@ -190,7 +197,20 @@ class UserOpSDK {
       setVerificationGasLimit: () => {},
       setPreVerificationGas: () => {},
       setMaxFeePerGas: () => {},
-      setMaxPriorityFeePerGas: () => {}
+      setMaxPriorityFeePerGas: () => {},
+      buildOp: async () => ({
+        sender: this._createMockAddress(),
+        nonce: "0x0",
+        initCode: "0x",
+        callData: "0xb61d27f6000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000",
+        callGasLimit: "0x88b8",
+        verificationGasLimit: "0x33450",
+        preVerificationGas: "0xc350",
+        maxFeePerGas: "0x2162553062",
+        maxPriorityFeePerGas: "0x40dbcf36",
+        paymasterAndData: "0x",
+        signature: "0x"
+      })
     };
   }
   
@@ -261,8 +281,9 @@ class UserOpSDK {
         // Add approval call to the builder
         this.builder.execute(tokenAddress, 0, callData);
         
-        // Send the approval UserOperation
-        const result = await this.client.sendUserOperation(this.builder);
+        // Build and send the UserOperation using the latest SDK pattern
+        const userOp = this.builder.buildOp ? await this.builder.buildOp() : this.builder;
+        const result = await this.client.sendUserOperation(userOp);
         const receipt = await result.wait();
         approvalSuccess = true;
       } catch (typeZeroError) {
@@ -398,14 +419,14 @@ class UserOpSDK {
     
     console.log(`Setting paymaster options: type=${type}, token=${token}`);
     
-    // Prepare options object for setPaymasterOptions
+    // Create the options object for paymaster
     const options = {
       type, // User-selected payment type: 0 (free), 1 (prepay), 2 (postpay)
       apikey: CONSTANTS.PAYMASTER_API_KEY,
       rpc: CONSTANTS.PAYMASTER_URL
     };
     
-    // Add token address for ERC20 payment types
+    // Only add token for ERC20 payment types (Type 1 & 2)
     if ((type === 1 || type === 2) && token) {
       // Check if token is supported
       const isSupported = await paymasterService.isTokenSupported(token);
@@ -414,19 +435,20 @@ class UserOpSDK {
         throw new Error('Token is not supported by the Paymaster service');
       }
       
+      // Add token to options
       options.token = token;
       
       // Ensure token is approved for Paymaster if needed
-      // This approval check is still necessary
       const isApproved = await paymasterService.isTokenApproved(token, this.aaWalletAddress);
       if (!isApproved) {
         console.log(`Token ${token} needs approval for paymaster`);
         await this.ensureTokenApproval(token);
       }
-    } else if (type !== 0) {
-      // If type is not 0 but no token provided, throw error
+    } else if (type !== 0 && !token) {
+      // Type is not 0 but no token provided
       throw new Error('Token address required for ERC20 payment types');
     }
+    // Type 0 does not include token field
     
     console.log('Setting paymaster options:', options);
     
@@ -539,8 +561,17 @@ class UserOpSDK {
     }
     
     try {
+      // Build the UserOp for newer SDK versions
+      const userOp = this.builder.buildOp ? await this.builder.buildOp() : this.builder;
+      
+      // Log UserOp for debugging
+      console.log("UserOperation before sending:", JSON.stringify(userOp, null, 2));
+      
       // Send the UserOperation
-      const result = await this.client.sendUserOperation(this.builder);
+      const result = await this.client.sendUserOperation(userOp);
+      
+      // Log the result
+      console.log("UserOperation result:", result);
       
       // Get UserOp hash
       const userOpHash = result.userOpHash;

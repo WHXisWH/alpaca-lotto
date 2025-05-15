@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, useWalletClient } from 'wagmi';
 import { ethers } from 'ethers';
 import { Client, Presets } from 'userop';
 import { EntryPointAbi } from '../constants/abi';
@@ -14,14 +14,13 @@ import {
   PAYMASTER_API_KEY
 } from '../constants/config';
 
-// Global initialization flag to prevent concurrent initializations
-let isInitializing = false;
-
 /**
  * Custom hook for NERO Chain's Account Abstraction functionality
  */
 const useUserOp = () => {
   const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
+  
   const [client, setClient] = useState(null);
   const [builder, setBuilder] = useState(null);
   const [aaWalletAddress, setAaWalletAddress] = useState(null);
@@ -34,8 +33,11 @@ const useUserOp = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [provider, setProvider] = useState(null);
 
-const clientRef = useRef(null);
-const builderRef = useRef(null);
+  // Use refs for stable references across renders
+  const clientRef = useRef(null);
+  const builderRef = useRef(null);
+  const isInitializingRef = useRef(false);
+
   /**
    * Check if the AA wallet has enough prefunding in the EntryPoint contract
    */
@@ -44,7 +46,7 @@ const builderRef = useRef(null);
     
     try {
       // Create provider and EntryPoint contract instance
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const provider = new ethers.providers.JsonRpcProvider(NERO_RPC_URL);
       const entryPointContract = new ethers.Contract(
         ENTRYPOINT_ADDRESS,
         EntryPointAbi,
@@ -84,7 +86,7 @@ const builderRef = useRef(null);
     
     try {
       // Create provider and signer
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const provider = new ethers.providers.JsonRpcProvider(NERO_RPC_URL);
       const signer = provider.getSigner();
       
       // Create EntryPoint contract instance
@@ -132,11 +134,11 @@ const builderRef = useRef(null);
       return { success: true, client, builder };
     }
     
-    if (isInitializing) {
+    if (isInitializingRef.current) {
       console.log('SDK initialization already in progress, waiting...');
       return new Promise(resolve => {
         const checkInterval = setInterval(() => {
-          if (!isInitializing) {
+          if (!isInitializingRef.current) {
             clearInterval(checkInterval);
             if (isInitialized && clientRef.current && builderRef.current) {
               resolve({ success: true, client: clientRef.current, builder: builderRef.current });
@@ -167,11 +169,11 @@ const builderRef = useRef(null);
   };
   
   const initSDK = useCallback(async () => {
-    if (isInitializing) {
+    if (isInitializingRef.current) {
       console.log('SDK initialization already in progress, waiting...');
       return new Promise(resolve => {
         const checkInterval = setInterval(() => {
-          if (!isInitializing) {
+          if (!isInitializingRef.current) {
             clearInterval(checkInterval);
             if (isInitialized && client && builder) {
               resolve({ 
@@ -194,12 +196,13 @@ const builderRef = useRef(null);
       return { success: true, client, builder };
     }
     
-    isInitializing = true; 
+    isInitializingRef.current = true;
     
-    if (!isConnected) {
-      setError('Wallet not connected');
-      isInitializing = false;
-      return { success: false, error: 'Wallet not connected' };
+    // Check for connected wallet and wallet client
+    if (!isConnected || !walletClient) {
+      console.error('Wallet not connected or wallet client not available');
+      isInitializingRef.current = false;
+      return { success: false, error: 'Wallet not connected or wallet client not available' };
     }
     
     setIsLoading(true);
@@ -210,21 +213,23 @@ const builderRef = useRef(null);
         try {
           await window.ethereum.request({ method: 'eth_requestAccounts' });
           
-          const providerInstance = new ethers.providers.Web3Provider(window.ethereum);
+          const providerInstance = new ethers.providers.JsonRpcProvider(NERO_RPC_URL);
           setProvider(providerInstance);
-          const signer = providerInstance.getSigner();
           
-          // Initialize AA Client - MODIFIED: Store in window global
+          // Get signer from wallet client
+          const signer = await new ethers.BrowserProvider(walletClient).getSigner();
+          
+          // Initialize AA Client
           const aaClient = await Client.init(NERO_RPC_URL, {
             overrideBundlerRpc: BUNDLER_URL,
             entryPoint: ENTRYPOINT_ADDRESS,
           });
           
-          // Store in global window object for persistence
-          window.aaClient = aaClient;
+          // Store in refs instead of window globals
+          clientRef.current = aaClient;
           setClient(aaClient);
           
-          // Initialize SimpleAccount builder - MODIFIED: Store in window global
+          // Initialize SimpleAccount builder
           const aaBuilder = await Presets.Builder.SimpleAccount.init(
             signer,
             NERO_RPC_URL,
@@ -235,8 +240,8 @@ const builderRef = useRef(null);
             }
           );
           
-          // Store in global window object for persistence
-          window.aaBuilder = aaBuilder;
+          // Store in refs instead of window globals
+          builderRef.current = aaBuilder;
           setBuilder(aaBuilder);
           
           const aaAddress = await aaBuilder.getSender();
@@ -252,9 +257,10 @@ const builderRef = useRef(null);
             setNeedsNeroTokens(!isPrefunded);
           }
           
+          // Set initialized flag to true
           setIsInitialized(true);
           setIsLoading(false);
-          isInitializing = false;
+          isInitializingRef.current = false;
           
           return { 
             success: true, 
@@ -265,23 +271,23 @@ const builderRef = useRef(null);
           console.error('Error initializing AA SDK:', err);
           setError(`Failed to initialize AA SDK: ${err.message}`);
           setIsLoading(false);
-          isInitializing = false;
+          isInitializingRef.current = false;
           return { success: false, error: err.message };
         }
       } else {
         setError('Ethereum provider not available');
         setIsLoading(false);
-        isInitializing = false;
+        isInitializingRef.current = false;
         return { success: false, error: 'Ethereum provider not available' };
       }
     } catch (err) {
       console.error('Error in AA SDK initialization:', err);
       setError(`AA SDK initialization error: ${err.message}`);
       setIsLoading(false);
-      isInitializing = false;
+      isInitializingRef.current = false;
       return { success: false, error: err.message };
     }
-  }, [isConnected, isInitialized, client, builder, checkAAWalletPrefunding]);
+  }, [isConnected, isInitialized, client, builder, walletClient, checkAAWalletPrefunding]);
 
   /**
    * Deploy AA wallet with integrated verification
@@ -308,7 +314,10 @@ const builderRef = useRef(null);
         rpc: PAYMASTER_URL
       });
   
-      const userOpResponse = await client.sendUserOperation(builder);
+      // Use buildOp if available (for newer SDK versions)
+      const userOp = builder.buildOp ? await builder.buildOp() : builder;
+      const userOpResponse = await client.sendUserOperation(userOp);
+      
       console.log("🔄 Waiting for wallet deployment transaction to be mined...");
       const receipt = await userOpResponse.wait();
       console.log("📝 Transaction mined:", receipt.transactionHash);
@@ -354,7 +363,6 @@ const builderRef = useRef(null);
       setIsLoading(false);
     }
   };
-  
   
   /**
    * Main deployment function with verification
@@ -423,7 +431,7 @@ const builderRef = useRef(null);
       const normalizedAAWalletAddress = ethers.utils.getAddress(aaWalletAddress);
       
       // Create provider and token contract
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const provider = new ethers.providers.JsonRpcProvider(NERO_RPC_URL);
       
       const tokenContract = new ethers.Contract(
         normalizedTokenAddress,
@@ -442,7 +450,6 @@ const builderRef = useRef(null);
     }
   };
 
-
   const executeTicketPurchase = useCallback(async ({
     lotteryId,
     tokenAddress,
@@ -456,9 +463,10 @@ const builderRef = useRef(null);
     setError(null);
     
     try {
-      const tokenToUse = paymentToken || tokenAddress;
+      // For Type 0, don't pass token to paymaster
+      const tokenToUse = paymentType === 0 ? null : (paymentToken || tokenAddress);
   
-      if ((paymentType === 1 || paymentType === 2) && !paymentToken) {
+      if ((paymentType === 1 || paymentType === 2) && !tokenToUse) {
         throw new Error('Payment token is required for token-based gas payment');
       }
       
@@ -492,17 +500,34 @@ const builderRef = useRef(null);
       // Configure the transaction
       aaBuilder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
-      // Use builder's setPaymasterOptions to configure gas payment
-      aaBuilder.setPaymasterOptions({
+      // Configure paymaster options - Type 0 does not include token
+      const paymasterOptions = {
         type: paymentType,
-        token: tokenToUse,
         apikey: PAYMASTER_API_KEY,
         rpc: PAYMASTER_URL
-      });
+      };
+      
+      // Only add token for Type 1 and 2
+      if (paymentType !== 0 && tokenToUse) {
+        paymasterOptions.token = tokenToUse;
+      }
+      
+      // Set the options
+      aaBuilder.setPaymasterOptions(paymasterOptions);
+      
+      // Log the UserOp before sending for debugging
+      console.log('UserOp before sending:', JSON.stringify(aaBuilder, null, 2));
+      
+      // Use buildOp for newer SDK versions if available
+      const userOp = aaBuilder.buildOp ? await aaBuilder.buildOp() : aaBuilder;
       
       // Send the UserOperation
-      const result = await aaClient.sendUserOperation(aaBuilder);
+      const result = await aaClient.sendUserOperation(userOp);
+      console.log('UserOperation result:', result);
+      
       const receipt = await result.wait();
+      console.log('Transaction receipt:', receipt);
+      
       setTxHash(receipt.transactionHash);
       
       setIsLoading(false);
@@ -545,7 +570,8 @@ const builderRef = useRef(null);
     setError(null);
     
     try {
-      const tokenToUse = paymentToken || (selections.length > 0 ? selections[0].tokenAddress : null);
+      // For Type 0, don't pass token to paymaster
+      const tokenToUse = paymentType === 0 ? null : (paymentToken || (selections.length > 0 ? selections[0].tokenAddress : null));
       
       // Validate token address for Types 1 & 2
       if ((paymentType === 1 || paymentType === 2) && !tokenToUse) {
@@ -589,16 +615,29 @@ const builderRef = useRef(null);
       // Configure the execution
       aaBuilder.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
       
-      // Set the paymaster options directly with the SDK
-      aaBuilder.setPaymasterOptions({
+      // Configure paymaster options - Type 0 does not include token
+      const paymasterOptions = {
         type: paymentType,
-        token: tokenToUse,
         apikey: PAYMASTER_API_KEY,
         rpc: PAYMASTER_URL
-      });
+      };
+      
+      // Only add token for Type 1 and 2
+      if (paymentType !== 0 && tokenToUse) {
+        paymasterOptions.token = tokenToUse;
+      }
+      
+      // Set the paymaster options
+      aaBuilder.setPaymasterOptions(paymasterOptions);
+      
+      // Log the UserOp before sending for debugging
+      console.log('Batch UserOp before sending:', JSON.stringify(aaBuilder, null, 2));
+      
+      // Use buildOp for newer SDK versions if available
+      const userOp = aaBuilder.buildOp ? await aaBuilder.buildOp() : aaBuilder;
       
       // Send the UserOperation
-      const result = await aaClient.sendUserOperation(aaBuilder);
+      const result = await aaClient.sendUserOperation(userOp);
       console.log('Batch UserOperation result:', result);
       
       // Wait for transaction confirmation
