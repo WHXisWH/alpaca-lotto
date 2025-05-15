@@ -213,11 +213,11 @@ const useUserOp = () => {
         try {
           await window.ethereum.request({ method: 'eth_requestAccounts' });
           
-          const providerInstance = new ethers.providers.JsonRpcProvider(NERO_RPC_URL);
+          const providerInstance = new ethers.providers.Web3Provider(window.ethereum);
           setProvider(providerInstance);
           
           // Get signer from wallet client - WITH ADDRESS EXPLICITLY SPECIFIED
-          const signer = providerInstance.getSigner(address);
+          const signer = providerInstance.getSigner();
           
           // Initialize AA Client
           const aaClient = await Client.init(NERO_RPC_URL, {
@@ -292,10 +292,12 @@ const useUserOp = () => {
   /**
    * Deploy AA wallet with integrated verification
    */
-  const deployAAWallet = async () => {
-    if (!builder || !client) {
-      throw new Error('SDK not initialized');
-    }
+  const _builder = builder ?? builderRef.current;
+  const _client  = client  ?? clientRef.current;
+
+  if (!_builder || !_client) {
+    throw new Error('SDK still not ready');
+  }
   
     setIsLoading(true);
     setError(null);
@@ -315,11 +317,11 @@ const useUserOp = () => {
       });
   
       // Use buildOp if available (for newer SDK versions)
-      const userOp = await builder.buildOp();
-      const result = await client.sendUserOperation(userOp);
+      const userOp = await _builder.buildOp();
+      const opResponse = await _client.sendUserOperation(userOp);
       
       console.log("🔄 Waiting for wallet deployment transaction to be mined...");
-      const receipt = await userOpResponse.wait();
+      const receipt = await opResponse.wait();
       console.log("📝 Transaction mined:", receipt.transactionHash);
       
       // Set longer wait time (for blockchain state update)
@@ -391,26 +393,10 @@ const useUserOp = () => {
         }
       }
       
-      if (!clientRef.current || !builderRef.current) {
-        console.log("SDK not initialized, re-initializing...");
-        const result = await ensureSDKInitialized();
-        
-        if (result.success && result.client && result.builder) {
-          const aaClient = result.client;
-          const aaBuilder = result.builder;
-          
-          setClient(aaClient);
-          setBuilder(aaBuilder);
-          
-          clientRef.current = aaClient;
-          builderRef.current = aaBuilder;
-        } else {
-          console.error("SDK initialization failed:", result.error);
-          throw new Error('SDK failed to initialize before deployment');
-        }
-      }
-      
-      await deployAAWallet();
+    const { success } = await ensureSDKInitialized(); 
+    if (!success) throw new Error('SDK init failed before deployment');
+    await deployAAWallet(); 
+    
       return true;
     } catch (err) {
       console.error("❌ Deployment error:", err);
