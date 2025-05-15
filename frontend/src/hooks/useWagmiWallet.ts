@@ -1,5 +1,3 @@
-// frontend/src/hooks/useWagmiWallet.ts
-
 import { useState, useEffect, useCallback } from 'react';
 import { 
   useAccount, 
@@ -9,7 +7,6 @@ import {
   useSwitchChain
 } from 'wagmi';
 import { createPublicClient, http, formatUnits } from 'viem';
-import { mainnet } from 'wagmi/chains';
 
 // Custom NERO Chain config
 const neroTestnet = {

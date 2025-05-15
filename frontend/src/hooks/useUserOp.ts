@@ -217,7 +217,7 @@ const useUserOp = () => {
           setProvider(providerInstance);
           
           // Get signer from wallet client
-          const signer = await new ethers.BrowserProvider(walletClient).getSigner();
+          const signer = await provider.getSigner();
           
           // Initialize AA Client
           const aaClient = await Client.init(NERO_RPC_URL, {
@@ -231,7 +231,7 @@ const useUserOp = () => {
           
           // Initialize SimpleAccount builder
           const aaBuilder = await Presets.Builder.SimpleAccount.init(
-            signer,
+            signer, 
             NERO_RPC_URL,
             {
               overrideBundlerRpc: BUNDLER_URL,
@@ -315,8 +315,8 @@ const useUserOp = () => {
       });
   
       // Use buildOp if available (for newer SDK versions)
-      const userOp = builder.buildOp ? await builder.buildOp() : builder;
-      const userOpResponse = await client.sendUserOperation(userOp);
+      const userOp = await builder.buildOp();
+      const result = await client.sendUserOperation(userOp);
       
       console.log("🔄 Waiting for wallet deployment transaction to be mined...");
       const receipt = await userOpResponse.wait();

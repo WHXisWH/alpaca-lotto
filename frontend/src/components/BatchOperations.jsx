@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import useUserOp from '../hooks/useUserOp';
 import useTokens from '../hooks/useTokens';
-import useWagmiWallet from '../hooks/useWagmiWallet';
 import useSessionKeys from '../hooks/useSessionKeys';
 
 /**
