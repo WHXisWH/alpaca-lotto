@@ -143,7 +143,20 @@ const HomePage = () => {
    */
   const handlePurchaseTickets = async ({ token, paymentType }) => {
     try {
-      // Use the updated executeTicketPurchase with proper payment arguments
+      // First, check if wallet is connected
+      if (!isConnected || !address) {
+        // Show connection modal or redirect to connect page
+        console.log("Wallet not connected, opening connect modal");
+        // If you have a connection modal component:
+        // setShowConnectModal(true);
+        // Or you can use a third-party connector like Web3Modal
+        return;
+      }
+      
+      // Check if wallet is on the correct network (NERO Chain)
+      // This could be part of your wallet hook
+  
+      // Proceed with the purchase
       const txHash = await executeTicketPurchase({
         lotteryId: selectedLottery.id,
         tokenAddress: token.address,
@@ -167,6 +180,26 @@ const HomePage = () => {
       console.error('Purchase error:', err);
       setError(err.message || 'Failed to purchase tickets');
     }
+  };
+  
+  // A component to ensure wallet connection before sensitive operations
+  const ConnectWalletGuard = ({ children, fallback = null }) => {
+    const { isConnected } = useAccount();
+    const { connectWallet } = useWagmiWallet();
+    
+    if (!isConnected) {
+      return (
+        <div className="connect-wallet-prompt">
+          <h3>Connect Your Wallet</h3>
+          <p>Please connect your wallet to continue</p>
+          <button onClick={connectWallet} className="connect-button">
+            Connect Wallet
+          </button>
+        </div>
+      );
+    }
+    
+    return children;
   };
   
   /**

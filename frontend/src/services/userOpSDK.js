@@ -31,7 +31,7 @@ class UserOpSDK {
     this.initialized = false;
   }
 
-  async init(signer) {
+  async init(signer, userAddress) {
     if (isInitializingRef.current) {
       console.log('SDK initialization already in progress, waiting...');
       return new Promise(resolve => {
@@ -63,6 +63,10 @@ class UserOpSDK {
         throw new Error('Signer is required to initialize the SDK');
       }
       
+      if (!userAddress) {
+        throw new Error('User address is required to initialize the SDK');
+      }
+      
       this.signer = signer;
       
       // Safely create provider with retry mechanism
@@ -83,7 +87,6 @@ class UserOpSDK {
       
       // Initialize the AA Client
       try {
-        // Initialize the AA Client with proper error handling
         if (typeof Client.init === 'function') {
           this.client = await Client.init(CONSTANTS.NERO_RPC_URL, {
             overrideBundlerRpc: CONSTANTS.BUNDLER_URL,
@@ -103,7 +106,7 @@ class UserOpSDK {
       try {
         if (Presets && Presets.Builder && typeof Presets.Builder.SimpleAccount === 'object' && 
             typeof Presets.Builder.SimpleAccount.init === 'function') {
-          // Create a SimpleAccount builder
+          // Create a SimpleAccount builder - EXPLICITLY PASS SIGNER WITH ADDRESS
           this.builder = await Presets.Builder.SimpleAccount.init(
             signer,
             CONSTANTS.NERO_RPC_URL,

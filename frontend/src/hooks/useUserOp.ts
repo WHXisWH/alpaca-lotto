@@ -198,11 +198,11 @@ const useUserOp = () => {
     
     isInitializingRef.current = true;
     
-    // Check for connected wallet and wallet client
-    if (!isConnected || !walletClient) {
-      console.error('Wallet not connected or wallet client not available');
+    // Check for connected wallet, wallet client, and address
+    if (!isConnected || !walletClient || !address) {
+      console.error('Wallet not connected, wallet client not available, or address missing');
       isInitializingRef.current = false;
-      return { success: false, error: 'Wallet not connected or wallet client not available' };
+      return { success: false, error: 'Wallet not connected, wallet client not available, or address missing' };
     }
     
     setIsLoading(true);
@@ -216,8 +216,8 @@ const useUserOp = () => {
           const providerInstance = new ethers.providers.JsonRpcProvider(NERO_RPC_URL);
           setProvider(providerInstance);
           
-          // Get signer from wallet client
-          const signer = await provider.getSigner();
+          // Get signer from wallet client - WITH ADDRESS EXPLICITLY SPECIFIED
+          const signer = providerInstance.getSigner(address);
           
           // Initialize AA Client
           const aaClient = await Client.init(NERO_RPC_URL, {
@@ -287,7 +287,7 @@ const useUserOp = () => {
       isInitializingRef.current = false;
       return { success: false, error: err.message };
     }
-  }, [isConnected, isInitialized, client, builder, walletClient, checkAAWalletPrefunding]);
+  }, [isConnected, isInitialized, client, builder, walletClient, address, checkAAWalletPrefunding]);
 
   /**
    * Deploy AA wallet with integrated verification
