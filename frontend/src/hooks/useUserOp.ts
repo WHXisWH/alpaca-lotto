@@ -289,83 +289,66 @@ const useUserOp = () => {
     }
   }, [isConnected, isInitialized, client, builder, walletClient, address, checkAAWalletPrefunding]);
 
-  /**
-   * Deploy AA wallet with integrated verification
-   */
-  const _builder = builder ?? builderRef.current;
-  const _client  = client  ?? clientRef.current;
+ /**
+ * Deploy AA wallet with integrated verification
+ */
+const deployAAWallet = useCallback(async () => {
+  const _builder = builderRef.current;
+  const _client  = clientRef.current;
 
-  if (!_builder || !_client) {
+  if (!_builder == null || _client == null) {
     throw new Error('SDK still not ready');
   }
-  
-    setIsLoading(true);
-    setError(null);
-  
-    try {
-      console.log("🚀 Attempting to deploy AA wallet...");
-      builder.resetOp && builder.resetOp();
-  
-      // Trigger a minimal "empty" UserOp to force contract deployment
-      builder.execute(ethers.constants.AddressZero, 0, "0x");
-      
-      // Set paymaster options to use sponsored gas (Type 0)
-      builder.setPaymasterOptions({
-        type: 0,
-        apikey: PAYMASTER_API_KEY,
-        rpc: PAYMASTER_URL
-      });
-  
-      // Use buildOp if available (for newer SDK versions)
-      const userOp = await _builder.buildOp();
-      const opResponse = await _client.sendUserOperation(userOp);
-      
-      console.log("🔄 Waiting for wallet deployment transaction to be mined...");
-      const receipt = await opResponse.wait();
-      console.log("📝 Transaction mined:", receipt.transactionHash);
-      
-      // Set longer wait time (for blockchain state update)
-      console.log("⏳ Waiting for blockchain state update...");
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Ensure address normalization
-      const normalizedAddress = ethers.utils.getAddress(aaWalletAddress);
-      
-      // Verify wallet deployment
-      if (provider) {
-        console.log(`🔍 Checking code at address: ${normalizedAddress}`);
-        const code = await provider.getCode(normalizedAddress);
-        
-        if (code === '0x') {
-          console.error("❌ No code found at wallet address after deployment");
-          throw new Error('Wallet deployment failed - no code at wallet address');
-        }
-        
-        console.log("✅ Code verified at wallet address");
+
+  setIsLoading(true);
+  setError(null);
+
+  try {
+    console.log('🚀 Attempting to deploy AA wallet…');
+    _builder.resetOp && _builder.resetOp();
+
+    _builder.execute(ethers.constants.AddressZero, 0, '0x');
+
+    _builder.setPaymasterOptions({
+      type: 0,
+      apikey: PAYMASTER_API_KEY,
+      rpc: PAYMASTER_URL,
+    });
+
+    const userOp     = await _builder.buildOp();
+    const opResponse = await _client.sendUserOperation(userOp);
+
+    console.log('🔄 Waiting tx to be mined…');
+    const receipt = await opResponse.wait();
+    console.log('📝 Tx mined:', receipt.transactionHash);
+
+    await new Promise((r) => setTimeout(r, 3_000));
+
+    if (provider && aaWalletAddress) {
+      const code = await provider.getCode(
+        ethers.utils.getAddress(aaWalletAddress),
+      );
+      if (code === '0x') {
+        throw new Error('Wallet deployment failed – no code at address');
       }
-  
-      console.log("✅ AA wallet deployed:", receipt.transactionHash);
-      setIsDeployed(true);
-      setNeedsNeroTokens(false);
-      return receipt;
-    } catch (err) {
-      console.error("❌ Failed to deploy AA wallet:", err);
-  
-      if (err.message?.includes('AA21') || err.message?.includes('funds')) {
-        setNeedsNeroTokens(true);
-        throw new Error("Not enough NERO balance to deploy the AA wallet. Please deposit funds into the EntryPoint contract first.");
-      }
-      
-      if (err.message?.includes('No code found') || err.message?.includes('failed - no code')) {
-        throw new Error("Wallet deployment verification failed. The transaction was mined but no code was found at the wallet address.");
-      }
-      
-      throw err;
-    } finally {
-      setIsLoading(false);
     }
-  };
-  
+
+    console.log('✅ AA wallet deployed:', receipt.transactionHash);
+    setIsDeployed(true);
+    setNeedsNeroTokens(false);
+    return receipt;
+  } catch (err: any) {
+    console.error('❌ Failed to deploy AA wallet:', err);
+    setNeedsNeroTokens(
+      err.message?.includes('AA21') || err.message?.includes('funds'),
+    );
+    throw err;
+  } finally {
+    setIsLoading(false);
+  }
+}, [provider, aaWalletAddress]);
+
+
   /**
    * Main deployment function with verification
    * This serves as the single entry point for deployment checks
