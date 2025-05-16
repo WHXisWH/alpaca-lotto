@@ -105,6 +105,60 @@ class PaymasterService {
             throw new Error(`Token approval failed: ${error.message}`);
         }
     }
+
+
+   async getSponsoredPaymasterData(userOp, entryPointAddress) {
+       console.log("Requesting sponsored paymaster data for UserOp:", userOp);
+       try {
+           const paymasterRpcMethod = 'pm_sponsorUserOperation';            const paymasterRpcParams = [
+               userOp,
+               entryPointAddress,
+               {
+                   apiKey: this.apiKey 
+               }
+           ];
+
+           const result = await this.paymasterRpc.send(paymasterRpcMethod, paymasterRpcParams);
+
+           if (!result || typeof result.paymasterAndData !== 'string') {
+               throw new Error('Invalid response from Paymaster for sponsored gas. Missing paymasterAndData.');
+           }
+           console.log("Received sponsored paymaster data:", result);
+           return result;
+       } catch (error) {
+           console.error("Error getting sponsored paymaster data from Paymaster RPC:", error);
+           throw new Error(`Failed to get sponsored gas data: ${error.message || error}`);
+       }
+   }
+
+   async getERC20PaymasterData(userOp, entryPointAddress, tokenAddress, paymentType) {
+       console.log(`Requesting ERC20 paymaster data for UserOp:`, userOp, `Token: ${tokenAddress}`, `Type: ${paymentType}`);
+       if (!tokenAddress) {
+           throw new Error("Token address is required for ERC20 paymaster data.");
+       }
+       try {
+           const paymasterRpcMethod = 'pm_sponsorUserOperation';
+           const paymasterRpcParams = [
+               userOp,
+               entryPointAddress,
+               {
+                   token: ethers.utils.getAddress(tokenAddress),
+                   apiKey: this.apiKey,                 
+               }
+           ];
+
+           const result = await this.paymasterRpc.send(paymasterRpcMethod, paymasterRpcParams);
+
+           if (!result || typeof result.paymasterAndData !== 'string') {
+               throw new Error('Invalid response from Paymaster for ERC20 gas. Missing paymasterAndData.');
+           }
+           console.log("Received ERC20 paymaster data:", result);
+           return result; // paymasterAndData, callGasLimit, verificationGasLimit, preVerificationGas などを含むオブジェクトを期待
+       } catch (error) {
+           console.error("Error getting ERC20 paymaster data from Paymaster RPC:", error);
+           throw new Error(`Failed to get ERC20 gas data for token ${tokenAddress}: ${error.message || error}`);
+       }
+   }
 }
 
 export default new PaymasterService();
