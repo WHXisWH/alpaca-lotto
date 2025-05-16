@@ -82,19 +82,23 @@ class PaymasterService {
         }
     }
 
-     async ensureTokenApproval(signer, tokenAddress, ownerAddress) {
+    async ensureTokenApproval(signer, tokenAddress, ownerAddress) {
         if (!tokenAddress || !ownerAddress || !this.tokenPaymasterAddress || !signer) {
             throw new Error("Missing parameters for token approval.");
         }
         const isApproved = await this.isTokenApproved(tokenAddress, ownerAddress);
         if (isApproved) {
+            console.log(`Token ${tokenAddress} already approved by ${ownerAddress} for ${this.tokenPaymasterAddress}`);
             return true;
         }
-
+   
+        console.log(`Approving token ${tokenAddress} for spender ${this.tokenPaymasterAddress} by owner ${ownerAddress}`);
         try {
             const tokenContract = new ethers.Contract(tokenAddress, ['function approve(address spender, uint256 amount) returns (bool)'], signer);
             const tx = await tokenContract.approve(this.tokenPaymasterAddress, ethers.constants.MaxUint256);
+            console.log(`Approval transaction sent: ${tx.hash}`);
             await tx.wait();
+            console.log(`Token ${tokenAddress} approved successfully.`);
             return true;
         } catch (error) {
             console.error(`Failed to approve token ${tokenAddress} for ${this.tokenPaymasterAddress}:`, error);
@@ -103,4 +107,4 @@ class PaymasterService {
     }
 }
 
-export default new PaymasterService();
+export default PaymasterService();

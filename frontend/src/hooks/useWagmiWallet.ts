@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  useAccount, 
-  useConnect, 
-  useDisconnect, 
+import {
+  useAccount,
+  useConnect,
+  useDisconnect,
   useChainId,
-  useSwitchChain
+  useSwitchChain,
+  useWalletClient,
 } from 'wagmi';
-import { createPublicClient, http, formatUnits } from 'viem';
+import { createPublicClient, http, formatUnits, type WalletClient } from 'viem';
+import { providers as ethersProviders, Signer as EthersSigner } from 'ethers';
 
-// Custom NERO Chain config
 const neroTestnet = {
   id: 689,
   name: 'NERO Chain Testnet',
@@ -24,7 +25,6 @@ const neroTestnet = {
   },
 };
 
-// ERC20 ABI for token interactions
 const ERC20_ABI = [
   {
     inputs: [{ name: 'owner', type: 'address' }],
@@ -65,256 +65,228 @@ interface Token {
   rawBalance: string;
 }
 
+function walletClientToEthers5Signer(walletClient: WalletClient): EthersSigner | null {
+  if (!walletClient) return null;
+  const { account, chain, transport } = walletClient;
+  if (!account || !chain || !transport) {
+    console.warn('WalletClient is missing required properties for Signer conversion.');
+    return null;
+  }
+  const network = {
+    chainId: chain.id,
+    name: chain.name,
+    ensAddress: chain.contracts?.ensRegistry?.address,
+  };
+  const provider = new ethersProviders.Web3Provider(transport as any, network); 
+  const signer = provider.getSigner(account.address);
+  return signer;
+}
+
+
 interface UseWagmiWalletReturn {
   account: string | undefined;
   isConnecting: boolean;
   connectionError: string | null;
   chainId: number | undefined;
-  aaWalletAddress: string | null;
-  signer: null;
-  provider: null;
-  connectWallet: () => Promise<{ account: string; provider: null; signer: null; }>;
+  aaWalletAddress: string | null; 
+  ethersSigner: EthersSigner | null; 
+  provider: ethersProviders.Web3Provider | null; 
+  connectWallet: () => Promise<void>; 
   disconnectWallet: () => void;
   getTokens: (tokenAddresses: string[], chainId?: number) => Promise<Token[]>;
   switchToNeroChain: () => Promise<void>;
   addNeroChain: () => Promise<void>;
+  isDevelopmentMode: boolean;
 }
 
-/**
- * Replaces original useWallet hook with wagmi implementation
- * Provides the same API surface as the original hook
- */
 export const useWagmiWallet = (): UseWagmiWalletReturn => {
-  // wagmi hooks
-  const { address, isConnected, isConnecting: connecting } = useAccount();
-  const { connect, connectors, error: connectError, isPending } = useConnect();
+  const { address, isConnected, isConnecting: wagmiIsConnecting } = useAccount();
+  const { connect, connectors, error: connectErrorHook, isPending: wagmiIsPending } = useConnect();
   const { disconnect } = useDisconnect();
-  const chainId = useChainId();
-  const { switchChain, error: switchError } = useSwitchChain();
-  
-  // State variables
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [isConnecting, setIsConnecting] = useState<boolean>(false);
-  const [aaWalletAddress, setAaWalletAddress] = useState<string | null>(null);
+  const currentChainId = useChainId();
+  const { switchChain, error: switchErrorHook } = useSwitchChain();
+  const { data: walletClient } = useWalletClient();
 
-  // Handle AA wallet address derivation
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [ethersSigner, setEthersSigner] = useState<EthersSigner | null>(null);
+  const [ethersProvider, setEthersProvider] = useState<ethersProviders.Web3Provider | null>(null);
+  const [aaWalletAddress, setAaWalletAddress] = useState<string | null>(null); 
+
+
+  const isDevelopmentMode = import.meta.env.MODE === 'development';
+
+
+  useEffect(() => {
+    if (connectErrorHook) {
+      setConnectionError(connectErrorHook.message);
+    } else if (switchErrorHook) {
+      setConnectionError(switchErrorHook.message);
+    } else {
+      setConnectionError(null);
+    }
+  }, [connectErrorHook, switchErrorHook]);
+
+  useEffect(() => {
+    if (walletClient) {
+      const signerInstance = walletClientToEthers5Signer(walletClient);
+      setEthersSigner(signerInstance);
+      if (signerInstance && signerInstance.provider instanceof ethersProviders.Web3Provider) {
+        setEthersProvider(signerInstance.provider);
+      } else if (walletClient.transport) {
+          // Fallback if provider cannot be derived directly from signer
+          const { chain } = walletClient;
+          if (chain) {
+             const network = { chainId: chain.id, name: chain.name };
+             setEthersProvider(new ethersProviders.Web3Provider(walletClient.transport as any, network));
+          }
+      }
+    } else {
+      setEthersSigner(null);
+      setEthersProvider(null);
+    }
+  }, [walletClient]);
+
   useEffect(() => {
     if (address) {
-      // For now, use the EOA address until a proper AA address generation is implemented
       setAaWalletAddress(address);
     } else {
       setAaWalletAddress(null);
     }
   }, [address]);
 
-  // Check for MetaMask or any other injected provider
-  const isMetaMaskAvailable = useCallback((): boolean => {
-    try {
-      return (
-        typeof window !== 'undefined' && 
-        window.ethereum && 
-        window.ethereum.isMetaMask
-      );
-    } catch (err) {
-      console.warn("Error checking for MetaMask:", err);
-      return false;
-    }
-  }, []);
-  
-  const connectWallet = useCallback(async () => {
-    setIsConnecting(true);
-    setConnectionError(null);
-  
-    try {
-      // Check for MetaMask with error handling
-      if (!isMetaMaskAvailable()) {
-        console.log('MetaMask not detected');
-        setConnectionError('No wallet detected. Please install MetaMask or another Ethereum wallet.');
-        setIsConnecting(false);
-        throw new Error('No wallet detected');
-      }
-  
-      // Retry logic with exponential backoff
-      let attempts = 0;
-      const maxAttempts = 3;
-      
-      while (attempts < maxAttempts) {
-        try {
-          const connector = connectors.find(c => c.name === 'MetaMask') || connectors[0];
-          if (connector) {
-            await connect({ connector });
-            break;
-          }
-        } catch (innerErr) {
-          console.warn(`Connection attempt ${attempts + 1} failed:`, innerErr);
-          attempts++;
-          if (attempts >= maxAttempts) throw innerErr;
-          // Exponential backoff
-          await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempts)));
-        }
-      }
-      
-      return {
-        account: address || '',
-        provider: null,
-        signer: null,
-      };
-    } catch (err) {
-      console.error('Wallet connection error:', err);
-      setConnectionError(err.message || 'Wallet connection error');
-      throw err;
-    } finally {
-      setIsConnecting(false);
-    }
-  }, [connect, connectors, address, isMetaMaskAvailable]);
 
-  /**
-   * Disconnect wallet
-   */
+  const connectWallet = useCallback(async () => {
+    setConnectionError(null);
+    const injectedConnector = connectors.find(c => c.id === 'injected' || c.name === 'MetaMask');
+    if (injectedConnector) {
+      try {
+        await connect({ connector: injectedConnector });
+      } catch (err: any) {
+        console.error('Wallet connection error:', err);
+        setConnectionError(err.message || 'Failed to connect wallet.');
+      }
+    } else {
+      setConnectionError('MetaMask or injected provider not found.');
+      console.error('MetaMask or injected provider not found.');
+    }
+  }, [connect, connectors]);
+
   const disconnectWallet = useCallback(() => {
     disconnect();
+    setEthersSigner(null);
+    setEthersProvider(null);
   }, [disconnect]);
 
-  /**
-   * Get tokens in wallet - Updated to avoid multicall3 dependency
-   * @param {Array} tokenAddresses - Array of token addresses to check
-   * @returns {Array} - Array of token objects with balances and metadata
-   */
   const getTokens = useCallback(async (tokenAddresses: string[], chainIdParam?: number): Promise<Token[]> => {
-    if (!isConnected) {
-      throw new Error('Wallet not connected');
+    if (!isConnected || !address || !ethersProvider) {
+      // setError('Wallet not connected or provider not available.');
+      console.warn('getTokens: Wallet not connected or provider not available.');
+      return [];
     }
 
-    if (!address) {
-      throw new Error('Wallet not connected');
-    }
-
-    // Target address - EOA or AA wallet
     const targetAddress = aaWalletAddress || address;
     if (!targetAddress) {
-      throw new Error('No valid address available');
+        console.warn('getTokens: No valid address available.');
+        return [];
     }
 
-    const currentChainId = chainIdParam || chainId || 689;
-
     try {
-      // Create a viem public client for the current chain - without multicall configuration
-      const publicClient = createPublicClient({
-        chain: {
-          id: currentChainId,
-          name: currentChainId === 689 ? 'NERO Chain Testnet' : 'Unknown Chain',
-          rpcUrls: {
-            default: {
-              http: [currentChainId === 689 
-                ? (import.meta.env.VITE_NERO_RPC_URL || 'https://rpc-testnet.nerochain.io')
-                : 'https://ethereum.publicnode.com'
-              ],
-            },
-          },
-        },
-        transport: http(),
-      });
-
-      // Process results into token objects
       const tokens: Token[] = [];
-      
-      // Process each token one by one instead of using multicall
-      for (let i = 0; i < tokenAddresses.length; i++) {
-        const tokenAddress = tokenAddresses[i] as `0x${string}`;
-        
+      for (const tokenAddr of tokenAddresses) {
         try {
-          // Individual contract calls for each token
-          const decimalsPromise = publicClient.readContract({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: 'decimals',
-          });
-          
-          const symbolPromise = publicClient.readContract({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: 'symbol',
-          });
-          
-          const namePromise = publicClient.readContract({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: 'name',
-          });
-          
-          const balancePromise = publicClient.readContract({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: 'balanceOf',
-            args: [targetAddress as `0x${string}`],
-          });
-          
-          // Execute all promises in parallel
+          const contract = new ethers.Contract(tokenAddr, ERC20_ABI, ethersProvider);
           const [decimals, symbol, name, balance] = await Promise.all([
-            decimalsPromise,
-            symbolPromise,
-            namePromise,
-            balancePromise
+            contract.decimals(),
+            contract.symbol(),
+            contract.name(),
+            contract.balanceOf(targetAddress),
           ]);
-          
-          // Only add tokens with positive balances
-          if (typeof balance === 'bigint' && balance > 0n) {
-            const formattedBalance = formatUnits(balance, decimals as number);
-            
+
+          if (balance && balance.gt(0)) {
             tokens.push({
-              address: tokenAddresses[i],
-              symbol: symbol as string,
-              name: name as string,
-              decimals: decimals as number,
-              balance: formattedBalance,
-              rawBalance: balance.toString()
+              address: tokenAddr,
+              symbol,
+              name,
+              decimals,
+              balance: formatUnits(balance, decimals),
+              rawBalance: balance.toString(),
             });
           }
         } catch (err) {
-          console.warn(`Skipping token ${tokenAddresses[i]} due to failed contract call:`, err);
-          continue;
+          console.warn(`Skipping token ${tokenAddr} due to error:`, err);
         }
       }
-
       return tokens;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching tokens:', err);
-      throw err;
+      // setError(err.message || 'Failed to fetch tokens.');
+      return [];
     }
-  }, [address, aaWalletAddress, isConnected, chainId]);
+  }, [isConnected, address, ethersProvider, aaWalletAddress]);
 
-  /**
-   * Switch to NERO Chain
-   */
   const switchToNeroChain = useCallback(async () => {
+    if (!switchChain) {
+        console.error("switchChain function is not available from wagmi's useSwitchChain.");
+        setConnectionError("Failed to switch network: Function not available.");
+        return;
+    }
     try {
       await switchChain({ chainId: neroTestnet.id });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error switching to NERO Chain:', err);
-      throw err;
+      setConnectionError(err.message || 'Failed to switch to NERO Chain.');
+      if (err.code === 4902 || err.message?.includes('Unrecognized chain ID')) { 
+        try {
+          await addNeroChain();
+        } catch (addError: any) {
+            console.error('Error adding NERO Chain:', addError);
+            setConnectionError(addError.message || 'Failed to add NERO Chain.');
+        }
+      }
     }
   }, [switchChain]);
 
-  /**
-   * Add NERO Chain to wallet
-   * Note: With wagmi v2, switching to a chain will automatically
-   * add it if it's not already added to the wallet
-   */
-  const addNeroChain = switchToNeroChain;
+  const addNeroChain = useCallback(async () => {
+    if (!walletClient || !walletClient.transport || typeof (walletClient.transport as any).request !== 'function') {
+        console.error("Wallet client or transport.request is not available to add chain.");
+        setConnectionError("Cannot add chain: Wallet client not configured correctly.");
+        return;
+    }
+    try {
+      await (walletClient.transport as any).request({
+        method: 'wallet_addEthereumChain',
+        params: [
+          {
+            chainId: `0x${neroTestnet.id.toString(16)}`,
+            chainName: neroTestnet.name,
+            nativeCurrency: neroTestnet.nativeCurrency,
+            rpcUrls: neroTestnet.rpcUrls.default.http,
+            blockExplorerUrls: [neroTestnet.blockExplorers?.default.url],
+          },
+        ],
+      });
+    } catch (err: any) {
+      console.error('Error adding NERO Chain:', err);
+      setConnectionError(err.message || 'Failed to add NERO Chain.');
+      throw err;
+    }
+  }, [walletClient]);
+
 
   return {
     account: address,
-    isConnecting,
+    isConnecting: wagmiIsConnecting || wagmiIsPending,
     connectionError,
-    chainId,
+    chainId: currentChainId,
     aaWalletAddress,
-    signer: null, 
-    provider: null, 
+    ethersSigner,
+    provider: ethersProvider,
     connectWallet,
     disconnectWallet,
     getTokens,
     switchToNeroChain,
-    addNeroChain
+    addNeroChain,
+    isDevelopmentMode,
   };
 };
 
