@@ -107,4 +107,4 @@ class PaymasterService {
     }
 }
 
-export default PaymasterService();
+export default new PaymasterService();
