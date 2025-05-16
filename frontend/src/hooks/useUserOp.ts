@@ -30,8 +30,7 @@ const useUserOp = () => {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [aaWalletAddress, setAaWalletAddress] = useState<string | null>(null);
   const [isAaWalletDeployed, setIsAaWalletDeployed] = useState(false);
-  const [txHash, setTxHash] = useState<string | null>(null);
-
+  
   const initSDK = useCallback(async () => {
     if (!isConnected || !ethersSigner || !address) {
       setError('Wallet not connected or signer not available.');
