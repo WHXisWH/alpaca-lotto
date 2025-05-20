@@ -8,8 +8,8 @@ import {
   Code,
   Icon,
 } from "@chakra-ui/react";
-import { CloseButton } from "@/components/ui/close-button";
-import { Alert } from "@/components/ui/alert";
+import { CloseButton } from "@/components/ui/close-button"; //
+import { Alert } from "@/components/ui/alert"; //
 import { useAccount } from "wagmi";
 import { useEthersSigner } from "./utils/ethersAdapters";
 import { Layout } from "./components/layout";
@@ -25,7 +25,7 @@ import { usePaymaster } from "./context/PaymasterContext";
 import { MdWarning } from "react-icons/md";
 
 function App() {
-  const { address: eoaAddress, isConnected, chain } = useAccount();
+  const { address: wagmiEoaAddress, isConnected, chain } = useAccount();
   const ethersSigner = useEthersSigner({ chainId: chain?.id });
 
   const {
@@ -35,31 +35,34 @@ function App() {
     loading: aaLoading,
     error: aaError,
     clearError: clearAAError,
+    isSocialLoggedIn,
+    eoaAddress,
   } = useAAWallet();
 
   const {
-    loading: paymasterLoading, 
     error: paymasterError,
     clearError: clearPaymasterError,
   } = usePaymaster();
 
   useEffect(() => {
     if (
-      isConnected &&
-      eoaAddress &&
+      isConnected && 
+      wagmiEoaAddress &&
       ethersSigner &&
-      !isAAWalletInitialized &&
-      !aaLoading
+      !isAAWalletInitialized && 
+      !aaLoading &&
+      !isSocialLoggedIn
     ) {
-      initializeAAWallet(eoaAddress, ethersSigner);
+      initializeAAWallet(wagmiEoaAddress, ethersSigner);
     }
   }, [
     isConnected,
-    eoaAddress,
+    wagmiEoaAddress,
     ethersSigner,
     initializeAAWallet,
     isAAWalletInitialized,
     aaLoading,
+    isSocialLoggedIn,
   ]);
 
   return (
@@ -67,7 +70,7 @@ function App() {
       <VStack gap={8} align="stretch" width="100%">
         <Box textAlign="center">
           <Heading as="h1" size="xl" mb={2}>
-            Alpaca Lotto AA
+            Alpaca Lotto
           </Heading>
           <Text fontSize="lg" color="gray.400">
             Experience the future of lottery with Account Abstraction!
@@ -110,11 +113,31 @@ function App() {
           </Alert>
         )}
 
-        {isConnected && eoaAddress && (
+        {isAAWalletInitialized && isSocialLoggedIn && aaWalletAddress && (
           <Box p={4} borderWidth="1px" borderRadius="md" bg="gray.700" mt={4}>
-            <Text fontWeight="bold">EOA Wallet:</Text>
+            <Text fontWeight="bold">Social Login EOA (derived):</Text>
             <Code colorScheme="purple" p={1} display="block" overflowX="auto">
-              {eoaAddress} (Chain: {chain?.name || "N/A"})
+              {eoaAddress} (Chain: {chain?.name || "Nero Testnet"})
+            </Code>
+             <Text fontWeight="bold" mt={2}>
+              Smart Account (AA Wallet):
+            </Text>
+            <Code
+              colorScheme="teal"
+              p={1}
+              display="block"
+              overflowX="auto"
+            >
+              {aaWalletAddress}
+            </Code>
+          </Box>
+        )}
+        
+        {isConnected && wagmiEoaAddress && !isSocialLoggedIn && (
+          <Box p={4} borderWidth="1px" borderRadius="md" bg="gray.700" mt={4}>
+            <Text fontWeight="bold">EOA Wallet (WAGMI):</Text>
+            <Code colorScheme="purple" p={1} display="block" overflowX="auto">
+              {wagmiEoaAddress} (Chain: {chain?.name || "N/A"})
             </Code>
             {aaLoading && !isAAWalletInitialized && <Spinner mt={2} />}
             {isAAWalletInitialized && aaWalletAddress && (
@@ -135,6 +158,7 @@ function App() {
           </Box>
         )}
 
+
         {isAAWalletInitialized && (
           <>
             <PaymasterSettings />
@@ -143,21 +167,24 @@ function App() {
             <OwnedTickets />
           </>
         )}
-
-        {!isConnected && (
-          <Text textAlign="center" mt={8}>
-            Please connect your wallet to begin.
-          </Text>
+        
+        {!isAAWalletInitialized && !aaLoading && !isSocialLoggedIn && !isConnected &&(
+           <Text textAlign="center" mt={8}>
+             Please connect your wallet or login with email/social to begin.
+           </Text>
         )}
 
-        {isConnected &&
-          !isAAWalletInitialized &&
-          !aaLoading &&
-          !aaError && (
+        {((isConnected && !isSocialLoggedIn && !isAAWalletInitialized && !aaLoading && !aaError) ||
+          (aaLoading && !isAAWalletInitialized && !isSocialLoggedIn))&& (
             <Text textAlign="center" mt={8}>
               Initializing your smart account...
             </Text>
           )}
+         {isSocialLoggedIn && aaLoading && !isAAWalletInitialized && (
+            <Text textAlign="center" mt={8}>
+                Initializing your smart account via social login...
+            </Text>
+         )}
       </VStack>
     </Layout>
   );

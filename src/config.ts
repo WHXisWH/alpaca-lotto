@@ -30,3 +30,5 @@ export const NATIVE_CURRENCY_DECIMALS = 18;
 
 export const USDC_TOKEN_ADDRESS = "0xc86fed58edf0981e927160c50ecb8a8b05b32fed";
 export const USDC_DECIMALS = 6;
+
+export const WEB3AUTH_CLIENT_ID = import.meta.env.VITE_WEB3AUTH_CLIENT_ID || "YOUR_WEB3AUTH_CLIENT_ID";

@@ -1,23 +1,19 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import path from 'path'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    nodePolyfills({ protocolImports: true })
+  ],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      'buffer': 'buffer/',
-    },
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, './src') }
+    ]
   },
   define: {
-    'global': 'globalThis',
-  },
-  optimizeDeps: {
-    esbuildOptions: {
-      define: {
-        global: 'globalThis',
-      },
-    },
-  },
-});
+    global: 'globalThis'
+  }
+})

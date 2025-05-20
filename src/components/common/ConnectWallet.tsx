@@ -1,15 +1,17 @@
-import React from "react";
-import { Box, Text, VStack, Spinner, Code } from "@chakra-ui/react";
-import { Button } from "@/components/ui/button";
+import React, { useState } from "react";
+import { Box, Text, VStack, Spinner, Code, HStack } from "@chakra-ui/react";
+import { Button } from "@/components/ui/button"; //
 import { useAccount, useConnect, useDisconnect, Connector } from "wagmi";
 import { useEthersSigner } from "@/utils/ethersAdapters";
 import { useAAWallet } from "@/context/AAWalletContext";
+import { SocialLogin } from "./SocialLogin";
 
 export const ConnectWallet: React.FC = () => {
   const { connect, connectors, error: wagmiConnectError, status } = useConnect();
-  const { address: eoaAddress, isConnected, connector: activeConnector, chain } = useAccount();
-  const { disconnect } = useDisconnect();
+  const { address: wagmiEoaAddress, isConnected, connector: activeConnector, chain } = useAccount(); // Renamed to avoid clash
+  const { disconnect: wagmiDisconnect } = useDisconnect();
   const ethersSigner = useEthersSigner({ chainId: chain?.id });
+  const [showSocialLogin, setShowSocialLogin] = useState<boolean>(true);
 
   const {
     initializeAAWallet,
@@ -17,6 +19,9 @@ export const ConnectWallet: React.FC = () => {
     aaWalletAddress,
     loading: aaLoading,
     error: aaError,
+    isSocialLoggedIn,
+    disconnectSocialLogin,
+    eoaAddress,
   } = useAAWallet();
 
   const handleConnect = (connectorId?: string) => {
@@ -37,14 +42,85 @@ export const ConnectWallet: React.FC = () => {
   };
 
   const handleInitializeAA = () => {
-    if (eoaAddress && ethersSigner) {
-      initializeAAWallet(eoaAddress, ethersSigner);
+    if (wagmiEoaAddress && ethersSigner && !isSocialLoggedIn) {
+      initializeAAWallet(wagmiEoaAddress, ethersSigner);
     } else {
       console.error(
-        "EOA address or ethers signer not available for AA initialization."
+        "WAGMI EOA address or ethers signer not available, or social login is active."
       );
     }
   };
+
+  const handleDisconnect = async () => {
+    if (isSocialLoggedIn) {
+      await disconnectSocialLogin();
+    }
+    if (isConnected) {
+        wagmiDisconnect();
+    }
+    setShowSocialLogin(true);
+  };
+
+
+  if (isAAWalletInitialized && aaWalletAddress) {
+    return (
+      <Box
+        p={4}
+        borderWidth="1px"
+        borderRadius="lg"
+        shadow="md"
+        bg="gray.800"
+        color="white"
+      >
+        <VStack gap={4}>
+          {isSocialLoggedIn ? (
+            <Text>
+              Logged in via Social. Smart Account:{" "}
+              <Code colorScheme="teal">{aaWalletAddress}</Code>
+            </Text>
+          ) : (
+            <>
+              <Text>
+                Connected EOA: <Code colorScheme="purple">{eoaAddress}</Code> 
+              </Text>
+              <Text fontSize="sm">
+                Chain: {chain?.name} (ID: {chain?.id}) Connector:{" "}
+                {activeConnector?.name}
+              </Text>
+              <Text>
+                Smart Account: <Code colorScheme="teal">{aaWalletAddress}</Code>
+              </Text>
+            </>
+          )}
+          <Button
+            colorScheme="red"
+            variant="outline"
+            onClick={handleDisconnect}
+          >
+            Disconnect
+          </Button>
+        </VStack>
+      </Box>
+    );
+  }
+  
+  if (aaLoading) {
+    return (
+      <Box
+        p={4}
+        borderWidth="1px"
+        borderRadius="lg"
+        shadow="md"
+        bg="gray.800"
+        color="white"
+        textAlign="center"
+      >
+        <Spinner size="md" color="teal.300" mb={2} />
+        <Text>Initializing your lucky wallet...</Text>
+        {isSocialLoggedIn && <Text fontSize="sm">Processing social login...</Text>}
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -56,68 +132,85 @@ export const ConnectWallet: React.FC = () => {
       color="white"
     >
       <VStack gap={4}>
-        {isConnected && eoaAddress ? (
-          <>
-            <Text>
-              Connected EOA: <Code colorScheme="purple">{eoaAddress}</Code>
-            </Text>
-            <Text fontSize="sm">
-              Chain: {chain?.name} (ID: {chain?.id}) Connector:{" "}
-              {activeConnector?.name}
-            </Text>
-            {isAAWalletInitialized && aaWalletAddress ? (
-              <Text>
-                AA Wallet: <Code colorScheme="teal">{aaWalletAddress}</Code>
-              </Text>
-            ) : aaLoading ? (
-              <Spinner aria-label="Initializing AA Wallet..." />
-            ) : (
-              <Button
-                colorScheme="orange"
-                onClick={handleInitializeAA}
-                loading={aaLoading}
-                disabled={!ethersSigner || aaLoading}
-              >
-                Initialize Smart Account
-              </Button>
-            )}
-            {aaError && (
-              <Text color="red.400">AA Init Error: {aaError}</Text>
-            )}
-            <Button
-              colorScheme="red"
-              variant="outline"
-              onClick={() => disconnect()}
-            >
-              Disconnect Wallet
-            </Button>
-          </>
+        <HStack gap={2} width="100%" justifyContent="center">
+          <Button
+            colorScheme={showSocialLogin ? "teal" : "gray"}
+            onClick={() => setShowSocialLogin(true)}
+            variant={showSocialLogin ? "solid" : "outline"}
+          >
+            Quick Login (Social/Email)
+          </Button>
+          <Button
+            colorScheme={!showSocialLogin ? "teal" : "gray"}
+            onClick={() => setShowSocialLogin(false)}
+            variant={!showSocialLogin ? "solid" : "outline"}
+          >
+            Connect External Wallet
+          </Button>
+        </HStack>
+        
+        {showSocialLogin ? (
+          <SocialLogin />
         ) : (
-          <VStack>
-            {connectors
-              .filter((c) => c.type === "injected" || c.isAuthorized)
-              .map((connector) => (
+          <VStack gap={4} width="100%">
+            {isConnected && wagmiEoaAddress ? ( // Connected with Wagmi
+              <>
+                <Text>
+                  Connected EOA: <Code colorScheme="purple">{wagmiEoaAddress}</Code>
+                </Text>
+                <Text fontSize="sm">
+                  Chain: {chain?.name} (ID: {chain?.id}) Connector:{" "}
+                  {activeConnector?.name}
+                </Text>
                 <Button
-                  key={connector.name}
-                  colorScheme="blue"
-                  onClick={() => handleConnect(connector.id)}
-                  loading={status === 'pending'}
-                  disabled={status === 'pending'}
+                  colorScheme="orange"
+                  onClick={handleInitializeAA}
+                  loading={aaLoading} // aaLoading is for AA initialization
+                  disabled={!ethersSigner || aaLoading}
                 >
-                  Connect with {connector.name}
+                  Initialize Smart Account
                 </Button>
-              ))}
-            {connectors.length === 0 && (
-              <Text>
-                No wallet connectors found. Please install MetaMask.
+                {aaError && ( // AA specific error
+                  <Text color="red.400">AA Init Error: {aaError}</Text>
+                )}
+                <Button
+                  colorScheme="red"
+                  variant="outline"
+                  onClick={handleDisconnect} // Use unified disconnect
+                >
+                  Disconnect Wallet
+                </Button>
+              </>
+            ) : ( // Not connected with Wagmi
+              <VStack gap={4} width="100%">
+                {connectors
+                  .filter((c) => c.isAuthorized || c.type === "injected" || c.id === "walletConnect") // Show common connectors
+                  .map((connector) => (
+                    <Button
+                      key={connector.id} // Use id for key
+                      colorScheme="blue"
+                      onClick={() => handleConnect(connector.id)}
+                      loading={status === 'pending' && activeConnector?.id === connector.id}
+                      disabled={status === 'pending'}
+                      width="100%"
+                    >
+                      Connect with {connector.name}
+                      {status === 'pending' && activeConnector?.id === connector.id && <Spinner size="sm" ml={2} />}
+                    </Button>
+                  ))}
+                {connectors.length === 0 && (
+                  <Text>
+                    No wallet connectors found. Please install a browser wallet like MetaMask.
+                  </Text>
+                )}
+              </VStack>
+            )}
+            {wagmiConnectError && ( 
+              <Text color="red.400" mt={2}>
+                Connection Error: {wagmiConnectError.message}
               </Text>
             )}
           </VStack>
-        )}
-        {wagmiConnectError && (
-          <Text color="red.400">
-            Connection Error: {wagmiConnectError.message}
-          </Text>
         )}
       </VStack>
     </Box>
