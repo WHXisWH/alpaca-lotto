@@ -109,6 +109,16 @@ export const AAWalletProvider: React.FC<{ children: React.ReactNode }> = ({
             paymasterMiddleware: neroPaymasterMiddlewareInstance,
         };
         
+        console.log(
+          "AAWalletContext: Initializing SimpleAccount with opts:", 
+          JSON.stringify({
+            entryPoint: optsForSimpleAccount.entryPoint,
+            factory: optsForSimpleAccount.factory,
+            overrideBundlerRpc: optsForSimpleAccount.overrideBundlerRpc,
+            paymasterMiddlewareExists: !!optsForSimpleAccount.paymasterMiddleware,
+          }, null, 2)
+        );
+        
         const simpleAccountBuilder =
           await SimpleAccount.init(
             connectedEoaSigner,
@@ -117,10 +127,11 @@ export const AAWalletProvider: React.FC<{ children: React.ReactNode }> = ({
           );
         setSimpleAccount(simpleAccountBuilder);
         const _aaWalletAddress = await simpleAccountBuilder.getSender();
+        console.log("AAWalletContext: SimpleAccount initialized. AA Wallet Address:", _aaWalletAddress);
         setAaWalletAddress(_aaWalletAddress as `0x${string}`);
         setIsAAWalletInitialized(true);
       } catch (err: any) {
-        console.error("Error initializing AA Wallet:", err);
+        console.error("Error initializing AA Wallet (AAWalletContext):", err);
         setError(err.message || "Failed to initialize AA Wallet.");
         setIsAAWalletInitialized(false);
       } finally {

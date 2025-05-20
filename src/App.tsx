@@ -38,8 +38,7 @@ function App() {
   } = useAAWallet();
 
   const {
-    fetchSupportedTokens,
-    loading: paymasterLoading,
+    loading: paymasterLoading, 
     error: paymasterError,
     clearError: clearPaymasterError,
   } = usePaymaster();
@@ -62,16 +61,6 @@ function App() {
     isAAWalletInitialized,
     aaLoading,
   ]);
-
-  useEffect(() => {
-    if (
-      isAAWalletInitialized &&
-      typeof fetchSupportedTokens === "function" &&
-      !paymasterLoading
-    ) {
-      fetchSupportedTokens();
-    }
-  }, [isAAWalletInitialized, fetchSupportedTokens, paymasterLoading]);
 
   return (
     <Layout>

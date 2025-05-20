@@ -1,4 +1,3 @@
-// src/context/LotteryContext.tsx
 import React, {
   createContext,
   useContext,
@@ -16,7 +15,7 @@ import {
   RPC_URL,
 } from "../config";
 import { UserOperationBuilder, ISendUserOperationResponse as UserOpSdkResponse } from "userop";
-import { UserOperationEventEvent } from "@account-abstraction/contracts/dist/types/EntryPoint"; // 假设类型来自这里
+import { UserOperationEventEvent } from "@account-abstraction/contracts/dist/types/EntryPoint";
 
 const ERC20_ABI_MINIMAL = [
   "function allowance(address owner, address spender) view returns (uint256)",
@@ -24,6 +23,8 @@ const ERC20_ABI_MINIMAL = [
   "function decimals() view returns (uint8)",
 ];
 const LOTTO_ABI = LOTTO_ABI_JSON as any;
+
+const getReadProvider = () => new ethers.providers.JsonRpcProvider(RPC_URL);
 
 export interface Lottery {
   id: number;
@@ -95,22 +96,22 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
   });
 
   const getLotteryContractReader = useCallback(() => {
-    const readerProvider = aaWalletContext.provider || new ethers.providers.JsonRpcProvider(RPC_URL);
+    const readerProvider = getReadProvider();
     return new ethers.Contract(
       LOTTERY_CONTRACT_ADDRESS,
       LOTTO_ABI,
       readerProvider
     );
-  }, [aaWalletContext.provider]);
+  }, []);
 
   const getUsdcContractReader = useCallback(() => {
-    const readerProvider = aaWalletContext.provider || new ethers.providers.JsonRpcProvider(RPC_URL);
+    const readerProvider = getReadProvider();
     return new ethers.Contract(
       USDC_TOKEN_ADDRESS,
       ERC20_ABI_MINIMAL,
       readerProvider
     );
-  }, [aaWalletContext.provider]);
+  }, []);
 
   const clearTransactionState = useCallback(() => {
     setTransaction({
@@ -126,7 +127,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
     const contract = getLotteryContractReader();
     if (!contract) return;
     try {
-      setTransaction((prev) => ({ ...prev, loading: true, step: "idle" }));
+      setTransaction((prev) => ({ ...prev, loading: true, error: null, successMessage: null, step: "idle" }));
       const fetchedLotteries: Lottery[] = [];
       const lotteryCountBN = await contract.lotteryCounter();
       const lotteryCount = lotteryCountBN.toNumber();
@@ -158,12 +159,13 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
           console.warn(`Failed to fetch or validate lottery with ID ${lotteryId}:`, result.status === "rejected" ? result.reason : "Invalid data");
         }
       });
-
+      
       setLotteries(fetchedLotteries.sort((a, b) => a.id - b.id));
-      setTransaction((prev) => ({ ...prev, loading: false }));
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to fetch lotteries:", error);
-      setTransaction((prev) => ({ ...prev, loading: false, error: "Failed to fetch lotteries" }));
+      setTransaction((prev) => ({ ...prev, error: error?.message || "Failed to fetch lotteries" }));
+    } finally {
+        setTransaction((prev) => ({ ...prev, loading: false }));
     }
   }, [getLotteryContractReader]);
 
@@ -191,15 +193,17 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
           );
           const lotteryDetails = lotteries.find((l) => l.id === lotteryId);
 
+          const newEntry = { lotteryId, ticketNumbers, lotteryName: lotteryDetails?.name || `ID ${lotteryId}` };
+
           if (existingEntryIndex > -1) {
+            if (JSON.stringify(prev[existingEntryIndex].ticketNumbers.sort()) === JSON.stringify(ticketNumbers.sort())) {
+                return prev;
+            }
             const updatedPrev = [...prev];
-            updatedPrev[existingEntryIndex] = { ...updatedPrev[existingEntryIndex], ticketNumbers, lotteryName: lotteryDetails?.name };
+            updatedPrev[existingEntryIndex] = newEntry;
             return updatedPrev;
           } else if (ticketNumbers.length > 0) {
-            return [
-              ...prev,
-              { lotteryId, ticketNumbers, lotteryName: lotteryDetails?.name },
-            ];
+            return [...prev, newEntry];
           }
           return prev;
         });
@@ -452,7 +456,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [
     aaWalletContext.isAAWalletInitialized,
     aaWalletContext.aaWalletAddress,
-    lotteries,
+    lotteries, // This will trigger if lotteries array reference changes
     fetchOwnedLotteryTickets,
   ]);
 
