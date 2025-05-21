@@ -6,6 +6,8 @@ import {
   HStack,
   Spinner,
   Link,
+  Flex,
+  Spacer
 } from "@chakra-ui/react";
 import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/tag";
@@ -58,9 +60,9 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
   } = useAAWallet();
 
   const [quantity, setQuantity] = useState<number>(1);
-  const [isEstimating, setIsEstimating] = useState<boolean>(false); // For fetchUSDCData loading
   const [usdcAllowance, setUsdcAllowance] = useState<BigNumber>(BigNumber.from(0));
   const [usdcBalance, setUsdcBalance] = useState<BigNumber>(BigNumber.from(0));
+  const [isDataLoading, setIsDataLoading] = useState<boolean>(false);
   const [isAllowanceSufficient, setIsAllowanceSufficient] = useState<boolean>(false);
   const [isBalanceSufficient, setIsBalanceSufficient] = useState<boolean>(false);
 
@@ -68,27 +70,14 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
   const prevPaymasterErrorRef = useRef<string | null>(null);
   const prevSuccessMessageRef = useRef<string | null>(null);
 
-  const formattedUsdcBalance = useMemo(
-    () => ethers.utils.formatUnits(usdcBalance, USDC_DECIMALS),
-    [usdcBalance]
-  );
-
-  const formattedUsdcAllowance = useMemo(() => {
-    if (usdcAllowance.eq(ethers.constants.MaxUint256)) {
-      return "Unlimited";
-    }
-    return ethers.utils.formatUnits(usdcAllowance, USDC_DECIMALS);
-  }, [usdcAllowance]);
-
-
-  const fetchUSDCData = useCallback(async () => {
-    setIsEstimating(true);
+  const fetchLotteryCardData = useCallback(async () => {
+    setIsDataLoading(true);
     if (!aaWalletAddress || !lottery || quantity <= 0) {
       setUsdcAllowance(BigNumber.from(0));
       setUsdcBalance(BigNumber.from(0));
       setIsAllowanceSufficient(false);
       setIsBalanceSufficient(false);
-      setIsEstimating(false);
+      setIsDataLoading(false);
       return;
     }
     try {
@@ -118,21 +107,21 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
       }
 
     } catch (e) {
-      console.warn("Error fetching USDC data:", e);
+      console.warn("Error fetching USDC data for card:", e);
       setUsdcAllowance(BigNumber.from(0));
       setUsdcBalance(BigNumber.from(0));
       setIsAllowanceSufficient(false);
       setIsBalanceSufficient(false);
     } finally {
-      setIsEstimating(false);
+      setIsDataLoading(false);
     }
   }, [aaWalletAddress, lottery, quantity]);
 
   useEffect(() => {
     if (isAAWalletInitialized && lottery) {
-      fetchUSDCData();
+        fetchLotteryCardData();
     }
-  }, [isAAWalletInitialized, lottery, quantity, fetchUSDCData, transaction.successMessage]);
+  }, [isAAWalletInitialized, lottery, quantity, fetchLotteryCardData, transaction.successMessage]);
 
   useEffect(() => {
     if (
@@ -148,7 +137,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
 
     let gasEstimateDebounceTimer: NodeJS.Timeout;
     const doEstimate = async () => {
-        setIsEstimating(true); // This is for fetchUSDCData, maybe rename for gas estimation or use a separate state
+        setIsDataLoading(true); 
         if (clearPaymasterError) clearPaymasterError();
         prevPaymasterErrorRef.current = null;
         try {
@@ -168,7 +157,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
         } catch (e: any) {
             console.error("Error directly in doEstimate (TicketCard):", e);
         } finally {
-            setIsEstimating(false); // This is for fetchUSDCData, maybe rename for gas estimation or use a separate state
+            setIsDataLoading(false); 
         }
     };
 
@@ -216,7 +205,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
       } else {
         setTimeout(() => toaster.create({ title: "Approval Successful", description: `USDC approved. You can now purchase tickets. Tx: ${approveResult.approvalTxHash}`, type: "success" }), 0);
         prevSuccessMessageRef.current = `USDC approved. You can now purchase tickets. Tx: ${approveResult.approvalTxHash}`;
-        fetchUSDCData();
+        fetchLotteryCardData();
       }
       return;
     }
@@ -312,7 +301,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
 
   const getGasPaymentDisplay = () => {
     const gasEstimatingForPaymaster = paymasterLoading && !gasCost.native && !gasCost.erc20 && !paymasterError;
-    if (gasEstimatingForPaymaster) return "Gas: Estimating...";
+    if (gasEstimatingForPaymaster || (isDataLoading && !paymasterError)) return "Gas: Estimating...";
     if (paymasterError && !gasCost.native && !gasCost.erc20) return "Gas: Estimation Failed";
 
     if (selectedPaymasterType === PaymasterType.NATIVE)
@@ -327,7 +316,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
       return `Gas: ${
         gasCost.erc20.formatted || "N/A"
       } ${selectedToken.symbol}`;
-    if (paymasterError) return "Gas: Estimation Failed"; // Catch all for other paymaster errors after options
+    if (paymasterError) return "Gas: Estimation Failed";
     return "Gas: Select payment option";
   };
 
@@ -335,6 +324,19 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
   const isLotteryActive = now >= lottery.startTime && now < lottery.endTime;
   const isLotteryEndedAwaitingDraw = now >= lottery.endTime && !lottery.drawn;
   const isLotteryNotStarted = now < lottery.startTime;
+  const isLotteryDrawn = lottery.drawn;
+
+  let statusTag;
+  if (isLotteryDrawn) {
+    statusTag = <Tag colorScheme="red" variant="solid" size="sm">Drawn</Tag>;
+  } else if (isLotteryActive) {
+    statusTag = <Tag colorScheme="green" variant="solid" size="sm">Active</Tag>;
+  } else if (isLotteryNotStarted) {
+    statusTag = <Tag colorScheme="yellow" variant="solid" size="sm">Not Started</Tag>;
+  } else if (isLotteryEndedAwaitingDraw) {
+    statusTag = <Tag colorScheme="orange" variant="solid" size="sm">Awaiting Draw</Tag>;
+  }
+
 
   const buttonText = !isBalanceSufficient ? "Insufficient USDC Balance" : !isAllowanceSufficient ? "Approve USDC" : "Purchase Tickets";
 
@@ -345,30 +347,25 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
       p={4}
       shadow="md"
       bg="gray.700"
-      color="white"
+      color="whiteAlpha.900"
     >
       <VStack align="stretch" gap={3}>
-        <Text fontSize="xl" fontWeight="bold" color="teal.300">
-          {lottery.name} (ID: {lottery.id})
-        </Text>
-        <Text>Ticket Price: {formattedTicketPrice} USDC</Text>
-        <Text>
-          Your USDC Balance: {formattedUsdcBalance}
-          {isEstimating && ' (loading…)'}
-        </Text>
-        <Text>Your USDC Allowance: {formattedUsdcAllowance}</Text>
-        <Text>
+        <Flex alignItems="center" justifyContent="space-between">
+            <Text fontSize="xl" fontWeight="bold" color="teal.300" noOfLines={1} textOverflow="ellipsis" mr={2}>
+              {lottery.name}
+            </Text>
+            {statusTag}
+        </Flex>
+        
+        <Text fontSize="sm" color="gray.300">Ticket Price: {formattedTicketPrice} USDC</Text>
+        <Text fontSize="sm" color="gray.300">
           Draw Time: {new Date(lottery.drawTime * 1000).toLocaleString()}
         </Text>
-        {lottery.drawn && <Tag colorScheme="red">Drawn</Tag>}
-        {!lottery.drawn && isLotteryActive && <Tag colorScheme="green">Active</Tag>}
-        {isLotteryNotStarted && <Tag colorScheme="yellow">Not Started</Tag>}
-        {isLotteryEndedAwaitingDraw && <Tag colorScheme="orange">Ended - Awaiting Draw</Tag>}
       </VStack>
 
       <VStack align="stretch" gap={3} mt={4}>
         <HStack>
-          <Text>Quantity:</Text>
+          <Text fontSize="sm" color="gray.300">Quantity:</Text>
           <NumberInputRoot
             size="sm"
             maxW="80px"
@@ -378,13 +375,18 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
                 const val = details.valueAsNumber;
                 setQuantity(isNaN(val) || val < 1 ? 1 : val);
             }}
-            disabled={transaction.loading || lottery.drawn || !isLotteryActive}
+            disabled={transaction.loading || isLotteryDrawn || !isLotteryActive}
           >
-            <NumberInputField />
+            <NumberInputField 
+              bg="gray.600" 
+              borderColor="gray.500" 
+              _hover={{borderColor: "gray.400"}}
+              _focus={{borderColor: "teal.300", boxShadow: `0 0 0 1px teal.300`}}
+            />
           </NumberInputRoot>
         </HStack>
-        <Text fontWeight="bold">Total Cost: {formattedTotalCost} USDC</Text>
-        <Text fontSize="sm" color="gray.400">
+        <Text fontWeight="bold" fontSize="md" color="whiteAlpha.900">Total Cost: {formattedTotalCost} USDC</Text>
+        <Text fontSize="xs" color="gray.400">
           {getGasPaymentDisplay()}
         </Text>
         <Button
@@ -393,32 +395,28 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
           loading={transaction.loading && (transaction.step === "approving" || transaction.step === "purchasing" || transaction.step === "fetchingReceipt")}
           disabled={
             transaction.loading ||
-            lottery.drawn ||
+            isLotteryDrawn ||
             !isLotteryActive ||
-            (!isBalanceSufficient)
+            (!isBalanceSufficient) ||
+            isDataLoading 
           }
         >
-          {transaction.loading ? (
+          {transaction.loading || isDataLoading ? (
             <Spinner size="sm" />
           ) : (
             buttonText
           )}
         </Button>
-        {isLotteryEndedAwaitingDraw && (
-          <Text color="yellow.400" fontSize="sm">
-            Lottery ended, awaiting draw.
-          </Text>
-        )}
-        {isLotteryNotStarted && (
-          <Text color="yellow.400" fontSize="sm">
-            Lottery has not started yet.
-          </Text>
+        {!isLotteryActive && !isLotteryDrawn && (
+            <Text color={isLotteryNotStarted ? "yellow.400" : "orange.400"} fontSize="xs" textAlign="center">
+                {isLotteryNotStarted ? "Lottery has not started yet." : "Lottery ended, awaiting draw."}
+            </Text>
         )}
          {!isBalanceSufficient && isLotteryActive && (
-             <Text color="red.400" fontSize="sm">Please ensure you have enough USDC in your smart account.</Text>
+             <Text color="red.400" fontSize="xs" textAlign="center">Please ensure you have enough USDC.</Text>
          )}
          {isBalanceSufficient && !isAllowanceSufficient && isLotteryActive && (
-             <Text color="orange.300" fontSize="sm">USDC spending needs to be approved for the lottery contract.</Text>
+             <Text color="orange.300" fontSize="xs" textAlign="center">USDC spending needs to be approved.</Text>
          )}
       </VStack>
     </Box>

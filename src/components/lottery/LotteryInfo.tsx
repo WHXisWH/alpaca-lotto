@@ -5,8 +5,12 @@ import {
   SimpleGrid,
   Spinner,
   VStack,
+  Flex,
+  Spacer,
+  Heading,
 } from "@chakra-ui/react";
 import { StatRoot, StatLabel, StatValueText, StatHelpText } from "@/components/ui/stat";
+import { Tag } from "@/components/ui/tag";
 import { useLottery } from "@/context/LotteryContext";
 import { ethers } from "ethers";
 import { USDC_DECIMALS } from "@/config";
@@ -15,30 +19,85 @@ export const LotteryInfo: React.FC = () => {
   const { lotteries, transaction } = useLottery();
 
   if (transaction.loading && lotteries.length === 0) {
-    return <Spinner />;
+    return (
+        <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg" bg="gray.700" color="white" minH="200px" display="flex" alignItems="center" justifyContent="center">
+            <Spinner color="teal.300" size="xl"/>
+        </Box>
+    );
   }
   if (lotteries.length === 0) {
-    return <Text>No lottery information available.</Text>;
+    return (
+        <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg" bg="gray.700" color="white">
+            <Text>No current lottery information available.</Text>
+        </Box>
+    );
   }
-  const currentLottery = lotteries[0];
+  
+  const currentLottery = lotteries.reduce((prev, curr) => {
+    const now = new Date().getTime() / 1000;
+    if (curr.endTime > now && curr.startTime <= now) return curr; 
+    if (prev.endTime > now && prev.startTime <= now) return prev; 
+    return curr.endTime > prev.endTime ? curr : prev; 
+  }, lotteries[0]);
+
+
+  if (!currentLottery) {
+    return (
+        <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg" bg="gray.700" color="white">
+            <Text>No suitable current lottery found.</Text>
+        </Box>
+    );
+  }
+
+  const now = new Date().getTime() / 1000;
+  const isLotteryActive = now >= currentLottery.startTime && now < currentLottery.endTime;
+  const isLotteryEndedAwaitingDraw = now >= currentLottery.endTime && !currentLottery.drawn;
+  const isLotteryNotStarted = now < currentLottery.startTime;
+  const isLotteryDrawn = currentLottery.drawn;
+
+  let statusTag;
+  let statusHelpText = "";
+
+  if (isLotteryDrawn) {
+    statusTag = <Tag colorScheme="red" variant="solid">Drawn</Tag>;
+    statusHelpText = "Lottery has been drawn.";
+  } else if (isLotteryActive) {
+    statusTag = <Tag colorScheme="green" variant="solid">Active</Tag>;
+    statusHelpText = "Lottery is currently active for ticket purchase.";
+  } else if (isLotteryNotStarted) {
+    statusTag = <Tag colorScheme="yellow" variant="solid">Not Started</Tag>;
+    statusHelpText = `Starts at: ${new Date(currentLottery.startTime * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  } else if (isLotteryEndedAwaitingDraw) {
+    statusTag = <Tag colorScheme="orange" variant="solid">Awaiting Draw</Tag>;
+    statusHelpText = "Ticket sales ended. Waiting for draw.";
+  }
+
 
   return (
     <Box
       p={5}
-      shadow="md"
+      shadow="xl"
       borderWidth="1px"
-      borderRadius="lg"
-      bg="gray.700"
-      color="white"
+      borderRadius="xl"
+      bg="gray.750"
+      borderColor="gray.600"
+      color="whiteAlpha.900"
     >
       <VStack align="stretch" gap={4}>
-        <Text fontSize="2xl" fontWeight="bold" mb={3} color="teal.300">
-          Current Lottery: {currentLottery.name} (ID: {currentLottery.id})
-        </Text>
-        <SimpleGrid columns={{ base: 1, md: 2 }} gap={5}>
+        <Flex alignItems="center" wrap="wrap">
+          <Heading size="lg" color="teal.300" mr={3}>
+            Current Lottery: {currentLottery.name}
+          </Heading>
+          <Text fontSize="md" color="gray.400" mr={3}>
+            (ID: {currentLottery.id})
+          </Text>
+          <Spacer display={{base: "none", md: "block"}} />
+          {statusTag}
+        </Flex>
+        <SimpleGrid columns={{ base: 1, sm: 2, md:3 }} gap={{base:3, md:5}}>
           <StatRoot>
-            <StatLabel>Ticket Price</StatLabel>
-            <StatValueText>
+            <StatLabel color="gray.400">Ticket Price</StatLabel>
+            <StatValueText color="whiteAlpha.900" fontSize="lg">
               {ethers.utils.formatUnits(
                 currentLottery.ticketPrice,
                 USDC_DECIMALS
@@ -47,12 +106,12 @@ export const LotteryInfo: React.FC = () => {
             </StatValueText>
           </StatRoot>
           <StatRoot>
-            <StatLabel>Total Tickets Sold</StatLabel>
-            <StatValueText>{currentLottery.totalTickets.toString()}</StatValueText>
+            <StatLabel color="gray.400">Total Tickets Sold</StatLabel>
+            <StatValueText color="whiteAlpha.900" fontSize="lg">{currentLottery.totalTickets.toString()}</StatValueText>
           </StatRoot>
           <StatRoot>
-            <StatLabel>Current Prize Pool</StatLabel>
-            <StatValueText>
+            <StatLabel color="gray.400">Current Prize Pool</StatLabel>
+            <StatValueText color="whiteAlpha.900" fontSize="lg">
               {ethers.utils.formatUnits(
                 currentLottery.prizePool,
                 USDC_DECIMALS
@@ -61,31 +120,29 @@ export const LotteryInfo: React.FC = () => {
             </StatValueText>
           </StatRoot>
           <StatRoot>
-            <StatLabel>Draw Date</StatLabel>
-            <StatValueText>
-              {new Date(currentLottery.drawTime * 1000).toLocaleString()}
+            <StatLabel color="gray.400">Draw Date</StatLabel>
+            <StatValueText color="whiteAlpha.900" fontSize="lg">
+              {new Date(currentLottery.drawTime * 1000).toLocaleDateString()}
             </StatValueText>
-            <StatHelpText>
-              {currentLottery.drawn
-                ? "Lottery Drawn"
-                : new Date().getTime() / 1000 > currentLottery.endTime
-                ? "Lottery Ended - Awaiting Draw"
-                : new Date().getTime() / 1000 < currentLottery.startTime
-                ? "Not Started Yet"
-                : "Ongoing"}
+            <StatHelpText color="gray.500">
+                {new Date(currentLottery.drawTime * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </StatHelpText>
           </StatRoot>
           <StatRoot>
-            <StatLabel>Lottery Start Time</StatLabel>
-            <StatValueText>
-              {new Date(currentLottery.startTime * 1000).toLocaleString()}
+            <StatLabel color="gray.400">Sale Ends</StatLabel>
+            <StatValueText color="whiteAlpha.900" fontSize="lg">
+              {new Date(currentLottery.endTime * 1000).toLocaleDateString()}
             </StatValueText>
+             <StatHelpText color="gray.500">
+                {new Date(currentLottery.endTime * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </StatHelpText>
           </StatRoot>
-          <StatRoot>
-            <StatLabel>Lottery End Time</StatLabel>
-            <StatValueText>
-              {new Date(currentLottery.endTime * 1000).toLocaleString()}
+           <StatRoot>
+            <StatLabel color="gray.400">Status</StatLabel>
+            <StatValueText color="whiteAlpha.900" fontSize="lg">
+              {isLotteryDrawn ? "Drawn" : isLotteryActive ? "Active" : isLotteryNotStarted ? "Not Started" : "Awaiting Draw"}
             </StatValueText>
+            <StatHelpText color="gray.500">{statusHelpText}</StatHelpText>
           </StatRoot>
         </SimpleGrid>
       </VStack>

@@ -1,19 +1,20 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Box,
   VStack,
-  HStack, 
+  HStack,
   Heading,
   Text,
   Spinner,
   Code,
   Icon,
-  Portal,
-  Button as ChakraButton, 
+  Flex,
+  Spacer,
 } from "@chakra-ui/react";
-import { CloseButton } from "@/components/ui/close-button";
-import { Alert } from "@/components/ui/alert";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { Button as UIButton } from "@/components/ui/button";
+import { CloseButton as UICloseButton } from "@/components/ui/close-button";
+import { Alert as UIAlert } from "@/components/ui/alert";
+import { useAccount, useDisconnect } from "wagmi";
 import { useEthersSigner } from "./utils/ethersAdapters";
 import { Layout } from "./components/layout";
 import { ConnectWallet } from "./components/common";
@@ -26,7 +27,14 @@ import {
 import { Web2UserDashboardMockup } from "./components/web2_user/Web2UserDashboardMockup";
 import { useAAWallet } from "./context/AAWalletContext";
 import { usePaymaster } from "./context/PaymasterContext";
-import { MdWarning, MdInfo } from "react-icons/md";
+import { MdWarning, MdInfo, MdCopyAll, MdRefresh, MdExpandMore, MdExpandLess } from "react-icons/md";
+import { ethers, BigNumber } from "ethers";
+import { USDC_TOKEN_ADDRESS, USDC_DECIMALS, RPC_URL } from "./config";
+import { toaster } from "@/components/ui/toaster";
+
+const ERC20_ABI_MINIMAL = [
+  "function balanceOf(address account) view returns (uint256)",
+];
 
 function App() {
   const { address: wagmiEoaAddress, isConnected, chain, connector: activeConnector } = useAccount();
@@ -50,7 +58,51 @@ function App() {
     clearError: clearPaymasterError,
   } = usePaymaster();
 
+  const [usdcBalance, setUsdcBalance] = useState<string>("0.00");
+  const [isBalanceLoading, setIsBalanceLoading] = useState<boolean>(false);
+  const [isGasPanelOpen, setIsGasPanelOpen] = useState<boolean>(true);
+
+  const toggleGasPanel = () => setIsGasPanelOpen(!isGasPanelOpen);
+
   const alpacaAppBg = "gray.850";
+  const globalInfoBg = "gray.750";
+  const borderColor = "gray.600";
+
+  const fetchUSDCBalance = useCallback(async () => {
+    if (!aaWalletAddress || !isAAWalletInitialized) {
+      setUsdcBalance("0.00");
+      return;
+    }
+    setIsBalanceLoading(true);
+    try {
+      const readerProvider = new ethers.providers.JsonRpcProvider(RPC_URL);
+      const usdcContract = new ethers.Contract(
+        USDC_TOKEN_ADDRESS,
+        ERC20_ABI_MINIMAL,
+        readerProvider
+      );
+      const balanceBN: BigNumber = await usdcContract.balanceOf(aaWalletAddress);
+      const formattedBalance = ethers.utils.formatUnits(balanceBN, USDC_DECIMALS);
+      const numberBalance = parseFloat(formattedBalance);
+      if (isNaN(numberBalance)) {
+        setUsdcBalance("Error");
+      } else {
+        setUsdcBalance(numberBalance.toFixed(2));
+      }
+    } catch (e) {
+      console.error("Failed to fetch USDC balance:", e);
+      setUsdcBalance("Error");
+      toaster.create({ title: "Balance Error", description: "Could not fetch USDC balance.", type: "error" });
+    } finally {
+      setIsBalanceLoading(false);
+    }
+  }, [aaWalletAddress, isAAWalletInitialized]);
+
+  useEffect(() => {
+    if (isAAWalletInitialized) {
+      fetchUSDCBalance();
+    }
+  }, [isAAWalletInitialized, fetchUSDCBalance]);
 
   useEffect(() => {
     if (
@@ -95,33 +147,28 @@ function App() {
     if (isConnected) {
       wagmiDisconnect();
     }
+    setUsdcBalance("0.00");
   };
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      toaster.create({ title: "Copied!", description: "Address copied to clipboard.", type: "success" });
+    }).catch(err => {
+      toaster.create({ title: "Copy Failed", description: "Could not copy address.", type: "error" });
+    });
+  };
 
   return (
     <Layout>
       <Box bg={alpacaAppBg} p={{base:2, md:4}} borderRadius="xl" minH="80vh">
-        <VStack gap={6} align="stretch" width="100%" pb={10}>
-          <Box textAlign="center" mt={4} mb={2}>
-            {/* Logo already in Layout header, this is main title */}
-            <Heading as="h1" size="2xl" mb={2}
-              bgGradient="linear(to-r, teal.300, green.400, orange.300)" // Alpaca-themed gradient
-              bgClip="text"
-            >
-              Alpaca Lotto
-            </Heading>
-            <Text fontSize="lg" color="gray.300">
-              Experience the future of lottery with Account Abstraction!
-            </Text>
-          </Box>
-
-          {!isAAWalletInitialized && <ConnectWallet />}
+        <VStack gap={4} align="stretch" width="100%">
+          {!isAAWalletInitialized && !aaLoading && <ConnectWallet />}
           
           {aaError && (
-            <Alert
+            <UIAlert
               status="error"
               variant="solid"
-              mt={4}
+              mt={2}
               bg="red.800"
               borderColor="red.600"
               icon={<Icon as={MdWarning} boxSize={5} color="red.200" />}
@@ -130,7 +177,7 @@ function App() {
                   <Text fontWeight="bold" color="red.100">Account Error</Text>
                   <Text fontSize="sm" color="red.200">{aaError}</Text>
               </VStack>
-              <CloseButton
+              <UICloseButton
                 onClick={clearAAError}
                 position="absolute"
                 right="8px"
@@ -139,14 +186,14 @@ function App() {
                 color="red.200"
                 _hover={{bg: "red.700"}}
               />
-            </Alert>
+            </UIAlert>
           )}
 
           {paymasterError && (
-            <Alert
+            <UIAlert
               status="error"
               variant="solid"
-              mt={4}
+              mt={2}
               bg="red.800"
               borderColor="red.600"
               icon={<Icon as={MdWarning} boxSize={5} color="red.200" />}
@@ -155,7 +202,7 @@ function App() {
                   <Text fontWeight="bold" color="red.100">System Error</Text>
                   <Text fontSize="sm" color="red.200">{paymasterError}</Text>
               </VStack>
-              <CloseButton
+              <UICloseButton
                 onClick={clearPaymasterError}
                 position="absolute"
                 right="8px"
@@ -164,48 +211,120 @@ function App() {
                 color="red.200"
                  _hover={{bg: "red.700"}}
               />
-            </Alert>
+            </UIAlert>
           )}
 
           {loadingMessage && (
-              <VStack bg="gray.750" p={4} borderRadius="lg" gap={3} alignItems="center" shadow="lg" borderColor="gray.600" borderWidth="1px">
+              <VStack bg="gray.750" p={4} borderRadius="lg" gap={3} alignItems="center" shadow="lg" borderColor="gray.600" borderWidth="1px" mt={2}>
                   <Spinner size="lg" color="green.300" borderWidth="4px" animationDuration="0.45s" />
                   <Text color="whiteAlpha.800" fontWeight="medium">{loadingMessage}</Text>
               </VStack>
           )}
 
-
           {isAAWalletInitialized && aaWalletAddress && (
-               <Box p={4} borderWidth="1px" borderRadius="lg" bg="gray.750" mt={isSocialLoggedIn ? 0 : 4} borderColor="gray.600" shadow="md">
-                  {isSocialLoggedIn ? (
-                      <VStack align="start" gap={1}>
-                          <HStack gap={2}><Icon as={MdInfo} color="green.300" boxSize={5}/><Text fontWeight="bold" color="green.300">Your Alpaca Lotto Smart Account is Ready!</Text></HStack>
-                          <Text fontSize="sm" color="gray.300">Smart Account Address:</Text>
-                          <Code colorPalette="green" variant="outline" p={1} display="block" overflowX="auto" fontSize="xs" borderRadius="sm">{aaWalletAddress}</Code>
-                          <Text fontSize="xs" color="gray.500" mt={1}>This is your unique address for playing Alpaca Lotto.</Text>
-                      </VStack>
-                  ) : (
-                      <VStack align="start" gap={1}>
-                          <HStack gap={2}><Icon as={MdInfo} color="green.300" boxSize={5}/><Text fontWeight="bold" color="green.300">Smart Account Initialized!</Text></HStack>
-                          <Text fontSize="sm" color="gray.300">Connected EOA (External Wallet):</Text>
-                          <Code colorPalette="purple" variant="outline" p={1} display="block" overflowX="auto" fontSize="xs" borderRadius="sm">{eoaAddress}</Code>
-                          <Text fontSize="xs" color="gray.500">Chain: {chain?.name || "N/A"}, Connector: {activeConnector?.name || "N/A"}</Text>
-                          
-                          <Text fontSize="sm" color="gray.300" mt={2}>Smart Account Address:</Text>
-                          <Code colorPalette="green" variant="outline" p={1} display="block" overflowX="auto" fontSize="xs" borderRadius="sm">{aaWalletAddress}</Code>
-                       </VStack>
-                  )}
-                   <ChakraButton variant="plain" size="sm" onClick={handleDisconnectApp} mt={3} colorPalette="orange">
-                      Disconnect
-                  </ChakraButton>
+            <Box 
+              p={3} 
+              borderWidth="1px" 
+              borderRadius="lg" 
+              bg={globalInfoBg} 
+              borderColor={borderColor} 
+              shadow="md"
+            >
+              <Flex direction={{base: "column", md: "row"}} alignItems={{base: "flex-start", md: "center"}} gap={{base: 2, md: 4}}>
+                <Box>
+                  <Text fontSize="xs" color="gray.400">Smart Account:</Text>
+                  <HStack>
+                    <Code 
+                      color="green.300" 
+                      variant="plain"
+                      bg="transparent"
+                      px={1} 
+                      fontSize="sm"
+                      fontWeight="medium"
+                    >
+                      {`${aaWalletAddress.substring(0, 6)}...${aaWalletAddress.substring(aaWalletAddress.length - 4)}`}
+                    </Code>
+                    <UIButton
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => copyToClipboard(aaWalletAddress)}
+                      color="gray.400"
+                      _hover={{ color: "teal.300", bg:"gray.600" }}
+                      aria-label="Copy address"
+                      px={1}
+                      minW="auto"
+                    >
+                      <Icon as={MdCopyAll} boxSize={4}/>
+                    </UIButton>
+                  </HStack>
+                </Box>
+                <Box>
+                  <Text fontSize="xs" color="gray.400">USDC Balance:</Text>
+                  <HStack>
+                    <Text fontSize="sm" color="whiteAlpha.800" fontWeight="medium">
+                      {isBalanceLoading ? <Spinner size="xs" /> : `${usdcBalance} USDC`}
+                    </Text>
+                     <UIButton
+                        size="xs"
+                        variant="ghost"
+                        onClick={fetchUSDCBalance}
+                        color="gray.400"
+                        _hover={{ color: "teal.300", bg:"gray.600" }}
+                        aria-label="Refresh Balance"
+                        loading={isBalanceLoading}
+                        px={1}
+                        minW="auto"
+                    >
+                       <Icon as={MdRefresh} boxSize={4} />
+                     </UIButton>
+                  </HStack>
+                </Box>
+                <Spacer display={{base:"none", md:"block"}}/>
+                <UIButton 
+                    variant="solid" 
+                    colorScheme="red" 
+                    bg="red.500"
+                    color="white"
+                    _hover={{bg: "red.600"}}
+                    _active={{bg: "red.700"}}
+                    size="sm" 
+                    onClick={handleDisconnectApp} 
+                    mt={{base: 2, md: 0}}
+                >
+                  Disconnect
+                </UIButton>
+              </Flex>
+              
+              <Box mt={3} borderWidth="1px" borderColor={borderColor} borderRadius="md">
+                <Flex 
+                  as="header" 
+                  p={3} 
+                  onClick={toggleGasPanel} 
+                  cursor="pointer" 
+                  alignItems="center" 
+                  bg="gray.700"
+                  _hover={{bg: "gray.650"}}
+                  borderTopRadius="md"
+                  borderBottomRadius={isGasPanelOpen ? "none" : "md"}
+                  borderBottomWidth={isGasPanelOpen ? "1px" : "0px"}
+                  borderColor={borderColor}
+                >
+                  <Heading size="sm" color="teal.300">Gas Payment Options</Heading>
+                  <Spacer />
+                  <Icon as={isGasPanelOpen ? MdExpandLess : MdExpandMore} boxSize={6} color="gray.400"/>
+                </Flex>
+                {isGasPanelOpen && (
+                  <Box borderBottomRadius="md" borderTopWidth="1px" borderColor={borderColor}>
+                     <PaymasterSettings />
+                  </Box>
+                )}
               </Box>
+            </Box>
           )}
           
-
           {isAAWalletInitialized && (
-            <VStack gap={8} width="100%">
+            <VStack gap={6} width="100%" pt={4}>
               {isSocialLoggedIn && <Web2UserDashboardMockup />}
-              <PaymasterSettings />
               <LotteryInfo />
               <TicketGrid />
               <OwnedTickets />
@@ -213,11 +332,10 @@ function App() {
           )}
           
           {!isAAWalletInitialized && !aaLoading && !loadingMessage && (
-             <Text textAlign="center" mt={8} color="gray.400">
+             <Text textAlign="center" mt={8} color="gray.400" pb={10}>
                Please choose a login method to start your Alpaca Lotto adventure!
              </Text>
           )}
-
         </VStack>
       </Box>
     </Layout>
