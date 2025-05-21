@@ -24,11 +24,11 @@ import {
   Icon as ChakraIcon,
   Separator,
   Portal,
+  Skeleton,
 } from "@chakra-ui/react";
 import { Button } from "@/components/ui/button";
 import { CloseButton as UICloseButton } from "@/components/ui/close-button";
-import { FaCreditCard, FaCoins, FaQuestionCircle, FaRobot } from "react-icons/fa";
-
+import { FaCreditCard, FaCoins, FaQuestionCircle, FaRobot, FaPaperPlane } from "react-icons/fa";
 
 export const Web2UserDashboardMockup: React.FC = () => {
   const { open: isCreditCardModalOpen, onOpen: onCreditCardModalOpen, onClose: onCreditCardModalClose } = useDisclosure();
@@ -41,6 +41,13 @@ export const Web2UserDashboardMockup: React.FC = () => {
   const [aiBotMessage, setAiBotMessage] = useState("");
   const [aiBotResponses, setAiBotResponses] = useState<{user: string, bot: string}[]>([]);
   const [isBotTyping, setIsBotTyping] = useState(false);
+
+  const cardBg = "gray.750";
+  const alpacaNatureGreen = "green.400";
+  const alpacaSupportBlue = "blue.400";
+
+  const [isBotIconLoaded, setIsBotIconLoaded] = useState(false);
+  const [isBotAvatarLoaded, setIsBotAvatarLoaded] = useState(false);
 
   const handleCreditCardSubmit = () => {
     if (!creditCardAmount || parseFloat(creditCardAmount) <= 0) {
@@ -90,7 +97,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
 
 
   return (
-    <Box p={5} shadow="lg" borderWidth="1px" borderRadius="xl" bg="gray.700" color="white" mt={6} borderColor="gray.600">
+    <Box p={{base:3, md:5}} shadow="xl" borderWidth="1px" borderRadius="xl" bg="gray.800" color="whiteAlpha.900" mt={6} borderColor="gray.700">
       <VStack align="stretch" gap={5}>
         <Heading as="h3" size="lg" textAlign="center" color="teal.300">
           Your Alpaca Lotto Dashboard
@@ -99,15 +106,15 @@ export const Web2UserDashboardMockup: React.FC = () => {
           Manage your funds and get help here. Let's get you ready to play!
         </Text>
         
-        <Separator my={2} borderColor="gray.500"/>
+        <Separator my={3} borderColor="gray.600"/>
 
 
         <SimpleGrid columns={{base: 1, md: 2}} gap={6}>
-            <Card.Root bg="gray.600" shadow="md" borderRadius="lg">
-                <Card.Body>
+            <Card.Root bg={cardBg} shadow="lg" borderRadius="xl" borderColor="gray.600" borderWidth="1px">
+                <Card.Body p={5}>
                     <VStack gap={4} align="stretch">
-                        <HStack gap={2}>
-                            <ChakraIcon as={FaCreditCard} w={6} h={6} color="blue.300" />
+                        <HStack gap={3}>
+                            <ChakraIcon as={FaCreditCard} w={6} h={6} color={alpacaSupportBlue} />
                             <Heading size="md" color="whiteAlpha.900">Fund Your Account</Heading>
                         </HStack>
                         <Text fontSize="sm" color="gray.300">
@@ -125,11 +132,18 @@ export const Web2UserDashboardMockup: React.FC = () => {
                 </Card.Body>
             </Card.Root>
 
-            <Card.Root bg="gray.600" shadow="md" borderRadius="lg">
-                <Card.Body>
+            <Card.Root bg={cardBg} shadow="lg" borderRadius="xl" borderColor="gray.600" borderWidth="1px">
+                <Card.Body p={5}>
                     <VStack gap={4} align="stretch">
-                        <HStack gap={2}>
-                             <ChakraIcon as={FaRobot} w={6} h={6} color="green.300" />
+                        <HStack gap={3}>
+                            <Skeleton boxSize="24px" loading={!isBotAvatarLoaded} borderRadius="sm">
+                                <Image 
+                                    src="/images/alpaca-ai-bot-icon.png" 
+                                    alt="Alpaca AI Assistant Icon" 
+                                    boxSize="24px" 
+                                    onLoad={() => setIsBotIconLoaded(true)}
+                                />
+                            </Skeleton>
                             <Heading size="md" color="whiteAlpha.900">Alpaca AI Assistant</Heading>
                         </HStack>
                         <Text fontSize="sm" color="gray.300">
@@ -154,32 +168,33 @@ export const Web2UserDashboardMockup: React.FC = () => {
             modal 
         >
             <Portal>
-                <DialogBackdrop bg="blackAlpha.700" />
+                <DialogBackdrop bg="blackAlpha.800" />
                 <DialogPositioner>
                     <DialogContent 
-                        bg="gray.700" 
-                        color="white" 
+                        bg={cardBg}
+                        color="whiteAlpha.900" 
                         borderRadius="xl" 
                         borderWidth="1px" 
-                        borderColor="gray.500"
-                        width={{base: "90%", md: "md"}}
+                        borderColor="gray.600"
+                        width={{base: "95%", md: "md"}}
+                        shadow="2xl"
                     >
-                        <DialogHeader borderBottomWidth="1px" borderColor="gray.600" color="teal.300">
+                        <DialogHeader borderBottomWidth="1px" borderColor="gray.600" color={alpacaSupportBlue} fontWeight="bold">
                             Add Funds via Credit Card (Mock)
                         </DialogHeader>
                         <DialogCloseTrigger asChild>
-                             <UICloseButton position="absolute" top="8px" right="8px" _hover={{bg: "gray.600"}} />
+                             <UICloseButton position="absolute" top="12px" right="12px" _hover={{bg: "gray.600"}} />
                         </DialogCloseTrigger>
                         <DialogBody py={6}>
                             {isProcessingPayment ? (
                             <VStack justifyContent="center" alignItems="center" minH="150px" gap={3}>
-                                <Spinner size="xl" color="teal.300" borderWidth="4px" animationDuration="0.45s"/>
+                                <Spinner size="xl" color={alpacaSupportBlue} borderWidth="4px" animationDuration="0.45s"/>
                                 <Text color="gray.300">Processing your payment securely...</Text>
                             </VStack>
                             ) : paymentSuccess === true ? (
                             <VStack justifyContent="center" alignItems="center" minH="150px" gap={3}>
-                                <ChakraIcon as={FaCoins} w={12} h={12} color="green.400" />
-                                <Text fontSize="lg" fontWeight="bold" color="green.300">Payment Successful!</Text>
+                                <ChakraIcon as={FaCoins} w={12} h={12} color={alpacaNatureGreen} />
+                                <Text fontSize="lg" fontWeight="bold" color={alpacaNatureGreen}>Payment Successful!</Text>
                                 <Text color="gray.300">Funds will be reflected in your account shortly.</Text>
                             </VStack>
                             ) : paymentSuccess === false ? (
@@ -190,7 +205,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                             </VStack>
                             ) : (
                             <VStack gap={4}>
-                                <Text color="gray.300">This is a mock interface for adding funds. No real transaction will occur.</Text>
+                                <Text color="gray.300" fontSize="sm">This is a mock interface for adding funds. No real transaction will occur.</Text>
                                 <InputGroup 
                                     startElement={
                                         <Text color="gray.400" pl={3} pr={2} style={{pointerEvents: "none"}}>
@@ -203,14 +218,14 @@ export const Web2UserDashboardMockup: React.FC = () => {
                                         placeholder="Enter amount in USDC"
                                         value={creditCardAmount}
                                         onChange={(e) => setCreditCardAmount(e.target.value)}
-                                        bg="gray.600"
+                                        bg="gray.700"
                                         borderColor="gray.500"
                                         _hover={{borderColor: "gray.400"}}
-                                        _focus={{borderColor: "teal.300", boxShadow: "0 0 0 1px teal.300"}}
-                                        _placeholder={{color: "gray.400"}}
+                                        _focus={{borderColor: alpacaSupportBlue, boxShadow: `0 0 0 1px ${alpacaSupportBlue}`}}
+                                        _placeholder={{color: "gray.500"}}
                                     />
                                 </InputGroup>
-                                <Box textAlign="center" fontSize="xs" color="gray.400" p={2} bg="gray.600" borderRadius="md">
+                                <Box textAlign="center" fontSize="xs" color="gray.400" p={2} bg="gray.700" borderRadius="md">
                                    Simulating secure payment processing by a third-party provider.
                                 </Box>
                             </VStack>
@@ -240,49 +255,81 @@ export const Web2UserDashboardMockup: React.FC = () => {
             modal
         >
             <Portal>
-                <DialogBackdrop bg="blackAlpha.700" />
+                <DialogBackdrop bg="blackAlpha.800" />
                 <DialogPositioner>
                     <DialogContent 
-                        bg="gray.700" 
-                        color="white" 
+                        bg={cardBg} 
+                        color="whiteAlpha.900" 
                         borderRadius="xl" 
                         borderWidth="1px" 
-                        borderColor="gray.500" 
+                        borderColor="gray.600" 
                         maxH="80vh"
-                        width={{base: "90%", md: "lg"}}
+                        width={{base: "95%", md: "lg"}}
+                        shadow="2xl"
                     >
-                        <DialogHeader borderBottomWidth="1px" borderColor="gray.600" color="green.300">
+                        <DialogHeader borderBottomWidth="1px" borderColor="gray.600" color={alpacaNatureGreen} fontWeight="bold">
                             Chat with Alpaca AI Assistant (Mock)
                         </DialogHeader>
                         <DialogCloseTrigger asChild>
-                             <UICloseButton position="absolute" top="8px" right="8px" _hover={{bg: "gray.600"}} />
+                             <UICloseButton position="absolute" top="12px" right="12px" _hover={{bg: "gray.600"}} />
                         </DialogCloseTrigger>
-                        <DialogBody py={4} overflowY="auto">
-                            <HStack mb={4} p={3} bg="gray.600" borderRadius="md" gap={3}>
-                                <Box p={2} bg="green.500" borderRadius="full">
-                                    <ChakraIcon as={FaRobot} color="white" boxSize={6}/>
-                                </Box>
+                        <DialogBody py={4} px={{base:3, md:6}} overflowY="auto">
+                            <HStack mb={4} p={3} bg="gray.700" borderRadius="lg" gap={3}>
+                                <Skeleton boxSize="40px" loading={!isBotAvatarLoaded} borderRadius="full">
+                                    <Image 
+                                        src="/images/alpaca-ai-bot-avatar.png" 
+                                        alt="Alpaca Bot Avatar" 
+                                        borderRadius="full" 
+                                        boxSize="40px" 
+                                        onLoad={() => setIsBotAvatarLoaded(true)}
+                                    />
+                                </Skeleton>
                                 <VStack align="start" gap={0}>
                                      <Text fontWeight="bold" color="whiteAlpha.900">Alpaca Bot</Text>
-                                     <Text fontSize="xs" color="green.300">Online</Text>
+                                     <Text fontSize="xs" color={alpacaNatureGreen}>Online</Text>
                                 </VStack>
                             </HStack>
-                            <VStack gap={4} align="stretch" minHeight="200px">
+                            <VStack gap={3} align="stretch" minHeight="250px" maxHeight="300px" overflowY="auto" pr={2}
+                                css={{
+                                    '&::-webkit-scrollbar': {
+                                    width: '6px',
+                                    },
+                                    '&::-webkit-scrollbar-track': {
+                                    width: '8px',
+                                    background: "rgba(0,0,0,0.1)",
+                                    },
+                                    '&::-webkit-scrollbar-thumb': {
+                                    background: "gray.500",
+                                    borderRadius: '24px',
+                                    },
+                                }}
+                            >
                                 {aiBotResponses.map((msg, index) => (
                                     <React.Fragment key={index}>
-                                        <Box alignSelf="flex-end" bg="blue.500" color="white" px={4} py={2} borderRadius="lg" borderBottomRightRadius="none" maxWidth="80%">
-                                            <Text>{msg.user}</Text>
+                                        <Box alignSelf="flex-end" bg={alpacaSupportBlue} color="white" px={3} py={2} borderRadius="lg" borderBottomRightRadius="2px" maxWidth="80%">
+                                            <Text fontSize="sm">{msg.user}</Text>
                                         </Box>
                                         {msg.bot && (
-                                            <Box alignSelf="flex-start" bg="gray.600" color="whiteAlpha.900" px={4} py={2} borderRadius="lg" borderBottomLeftRadius="none" maxWidth="80%">
-                                                <Text whiteSpace="pre-wrap">{msg.bot}</Text>
-                                            </Box>
+                                            <HStack alignSelf="flex-start" maxWidth="80%" alignItems="flex-end" gap={2}>
+                                                 <Skeleton boxSize="24px" loading={!isBotAvatarLoaded} borderRadius="sm" flexShrink={0}>
+                                                    <Image 
+                                                        src="/images/alpaca-ai-bot-icon.png" 
+                                                        alt="Bot Icon" 
+                                                        boxSize="24px" 
+                                                        borderRadius="sm"
+                                                        onLoad={() => setIsBotIconLoaded(true)}
+                                                    />
+                                                </Skeleton>
+                                                <Box bg="gray.600" color="whiteAlpha.800" px={3} py={2} borderRadius="lg" borderBottomLeftRadius="2px">
+                                                    <Text fontSize="sm" whiteSpace="pre-wrap">{msg.bot}</Text>
+                                                </Box>
+                                            </HStack>
                                         )}
                                     </React.Fragment>
                                 ))}
                                 {isBotTyping && (
                                     <HStack alignSelf="flex-start" gap={2} px={2} py={1}>
-                                        <Spinner size="xs" color="green.300" borderWidth="2px" animationDuration="0.45s"/>
+                                        <Spinner size="xs" color={alpacaNatureGreen} borderWidth="2px" animationDuration="0.45s"/>
                                         <Text fontSize="sm" color="gray.400">Alpaca Bot is typing...</Text>
                                     </HStack>
                                 )}
@@ -295,16 +342,23 @@ export const Web2UserDashboardMockup: React.FC = () => {
                                     value={aiBotMessage}
                                     onChange={(e) => setAiBotMessage(e.target.value)}
                                     onKeyPress={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAiBotSubmit(); }}}
-                                    bg="gray.600"
+                                    bg="gray.700"
                                     borderColor="gray.500"
                                     _hover={{borderColor: "gray.400"}}
-                                    _focus={{borderColor: "green.300", boxShadow: "0 0 0 1px green.300"}}
-                                    _placeholder={{color: "gray.400"}}
+                                    _focus={{borderColor: alpacaNatureGreen, boxShadow: `0 0 0 1px ${alpacaNatureGreen}`}}
+                                    _placeholder={{color: "gray.500"}}
                                     resize="none"
                                     rows={1}
+                                    fontSize="sm"
                                 />
-                                <Button colorPalette="green" onClick={handleAiBotSubmit} disabled={isBotTyping || !aiBotMessage.trim()}>
+                                <Button 
+                                    colorPalette="green" 
+                                    onClick={handleAiBotSubmit} 
+                                    disabled={isBotTyping || !aiBotMessage.trim()}
+                                    gap={2}
+                                >
                                     Send
+                                    <FaPaperPlane />
                                 </Button>
                             </HStack>
                         </DialogFooter>

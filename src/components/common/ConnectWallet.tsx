@@ -7,17 +7,18 @@ import {
     Spinner, 
     Code, 
     SimpleGrid, 
-    Card,
+    Card, 
     Heading,
     Icon,
-    Portal
+    Portal,
+    Center
 } from "@chakra-ui/react";
 import { Button } from "@/components/ui/button";
 import { useAccount, useConnect, useDisconnect, Connector } from "wagmi";
 import { useEthersSigner } from "@/utils/ethersAdapters";
 import { useAAWallet } from "@/context/AAWalletContext";
 import { SocialLogin } from "./SocialLogin";
-import { FaGoogle, FaEnvelope, FaWallet } from "react-icons/fa";
+import { FaGoogle, FaPaperPlane, FaWallet } from "react-icons/fa";
 
 
 export const ConnectWallet: React.FC = () => {
@@ -40,6 +41,12 @@ export const ConnectWallet: React.FC = () => {
     disconnectSocialLogin,
     eoaAddress,
   } = useAAWallet();
+
+  const cardBg = "gray.750";
+  const cardHoverBg = "gray.700";
+  const alpacaNatureGreen = "green.300"; 
+  const alpacaWarmBrown = "orange.400";
+
 
   useEffect(() => {
     if (isAAWalletInitialized) {
@@ -90,9 +97,9 @@ export const ConnectWallet: React.FC = () => {
   const selectLoginMethod = (method: "social" | "eoa") => {
     setLoginMethod(method);
     if (method === "eoa") {
-        if (isConnected && wagmiEoaAddress) {
-           setShowEOAConnectorList(false);
-        } else {
+        if (isConnected && wagmiEoaAddress && !isAAWalletInitialized) {
+           setShowEOAConnectorList(false); 
+        } else if (!isConnected) {
            setShowEOAConnectorList(true);
         }
     } else {
@@ -101,11 +108,12 @@ export const ConnectWallet: React.FC = () => {
   };
   
   const backToSelection = () => {
-    setLoginMethod(null);
-    setShowEOAConnectorList(false);
-    if (isConnected && !isAAWalletInitialized) {
+    if (isConnected && loginMethod === "eoa" && !isAAWalletInitialized) {
         wagmiDisconnect();
     }
+    setLoginMethod(null);
+    setShowEOAConnectorList(false);
+    
   }
 
   if (isAAWalletInitialized && aaWalletAddress) {
@@ -115,31 +123,29 @@ export const ConnectWallet: React.FC = () => {
         borderWidth="1px"
         borderRadius="lg"
         shadow="md"
-        bg="gray.800"
-        color="white"
+        bg={cardBg}
+        color="whiteAlpha.900"
+        borderColor="gray.600"
       >
-        <VStack gap={4}>
+        <VStack gap={3}>
           {isSocialLoggedIn ? (
              <VStack gap={1}>
-                <Text fontWeight="bold" fontSize="lg" color="teal.300">Welcome!</Text>
-                <Text>
-                Logged in with Social Account.
-                </Text>
-                <Text>Your Smart Account for Alpaca Lotto:</Text>
-                <Code colorScheme="teal" p={1} display="block" overflowX="auto" fontSize="sm">{aaWalletAddress}</Code>
+                <Text fontWeight="bold" fontSize="lg" color={alpacaNatureGreen}>Welcome!</Text>
+                <Text fontSize="sm">Logged in with Social Account.</Text>
+                <Text fontSize="sm">Your Alpaca Smart Account:</Text>
+                <Code colorPalette="green" p={1} display="block" overflowX="auto" fontSize="xs" variant="outline">{aaWalletAddress}</Code>
              </VStack>
           ) : (
             <VStack gap={1}>
-              <Text fontWeight="bold" fontSize="lg" color="teal.300">Wallet Connected & Smart Account Ready!</Text>
-              <Text>
-                Connected EOA: <Code colorScheme="purple" fontSize="sm">{eoaAddress}</Code>
+              <Text fontWeight="bold" fontSize="lg" color={alpacaNatureGreen}>Wallet Connected & Smart Account Ready!</Text>
+              <Text fontSize="sm">
+                EOA: <Code colorPalette="purple" variant="outline" fontSize="xs">{eoaAddress}</Code>
               </Text>
-              <Text fontSize="xs">
-                Chain: {chain?.name} (ID: {chain?.id}) | Connector:{" "}
-                {activeConnector?.name}
+              <Text fontSize="xs" color="gray.400">
+                Chain: {chain?.name} | Connector: {activeConnector?.name}
               </Text>
-              <Text>
-                Your Smart Account: <Code colorScheme="teal" fontSize="sm">{aaWalletAddress}</Code>
+              <Text fontSize="sm">
+                Smart Account: <Code colorPalette="green" variant="outline" fontSize="xs">{aaWalletAddress}</Code>
               </Text>
             </VStack>
           )}
@@ -162,12 +168,13 @@ export const ConnectWallet: React.FC = () => {
         p={6}
         borderWidth="1px"
         borderRadius="lg"
-        shadow="md"
-        bg="gray.800"
-        color="white"
+        shadow="lg"
+        bg={cardBg}
+        color="whiteAlpha.900"
         textAlign="center"
+        borderColor="gray.600"
       >
-        <Spinner size="xl" color="teal.300" mb={4} borderWidth="4px" animationDuration="0.45s" />
+        <Spinner size="xl" color={alpacaNatureGreen} mb={4} borderWidth="4px" animationDuration="0.45s" />
         <Text fontSize="lg" fontWeight="semibold">Initializing Your Lucky Wallet...</Text>
         {(isSocialLoggedIn || loginMethod === "social") && <Text fontSize="sm" color="gray.300">Processing secure login...</Text>}
         {(loginMethod === "eoa" && isConnected) && <Text fontSize="sm" color="gray.300">Setting up your smart account...</Text>}
@@ -177,19 +184,20 @@ export const ConnectWallet: React.FC = () => {
 
   return (
     <Box
-      p={6}
+      p={{base: 4, md: 6}}
       borderWidth="1px"
-      borderRadius="lg"
-      shadow="md"
+      borderRadius="xl"
+      shadow="xl"
       bg="gray.800"
       color="whiteAlpha.900"
       width="100%"
-      maxWidth={loginMethod ? "500px" : "600px"}
+      maxWidth={loginMethod ? "500px" : "650px"}
       mx="auto"
+      borderColor="gray.700"
     >
       {!loginMethod ? (
         <VStack gap={6}>
-            <Heading as="h2" size="lg" textAlign="center" color="white">
+            <Heading as="h2" size="xl" textAlign="center" color="whiteAlpha.900">
                 Join Alpaca Lotto
             </Heading>
             <Text textAlign="center" fontSize="md" color="gray.300">
@@ -199,80 +207,82 @@ export const ConnectWallet: React.FC = () => {
                  <Card.Root 
                     onClick={() => selectLoginMethod("social")} 
                     cursor="pointer" 
-                    bg="gray.700" 
-                    _hover={{ bg: "gray.600", shadow: "xl" }}
-                    transition="background-color 0.2s ease-out, box-shadow 0.2s ease-out"
-                    borderRadius="lg"
+                    bg={cardBg}
+                    _hover={{ bg: cardHoverBg, shadow: "2xl", transform: "translateY(-2px)" }}
+                    transition="all 0.2s ease-out"
+                    borderRadius="xl"
                     borderWidth="1px"
                     borderColor="gray.600"
-                    p={2}
+                    p={4}
+                    minHeight="220px"
+                    display="flex"
+                    flexDirection="column"
+                    justifyContent="space-between"
                 >
-                    <Card.Header>
-                        <HStack gap={2}>
-                             <Icon as={FaGoogle} w={6} h={6} color="teal.300" />
+                    <VStack align="start" gap={3}>
+                        <HStack gap={3}>
+                             <Icon as={FaGoogle} w={7} h={7} color={alpacaNatureGreen} />
                              <Heading size="md" color="whiteAlpha.900">Quick & Easy Login</Heading>
                         </HStack>
-                    </Card.Header>
-                    <Card.Body>
                         <Text fontSize="sm" color="gray.300">
                             Use your Google or Email account. We'll set up a secure smart wallet for you automatically!
                         </Text>
-                    </Card.Body>
-                    <Card.Footer>
-                        <Button colorPalette="teal" variant="solid" width="100%"> 
-                            Login with Social/Email
-                        </Button>
-                    </Card.Footer>
+                    </VStack>
+                    <Button colorPalette="green" variant="solid" width="100%" mt={4}> 
+                        Login with Social/Email
+                    </Button>
                 </Card.Root>
                 <Card.Root
                     onClick={() => selectLoginMethod("eoa")} 
                     cursor="pointer" 
-                    bg="gray.700" 
-                    _hover={{ bg: "gray.600", shadow: "xl" }}
-                    transition="background-color 0.2s ease-out, box-shadow 0.2s ease-out"
-                    borderRadius="lg"
+                    bg={cardBg} 
+                    _hover={{ bg: cardHoverBg, shadow: "2xl", transform: "translateY(-2px)" }}
+                    transition="all 0.2s ease-out"
+                    borderRadius="xl"
                     borderWidth="1px"
                     borderColor="gray.600"
-                    p={2}
+                    p={4}
+                    minHeight="220px"
+                    display="flex"
+                    flexDirection="column"
+                    justifyContent="space-between"
                 >
-                    <Card.Header>
-                         <HStack gap={2}>
-                            <Icon as={FaWallet} w={6} h={6} color="purple.300" />
+                    <VStack align="start" gap={3}>
+                        <HStack gap={3}>
+                            <Icon as={FaWallet} w={7} h={7} color={alpacaWarmBrown} />
                             <Heading size="md" color="whiteAlpha.900">Use Crypto Wallet</Heading>
                         </HStack>
-                    </Card.Header>
-                    <Card.Body>
                         <Text fontSize="sm" color="gray.300">
                             Connect your existing MetaMask, WalletConnect, or other browser wallet.
                         </Text>
-                    </Card.Body>
-                    <Card.Footer>
-                         <Button colorPalette="purple" variant="solid" width="100%">
-                            Connect External Wallet
-                        </Button>
-                    </Card.Footer>
+                    </VStack>
+                     <Button colorPalette="orange" variant="solid" width="100%" mt={4}>
+                        Connect External Wallet
+                    </Button>
                 </Card.Root>
             </SimpleGrid>
         </VStack>
       ) : loginMethod === "social" ? (
         <VStack gap={4} align="stretch">
-            <Button onClick={backToSelection} variant="plain" colorPalette="gray" size="sm" alignSelf="flex-start">
-                &larr; Back to options
+            <Button onClick={backToSelection} variant="plain" colorPalette="gray" size="sm" alignSelf="flex-start" gap={1}>
+                 <Icon as={FaPaperPlane} style={{ transform: "rotate(180deg)" }}/>
+                 Back to options
             </Button>
             <SocialLogin />
         </VStack>
       ) : (
         <VStack gap={4} align="stretch" width="100%">
-            <Button onClick={backToSelection} variant="plain" colorPalette="gray" size="sm" alignSelf="flex-start">
-                &larr; Back to options
+            <Button onClick={backToSelection} variant="plain" colorPalette="gray" size="sm" alignSelf="flex-start" gap={1}>
+                 <Icon as={FaPaperPlane} style={{ transform: "rotate(180deg)" }}/>
+                 Back to options
             </Button>
-            <Heading as="h3" size="md" textAlign="center" color="whiteAlpha.900">
+            <Heading as="h3" size="lg" textAlign="center" color="whiteAlpha.900">
                 Connect Your Wallet
             </Heading>
             {isConnected && wagmiEoaAddress && !isAAWalletInitialized ? (
-              <VStack gap={3} p={4} bg="gray.700" borderRadius="md">
+              <VStack gap={3} p={4} bg={cardBg} borderRadius="md" borderColor="gray.600" borderWidth="1px">
                 <Text color="whiteAlpha.900">
-                  Wallet Connected: <Code colorScheme="purple" fontSize="sm">{wagmiEoaAddress}</Code>
+                  Wallet Connected: <Code colorScheme="purple" fontSize="sm" variant="outline">{wagmiEoaAddress}</Code>
                 </Text>
                 <Text fontSize="xs" color="gray.400">
                   Chain: {chain?.name} | Connector: {activeConnector?.name}
@@ -287,7 +297,7 @@ export const ConnectWallet: React.FC = () => {
                   Activate Smart Account
                 </Button>
                 {aaError && (
-                  <Text color="red.400" fontSize="sm">Error: {aaError}</Text>
+                  <Text color="red.400" fontSize="sm">{aaError}</Text>
                 )}
                 <Button
                   variant="outline"
@@ -313,8 +323,8 @@ export const ConnectWallet: React.FC = () => {
                             loading={wagmiConnectStatus === 'pending' && activeConnector?.id === connector.id}
                             disabled={wagmiConnectStatus === 'pending'}
                             width="100%"
-                            _hover={{ bg: "blue.600", color: "white", borderColor: "blue.600" }}
-                            borderColor="blue.500"
+                            _hover={{ bg: "blue.500", color: "white", borderColor: "blue.500" }}
+                            borderColor="blue.400"
                             color="whiteAlpha.900"
                             >
                             Connect with {connector.name}
@@ -338,6 +348,14 @@ export const ConnectWallet: React.FC = () => {
                  <Button colorPalette="blue" onClick={() => setShowEOAConnectorList(true)} width="100%">
                     Show Connection Options
                 </Button>
+            )}
+             {isConnected && !wagmiEoaAddress && loginMethod === "eoa" && (
+                <Center pt={4}>
+                    <VStack gap={2}>
+                        <Spinner color={alpacaWarmBrown} />
+                        <Text fontSize="sm" color="gray.300">Awaiting wallet connection details...</Text>
+                    </VStack>
+                </Center>
             )}
         </VStack>
       )}
