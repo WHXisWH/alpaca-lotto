@@ -1,4 +1,3 @@
-// File: src/context/AAWalletContext.tsx
 import React, {
   createContext,
   useContext,
@@ -25,8 +24,7 @@ import {
 import { Web3Auth } from "@web3auth/modal";
 import { CHAIN_NAMESPACES, SafeEventEmitterProvider, UserAuthInfo, ADAPTER_STATUS, WEB3AUTH_NETWORK } from "@web3auth/base";
 import { EthereumPrivateKeyProvider } from "@web3auth/ethereum-provider";
-// OpenloginAdapter is no longer explicitly configured based on new guidance
-// import { OpenloginAdapter } from "@web3auth/openlogin-adapter"; 
+
 
 interface AAWalletContextType {
   eoaAddress?: string;
@@ -46,8 +44,6 @@ interface AAWalletContextType {
     eoaSign: EthersSigner,
   ) => Promise<void>;
   initializeAAWalletFromSocial: (
-    // loginProvider parameter might become less relevant if web3auth.connect() handles selection
-    // Keeping it for now in case specific hints are needed later, or for email
     loginProviderHint?: string, 
     email?: string,
   ) => Promise<void>;
@@ -109,30 +105,19 @@ export const AAWalletProvider: React.FC<{ children: React.ReactNode }> = ({
             config: { chainConfig }
         });
 
-        // GOOGLE_OAUTH_CLIENT_ID should be defined in your .env and imported via config.ts if used
-        // For now, assuming it's handled by Web3Auth dashboard's default verifier config if not explicitly passed here for Google
+       
         const w3a = new Web3Auth({
           clientId: WEB3AUTH_CLIENT_ID,
-          web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_DEVNET, // Consistent with dashboard
-          privateKeyProvider: privateKeyProvider, // Keep this for EVM private key handling
-          chainConfig: chainConfig, // Pass chainConfig also to Web3Auth main instance
+          web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_DEVNET,
+          privateKeyProvider: privateKeyProvider,
+          chainConfig: chainConfig,
           uiConfig: {
             appName: "Alpaca Lotto",
             loginMethodsOrder: ["google", "email_passwordless"],
-            theme: "dark",
+            mode: "dark",
           },
-          // loginConfig can be used to customize specific verifiers if needed
-          // loginConfig: { 
-          //   google: {
-          //     verifier: "YOUR_GOOGLE_VERIFIER_ID", // From Web3Auth Dashboard
-          //     clientId: "YOUR_GOOGLE_OAUTH_CLIENT_ID_FOR_WEB3AUTH" // From Google Cloud Console for Web3Auth
-          //   }
-          // }
         });
         
-        // No longer explicitly configuring OpenloginAdapter here
-        // const openloginAdapter = new OpenloginAdapter({...});
-        // w3a.configureAdapter(openloginAdapter);
 
         await w3a.initModal({ modalConfig: {} });
         setWeb3Auth(w3a);
@@ -186,7 +171,6 @@ export const AAWalletProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   const initializeAAWalletFromSocial = useCallback(
-    // loginProviderHint and email might still be useful if web3auth.connect() can take options for specific providers
     async (loginProviderHint?: string, email?: string) => { 
       if (!web3Auth) {
         setError("Web3Auth not initialized."); setLoading(false); return;
@@ -197,9 +181,6 @@ export const AAWalletProvider: React.FC<{ children: React.ReactNode }> = ({
       setWeb3authProvider(null);
 
       try {
-        // Use web3auth.connect() which opens the modal for user selection
-        // loginProviderHint and email might be passed as options if API supports it, e.g. for specific pre-selection
-        // For now, a generic connect() is the primary change.
         const freshW3aProvider = await web3Auth.connect(); 
         
         if (!freshW3aProvider) {
