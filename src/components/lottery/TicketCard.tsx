@@ -43,6 +43,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
     checkAndApproveUSDC,
     transaction,
     clearTransactionState,
+    setSelectedLotteryForInfo, 
   } = useLottery();
   const {
     selectedPaymasterType,
@@ -69,6 +70,12 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
   const prevTransactionErrorRef = useRef<string | null>(null);
   const prevPaymasterErrorRef = useRef<string | null>(null);
   const prevSuccessMessageRef = useRef<string | null>(null);
+
+  const handleCardClick = () => {
+    if (setSelectedLotteryForInfo) {
+      setSelectedLotteryForInfo(lottery);
+    }
+  };
 
   const fetchLotteryCardData = useCallback(async () => {
     setIsDataLoading(true);
@@ -348,10 +355,23 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
       shadow="md"
       bg="gray.700"
       color="whiteAlpha.900"
+      onClick={handleCardClick}
+      cursor="pointer"
+      _hover={{ borderColor: "teal.300", shadow: "lg" }}
+      transition="border-color 0.2s, box-shadow 0.2s"
     >
       <VStack align="stretch" gap={3}>
         <Flex alignItems="center" justifyContent="space-between">
-            <Text fontSize="xl" fontWeight="bold" color="teal.300" noOfLines={1} textOverflow="ellipsis" mr={2}>
+        <Text 
+              fontSize="xl" 
+              fontWeight="bold" 
+              color="teal.300" 
+              mr={2}
+              overflow="hidden"
+              textOverflow="ellipsis"
+              whiteSpace="nowrap"
+              minWidth="0"
+            >
               {lottery.name}
             </Text>
             {statusTag}
@@ -391,7 +411,10 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
         </Text>
         <Button
           colorScheme={!isAllowanceSufficient && isBalanceSufficient ? "orange" : "teal"}
-          onClick={handlePurchaseOrApprove}
+          onClick={(e) => {
+            e.stopPropagation(); 
+            handlePurchaseOrApprove();
+          }}
           loading={transaction.loading && (transaction.step === "approving" || transaction.step === "purchasing" || transaction.step === "fetchingReceipt")}
           disabled={
             transaction.loading ||

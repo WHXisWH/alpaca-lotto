@@ -11,43 +11,31 @@ import {
 } from "@chakra-ui/react";
 import { StatRoot, StatLabel, StatValueText, StatHelpText } from "@/components/ui/stat";
 import { Tag } from "@/components/ui/tag";
-import { useLottery } from "@/context/LotteryContext";
+import { useLottery, Lottery } from "@/context/LotteryContext";
 import { ethers } from "ethers";
 import { USDC_DECIMALS } from "@/config";
 
 export const LotteryInfo: React.FC = () => {
-  const { lotteries, transaction } = useLottery();
+  const { selectedLotteryForInfo, transaction } = useLottery();
 
-  if (transaction.loading && lotteries.length === 0) {
+  if (transaction.loading && !selectedLotteryForInfo) {
     return (
-        <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg" bg="gray.700" color="white" minH="200px" display="flex" alignItems="center" justifyContent="center">
+        <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg" bg="gray.750" color="white" minH="200px" display="flex" alignItems="center" justifyContent="center">
             <Spinner color="teal.300" size="xl"/>
         </Box>
     );
   }
-  if (lotteries.length === 0) {
+  
+  if (!selectedLotteryForInfo) {
     return (
-        <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg" bg="gray.700" color="white">
-            <Text>No current lottery information available.</Text>
+        <Box p={5} shadow="xl" borderWidth="1px" borderRadius="xl" bg="gray.750" borderColor="gray.600" color="whiteAlpha.900" minH="200px">
+            <Heading size="lg" color="teal.300" mb={3}>Current Lottery</Heading>
+            <Text color="gray.400">Please select a lottery from the list below to see details.</Text>
         </Box>
     );
   }
   
-  const currentLottery = lotteries.reduce((prev, curr) => {
-    const now = new Date().getTime() / 1000;
-    if (curr.endTime > now && curr.startTime <= now) return curr; 
-    if (prev.endTime > now && prev.startTime <= now) return prev; 
-    return curr.endTime > prev.endTime ? curr : prev; 
-  }, lotteries[0]);
-
-
-  if (!currentLottery) {
-    return (
-        <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg" bg="gray.700" color="white">
-            <Text>No suitable current lottery found.</Text>
-        </Box>
-    );
-  }
+  const currentLottery = selectedLotteryForInfo;
 
   const now = new Date().getTime() / 1000;
   const isLotteryActive = now >= currentLottery.startTime && now < currentLottery.endTime;
@@ -85,8 +73,16 @@ export const LotteryInfo: React.FC = () => {
     >
       <VStack align="stretch" gap={4}>
         <Flex alignItems="center" wrap="wrap">
-          <Heading size="lg" color="teal.300" mr={3}>
-            Current Lottery: {currentLottery.name}
+        <Heading 
+            size="lg" 
+            color="teal.300" 
+            mr={3}
+            overflow="hidden"
+            textOverflow="ellipsis"
+            whiteSpace="nowrap"
+            minWidth="0"
+          >
+            {currentLottery.name}
           </Heading>
           <Text fontSize="md" color="gray.400" mr={3}>
             (ID: {currentLottery.id})

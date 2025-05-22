@@ -6,7 +6,6 @@ import React, {
   useCallback,
 } from "react";
 import { BigNumber, ethers } from "ethers";
-import { Presets } from "userop"; 
 import { useAAWallet } from "./AAWalletContext";
 import { usePaymaster } from "./PaymasterContext";
 import LOTTO_ABI_JSON from "../abis/AlpacaLotto.json";
@@ -73,6 +72,8 @@ interface LotteryContextType {
   isLotteryOwner: boolean;
   fetchLotteryOwner: () => Promise<void>;
   getLotteryById: (lotteryId: number) => Lottery | undefined;
+  selectedLotteryForInfo: Lottery | null;
+  setSelectedLotteryForInfo: (lottery: Lottery | null) => void;
 }
 
 const LotteryContext = createContext<LotteryContextType | undefined>(undefined);
@@ -95,6 +96,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
     hash: null,
     step: "idle",
   });
+  const [selectedLotteryForInfo, setSelectedLotteryForInfoState] = useState<Lottery | null>(null);
 
   const getLotteryContractReader = useCallback(() => {
     const readerProvider = getReadProvider();
@@ -105,13 +107,8 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
     );
   }, []);
 
-  const getUsdcContractReader = useCallback(() => {
-    const readerProvider = getReadProvider();
-    return new ethers.Contract(
-      USDC_TOKEN_ADDRESS,
-      ERC20_ABI_MINIMAL,
-      readerProvider
-    );
+  const setSelectedLotteryForInfo = useCallback((lottery: Lottery | null) => {
+    setSelectedLotteryForInfoState(lottery);
   }, []);
 
   const clearTransactionState = useCallback(() => {
@@ -127,6 +124,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
   const fetchLotteries = useCallback(async () => {
     const contract = getLotteryContractReader();
     if (!contract) return;
+    let initialSelectedLottery: Lottery | null = null;
     try {
       setTransaction((prev) => ({ ...prev, loading: true, error: null, successMessage: null, step: "idle" }));
       const fetchedLotteries: Lottery[] = [];
@@ -161,14 +159,27 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       });
       
-      setLotteries(fetchedLotteries.sort((a, b) => a.id - b.id));
+      const sortedLotteries = fetchedLotteries.sort((a, b) => a.id - b.id);
+      setLotteries(sortedLotteries);
+
+      if (sortedLotteries.length > 0) {
+        const now = new Date().getTime() / 1000;
+        initialSelectedLottery = sortedLotteries.find(l => l.endTime > now && l.startTime <= now) || 
+                                sortedLotteries.sort((a,b) => b.endTime - a.endTime)[0] || // Fallback to latest end time
+                                sortedLotteries[0]; // Fallback to first
+        setSelectedLotteryForInfo(initialSelectedLottery);
+      } else {
+        setSelectedLotteryForInfo(null);
+      }
+
     } catch (error: any) {
       console.error("Failed to fetch lotteries:", error);
       setTransaction((prev) => ({ ...prev, error: error?.message || "Failed to fetch lotteries" }));
+      setSelectedLotteryForInfo(null);
     } finally {
         setTransaction((prev) => ({ ...prev, loading: false }));
     }
-  }, [getLotteryContractReader]);
+  }, [getLotteryContractReader, setSelectedLotteryForInfo]);
 
   const getLotteryById = useCallback((lotteryId: number) => {
     return lotteries.find(l => l.id === lotteryId);
@@ -233,7 +244,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
       return { approved: false, error: "Lottery details not found for approval." };
     }
 
-    const usdcReader = getUsdcContractReader();
+    const usdcReader = new ethers.Contract(USDC_TOKEN_ADDRESS, ERC20_ABI_MINIMAL, getReadProvider());
     if (!usdcReader) return { approved: false, error: "USDC contract reader not available." };
 
     const totalCostUSDC = selectedLottery.ticketPrice.mul(quantity);
@@ -312,8 +323,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const purchaseTicketsForLottery = async (
     lotteryId: number,
-    quantity: number,
-    useNative: boolean
+    quantity: number
   ): Promise<string | null> => {
     if (
       !aaWalletContext.aaWalletAddress ||
@@ -367,41 +377,18 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
 
     try {
       const lotteryContractInterface = new ethers.utils.Interface(LOTTO_ABI);
+      const purchaseCallData = lotteryContractInterface.encodeFunctionData(
+        "purchaseTickets",
+        [lotteryId, USDC_TOKEN_ADDRESS, quantity]
+      );
 
-const paymentTokenAddr = useNative
-  ? ethers.constants.AddressZero
-  : USDC_TOKEN_ADDRESS;
-
-const valueForExecute = useNative
-  ? BigNumber.from(selectedLottery.ticketPrice).mul(quantity)
-  : BigNumber.from(0);
-
-const purchaseCallData = lotteryContractInterface.encodeFunctionData(
-  "purchaseTickets",
-  [lotteryId, paymentTokenAddr, quantity]
-);
-
-let purchaseOpBuilder: UserOperationBuilder =
-  aaWalletContext.simpleAccount.execute(
-    LOTTERY_CONTRACT_ADDRESS,
-    valueForExecute,
-    purchaseCallData
-  );
-
+      let purchaseOpBuilder: UserOperationBuilder = aaWalletContext.simpleAccount.execute(
+        LOTTERY_CONTRACT_ADDRESS,
+        BigNumber.from(0),
+        purchaseCallData
+      );
 
       purchaseOpBuilder = await applyPaymasterToBuilder(purchaseOpBuilder); 
-
-      const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
-const estCallGas = await provider.estimateGas({
-  from: aaWalletContext.aaWalletAddress,
-  to: LOTTERY_CONTRACT_ADDRESS,
-  data: purchaseCallData,
-});
-
-purchaseOpBuilder
-  .setCallGasLimit(estCallGas.mul(2))    
-  .setVerificationGasLimit(BigNumber.from(120_000))
-  .setPreVerificationGas(BigNumber.from(60_000));
 
       setTransaction((prev) => ({
         ...prev,
@@ -481,7 +468,7 @@ purchaseOpBuilder
   }, [
     aaWalletContext.isAAWalletInitialized,
     aaWalletContext.aaWalletAddress,
-    lotteries, // This will trigger if lotteries array reference changes
+    lotteries, 
     fetchOwnedLotteryTickets,
   ]);
 
@@ -499,6 +486,8 @@ purchaseOpBuilder
         isLotteryOwner,
         fetchLotteryOwner,
         getLotteryById,
+        selectedLotteryForInfo,
+        setSelectedLotteryForInfo,
       }}
     >
       {children}

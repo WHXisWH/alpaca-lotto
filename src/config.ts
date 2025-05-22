@@ -22,10 +22,6 @@ export const LOTTERY_CONTRACT_ADDRESS =
   import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS ||
   "YOUR_LOTTERY_CONTRACT_ADDRESS";
 
-export const tokenPaymaster =
-  import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS ||
-  "YOUR_TOKEN_PAYMASTER_ADDRESS";
-
 export const CHAIN_ID = 689;
 export const CHAIN_NAME = "Nero Testnet";
 export const NATIVE_CURRENCY_NAME = "NERO";
@@ -36,3 +32,5 @@ export const USDC_TOKEN_ADDRESS = "0xc86fed58edf0981e927160c50ecb8a8b05b32fed";
 export const USDC_DECIMALS = 6;
 
 export const WEB3AUTH_CLIENT_ID = import.meta.env.VITE_WEB3AUTH_CLIENT_ID || "YOUR_WEB3AUTH_CLIENT_ID";
+
+export const WALLET_CONNECT_PROJECT_ID = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID || "";

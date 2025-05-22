@@ -10,6 +10,7 @@ import {
   Icon,
   Flex,
   Spacer,
+  Tabs,
 } from "@chakra-ui/react";
 import { Button as UIButton } from "@/components/ui/button";
 import { CloseButton as UICloseButton } from "@/components/ui/close-button";
@@ -27,6 +28,7 @@ import {
 import { Web2UserDashboardMockup } from "./components/web2_user/Web2UserDashboardMockup";
 import { useAAWallet } from "./context/AAWalletContext";
 import { usePaymaster } from "./context/PaymasterContext";
+import { useLottery } from "./context/LotteryContext";
 import { MdWarning, MdInfo, MdCopyAll, MdRefresh, MdExpandMore, MdExpandLess } from "react-icons/md";
 import { ethers, BigNumber } from "ethers";
 import { USDC_TOKEN_ADDRESS, USDC_DECIMALS, RPC_URL } from "./config";
@@ -58,15 +60,20 @@ function App() {
     clearError: clearPaymasterError,
   } = usePaymaster();
 
+  const { lotteries, setSelectedLotteryForInfo: contextSetSelectedLottery } = useLottery();
+
   const [usdcBalance, setUsdcBalance] = useState<string>("0.00");
   const [isBalanceLoading, setIsBalanceLoading] = useState<boolean>(false);
   const [isGasPanelOpen, setIsGasPanelOpen] = useState<boolean>(true);
+  const [currentTab, setCurrentTab] = useState<string>("buyTickets");
 
   const toggleGasPanel = () => setIsGasPanelOpen(!isGasPanelOpen);
 
   const alpacaAppBg = "gray.850";
   const globalInfoBg = "gray.750";
   const borderColor = "gray.600";
+  const tabSelectedBg = "gray.700"; 
+  const tabDefaultBg = "gray.800";
 
   const fetchUSDCBalance = useCallback(async () => {
     if (!aaWalletAddress || !isAAWalletInitialized) {
@@ -103,6 +110,22 @@ function App() {
       fetchUSDCBalance();
     }
   }, [isAAWalletInitialized, fetchUSDCBalance]);
+  
+  useEffect(() => {
+    if (lotteries.length > 0 && contextSetSelectedLottery) {
+        const now = new Date().getTime() / 1000;
+        const activeLottery = lotteries.find(l => l.endTime > now && l.startTime <= now);
+        if (activeLottery) {
+            contextSetSelectedLottery(activeLottery);
+        } else {
+            const sortedByEndTime = [...lotteries].sort((a,b) => b.endTime - a.endTime);
+            contextSetSelectedLottery(sortedByEndTime[0] || lotteries[0]);
+        }
+    } else if (lotteries.length === 0 && contextSetSelectedLottery) {
+        contextSetSelectedLottery(null);
+    }
+  }, [lotteries, contextSetSelectedLottery]);
+
 
   useEffect(() => {
     if (
@@ -148,6 +171,7 @@ function App() {
       wagmiDisconnect();
     }
     setUsdcBalance("0.00");
+    if(contextSetSelectedLottery) contextSetSelectedLottery(null);
   };
 
   const copyToClipboard = (text: string) => {
@@ -156,6 +180,10 @@ function App() {
     }).catch(err => {
       toaster.create({ title: "Copy Failed", description: "Could not copy address.", type: "error" });
     });
+  };
+
+  const handleTabChange = (details: { value: string }) => {
+    setCurrentTab(details.value);
   };
 
   return (
@@ -323,12 +351,74 @@ function App() {
           )}
           
           {isAAWalletInitialized && (
-            <VStack gap={6} width="100%" pt={4}>
-              {isSocialLoggedIn && <Web2UserDashboardMockup />}
-              <LotteryInfo />
-              <TicketGrid />
-              <OwnedTickets />
-            </VStack>
+             <Tabs.Root 
+                defaultValue="buyTickets" 
+                value={currentTab}
+                onValueChange={handleTabChange}
+                mt={4} 
+                width="100%"
+                borderColor={borderColor} 
+            >
+                <Tabs.List 
+                    borderBottomWidth="2px" 
+                    borderColor={borderColor}
+                    bg={globalInfoBg} 
+                    borderTopRadius="lg"
+                >
+                    <Tabs.Trigger 
+                        value="buyTickets" 
+                        flex={1} 
+                        py={3}
+                        fontSize="md"
+                        fontWeight="semibold"
+                        color="gray.400"
+                        bg={currentTab === "buyTickets" ? tabSelectedBg : tabDefaultBg}
+                        borderTopLeftRadius="lg"
+                        borderBottomWidth={currentTab === "buyTickets" ? "2px" : "0px"}
+                        borderBottomColor={currentTab === "buyTickets" ? "teal.300" : "transparent"}
+                        _selected={{ color: "teal.300" }}
+                        _hover={{bg: tabSelectedBg, color: "whiteAlpha.800"}}
+                        transition="background-color 0.2s, color 0.2s, border-bottom-color 0.2s"
+                    >
+                        Buy Tickets
+                    </Tabs.Trigger>
+                    <Tabs.Trigger 
+                        value="myTickets" 
+                        flex={1} 
+                        py={3} 
+                        fontSize="md"
+                        fontWeight="semibold"
+                        color="gray.400"
+                        bg={currentTab === "myTickets" ? tabSelectedBg : tabDefaultBg}
+                        borderTopRightRadius="lg"
+                        borderBottomWidth={currentTab === "myTickets" ? "2px" : "0px"}
+                        borderBottomColor={currentTab === "myTickets" ? "teal.300" : "transparent"}
+                        _selected={{ color: "teal.300" }}
+                        _hover={{bg: tabSelectedBg, color: "whiteAlpha.800"}}
+                        transition="background-color 0.2s, color 0.2s, border-bottom-color 0.2s"
+                    >
+                        My Tickets
+                    </Tabs.Trigger>
+                </Tabs.List>
+                
+                <Box 
+                    borderWidth="0px 1px 1px 1px"
+                    borderColor={borderColor}
+                    borderBottomRadius="lg"
+                    bg={tabSelectedBg}
+                >
+                    <Tabs.Content value="buyTickets" p={{base:3, md:4}}>
+                        <VStack gap={6} width="100%">
+                          {isSocialLoggedIn && currentTab === "buyTickets" && <Web2UserDashboardMockup />}
+                          <LotteryInfo />
+                          <TicketGrid />
+                        </VStack>
+                    </Tabs.Content>
+                    <Tabs.Content value="myTickets" p={{base:3, md:4}}>
+                        <OwnedTickets />
+                    </Tabs.Content>
+                </Box>
+            </Tabs.Root>
           )}
           
           {!isAAWalletInitialized && !aaLoading && !loadingMessage && (
