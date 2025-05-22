@@ -36,7 +36,7 @@ export interface SupportedToken {
 }
 
 export interface NativeTokenPaymasterInfo {
-  gas?: string;
+  gas?: string; // hex string
   price?: number;
   decimals?: number;
   symbol?: string;
@@ -77,11 +77,6 @@ export interface PaymasterContextType {
 const PaymasterContext = createContext<PaymasterContextType | undefined>(
   undefined
 );
-
-// Define minimum preVerificationGas based on bundler requirements
-const MIN_BUNDLER_PRE_VERIFICATION_GAS = BigNumber.from(50009);
-const RECOMMENDED_PRE_VERIFICATION_GAS = BigNumber.from(60000);
-
 
 export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -403,32 +398,22 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
         console.debug("[PaymasterContext] estimateGasCost: Calling estimateGasLimitsMiddleware with op:", JSON.stringify(opForEstimation, null, 2));
         await estimateGasLimitsMiddleware(middlewareCtx);
 
-        let { callGasLimit, verificationGasLimit, preVerificationGas } = middlewareCtx.op;
-
-        console.debug(`[PaymasterContext] estimateGasCost: Original estimated preVerificationGas: ${preVerificationGas?.toString()}`);
-        let adjustedPreVerificationGas = preVerificationGas ? BigNumber.from(preVerificationGas) : BigNumber.from(0);
-        if (adjustedPreVerificationGas.lt(MIN_BUNDLER_PRE_VERIFICATION_GAS)) {
-            console.warn(`[PaymasterContext] estimateGasCost: preVerificationGas ${adjustedPreVerificationGas.toString()} is below minimum ${MIN_BUNDLER_PRE_VERIFICATION_GAS.toString()}. Adjusting to ${RECOMMENDED_PRE_VERIFICATION_GAS.toString()}.`);
-            adjustedPreVerificationGas = RECOMMENDED_PRE_VERIFICATION_GAS;
-        }
-        preVerificationGas = adjustedPreVerificationGas; // Use the adjusted value
-
+        const { callGasLimit, verificationGasLimit, preVerificationGas } = middlewareCtx.op;
 
         if (!callGasLimit || !verificationGasLimit || !preVerificationGas || BigNumber.from(callGasLimit).isZero()) {
-            console.warn("[PaymasterContext] estimateGasCost: Gas limits might be invalid after estimation/adjustment.", {callGasLimit: callGasLimit?.toString(), verificationGasLimit: verificationGasLimit?.toString(), preVerificationGas: preVerificationGas?.toString()});
+            console.warn("[PaymasterContext] estimateGasCost: Gas limits might be invalid after estimation.", {callGasLimit: callGasLimit?.toString(), verificationGasLimit: verificationGasLimit?.toString(), preVerificationGas: preVerificationGas?.toString()});
         }
 
         builderForGasEst.setCallGasLimit(callGasLimit || ethers.constants.Zero);
         builderForGasEst.setVerificationGasLimit(verificationGasLimit || ethers.constants.Zero);
-        builderForGasEst.setPreVerificationGas(preVerificationGas || ethers.constants.Zero); // Set the potentially adjusted preVerificationGas
-
+        builderForGasEst.setPreVerificationGas(preVerificationGas || ethers.constants.Zero);
 
         const displayProvider = new ethers.providers.JsonRpcProvider(RPC_URL);
         const gasPrice = await displayProvider.getGasPrice();
         
         const totalCalculatedNativeGasUnits = BigNumber.from(callGasLimit || 0)
           .add(BigNumber.from(verificationGasLimit || 0))
-          .add(BigNumber.from(preVerificationGas || 0)); // Use adjusted preVerificationGas here too
+          .add(BigNumber.from(preVerificationGas || 0));
         
         const totalCalculatedNativeGasCost = totalCalculatedNativeGasUnits.mul(gasPrice);
 
@@ -437,7 +422,8 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
 
         if (nativeTokenPaymasterInfo && nativeTokenPaymasterInfo.gas && nativeTokenPaymasterInfo.gas !== "0x0" && nativeTokenPaymasterInfo.gas !== "") {
             const paymasterSuggestedGasUnits = BigNumber.from(nativeTokenPaymasterInfo.gas);
-            const paymasterSuggestedPrice = nativeTokenPaymasterInfo.price ?? 1; 
+            const paymasterSuggestedPrice = nativeTokenPaymasterInfo.price ?? 1; // Assuming price is a multiplier or direct price
+            // This logic might need adjustment based on what nativeTokenPaymasterInfo.price exactly represents
              finalNativeGasCostRaw = paymasterSuggestedGasUnits.mul(paymasterSuggestedPrice); 
             if (nativeTokenPaymasterInfo.decimals) {
                 nativeDecimalsToUse = nativeTokenPaymasterInfo.decimals;

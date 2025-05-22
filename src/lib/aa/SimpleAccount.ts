@@ -185,6 +185,11 @@ export class SimpleAccount extends UserOperationBuilder {
         console.warn("SimpleAccount.getSenderInitCode: Proxy not properly initialized. Falling back to potentially pre-calculated this.initCode if nonce would be 0.");
         return this.initCode;
     }
+
+    const latestNonce = await this.entryPoint.getNonce(this.proxy.address, 0);
+    this.initCode = latestNonce.toHexString();
+    console.log("Override UserOp.nonce with on-chain latestNonce:", this.initCode);
+
     const currentNonce = await this.entryPoint.getNonce(this.proxy.address, 0);
     if (currentNonce.isZero()) {
         console.log("SimpleAccount.getSenderInitCode: Nonce is 0, returning pre-calculated initCode:", this.initCode);

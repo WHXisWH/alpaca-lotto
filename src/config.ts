@@ -22,6 +22,10 @@ export const LOTTERY_CONTRACT_ADDRESS =
   import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS ||
   "YOUR_LOTTERY_CONTRACT_ADDRESS";
 
+export const tokenPaymaster =
+  import.meta.env.VITE_TOKEN_PAYMASTER_ADDRESS ||
+  "YOUR_TOKEN_PAYMASTER_ADDRESS";
+
 export const CHAIN_ID = 689;
 export const CHAIN_NAME = "Nero Testnet";
 export const NATIVE_CURRENCY_NAME = "NERO";

@@ -6,6 +6,7 @@ import React, {
   useCallback,
 } from "react";
 import { BigNumber, ethers } from "ethers";
+import { Presets } from "userop"; 
 import { useAAWallet } from "./AAWalletContext";
 import { usePaymaster } from "./PaymasterContext";
 import LOTTO_ABI_JSON from "../abis/AlpacaLotto.json";
@@ -311,7 +312,8 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const purchaseTicketsForLottery = async (
     lotteryId: number,
-    quantity: number
+    quantity: number,
+    useNative: boolean
   ): Promise<string | null> => {
     if (
       !aaWalletContext.aaWalletAddress ||
@@ -365,18 +367,41 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
 
     try {
       const lotteryContractInterface = new ethers.utils.Interface(LOTTO_ABI);
-      const purchaseCallData = lotteryContractInterface.encodeFunctionData(
-        "purchaseTickets",
-        [lotteryId, USDC_TOKEN_ADDRESS, quantity]
-      );
 
-      let purchaseOpBuilder: UserOperationBuilder = aaWalletContext.simpleAccount.execute(
-        LOTTERY_CONTRACT_ADDRESS,
-        BigNumber.from(0),
-        purchaseCallData
-      );
+const paymentTokenAddr = useNative
+  ? ethers.constants.AddressZero
+  : USDC_TOKEN_ADDRESS;
+
+const valueForExecute = useNative
+  ? BigNumber.from(selectedLottery.ticketPrice).mul(quantity)
+  : BigNumber.from(0);
+
+const purchaseCallData = lotteryContractInterface.encodeFunctionData(
+  "purchaseTickets",
+  [lotteryId, paymentTokenAddr, quantity]
+);
+
+let purchaseOpBuilder: UserOperationBuilder =
+  aaWalletContext.simpleAccount.execute(
+    LOTTERY_CONTRACT_ADDRESS,
+    valueForExecute,
+    purchaseCallData
+  );
+
 
       purchaseOpBuilder = await applyPaymasterToBuilder(purchaseOpBuilder); 
+
+      const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const estCallGas = await provider.estimateGas({
+  from: aaWalletContext.aaWalletAddress,
+  to: LOTTERY_CONTRACT_ADDRESS,
+  data: purchaseCallData,
+});
+
+purchaseOpBuilder
+  .setCallGasLimit(estCallGas.mul(2))    
+  .setVerificationGasLimit(BigNumber.from(120_000))
+  .setPreVerificationGas(BigNumber.from(60_000));
 
       setTransaction((prev) => ({
         ...prev,
