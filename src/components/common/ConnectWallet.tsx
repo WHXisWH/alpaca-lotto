@@ -17,7 +17,7 @@ import { useEthersSigner } from "@/utils/ethersAdapters";
 import { useAAWallet } from "@/context/AAWalletContext";
 import { SocialLogin } from "./SocialLogin";
 import { LoginMethodCard } from "./LoginMethodCard";
-import { FaGoogle, FaPaperPlane, FaWallet, FaQrcode } from "react-icons/fa"; // Added FaQrcode for WalletConnect
+import { FaGoogle, FaPaperPlane, FaWallet } from "react-icons/fa";
 
 export const ConnectWallet: React.FC = () => {
   const { connect, connectors, error: wagmiConnectError, status: wagmiConnectStatus } = useConnect();
@@ -336,7 +336,10 @@ export const ConnectWallet: React.FC = () => {
               <VStack gap={3} width="100%">
                 {connectors
                   .filter(
-                    (c) => c.ready // Prioritize ready connectors
+                    (c) =>
+                      c.isAuthorized ||
+                      c.type === "injected" ||
+                      c.id === "walletConnect"
                   )
                   .map((connector) => (
                     <UIButton
@@ -346,7 +349,7 @@ export const ConnectWallet: React.FC = () => {
                       onClick={() => handleConnect(connector.id)}
                       loading={
                         wagmiConnectStatus === "pending" &&
-                        connectors.find(c => c.id === connector.id)?.id === connector.id // More robust check for pending connector
+                        activeConnector?.id === connector.id
                       }
                       disabled={wagmiConnectStatus === "pending"}
                       width="100%"
@@ -358,15 +361,9 @@ export const ConnectWallet: React.FC = () => {
                       borderColor="blue.400"
                       color="whiteAlpha.900"
                     >
-                      <HStack justifyContent="center" width="full">
-                        {connector.icon && <Icon as={() => <img src={connector.icon} alt={connector.name} style={{width:20, height:20}} />} mr={2} />}
-                        {!connector.icon && connector.id === "walletConnect" && <Icon as={FaQrcode} mr={2}/>}
-                        {!connector.icon && connector.type === "injected" && <Icon as={FaWallet} mr={2}/>}
-                        <Text>
-                          {connector.name === "Injected" && activeConnector?.name ? activeConnector.name : connector.name}
-                        </Text>
-                        {wagmiConnectStatus === "pending" &&
-                         connectors.find(c => c.id === connector.id)?.id === connector.id && (
+                      Connect with {connector.name}
+                      {wagmiConnectStatus === "pending" &&
+                        activeConnector?.id === connector.id && (
                           <Spinner
                             size="sm"
                             ml={2}
@@ -374,13 +371,12 @@ export const ConnectWallet: React.FC = () => {
                             animationDuration="0.45s"
                           />
                         )}
-                      </HStack>
                     </UIButton>
                   ))}
-                {connectors.filter(c => c.ready).length === 0 && (
+                {connectors.length === 0 && (
                   <Text color="gray.400">
-                    No wallet connectors found or ready. Please install a browser wallet
-                    like MetaMask or ensure WalletConnect is available.
+                    No wallet connectors found. Please install a browser wallet
+                    like MetaMask.
                   </Text>
                 )}
               </VStack>

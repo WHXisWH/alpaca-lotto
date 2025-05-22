@@ -6,7 +6,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { injected, walletConnect } from "wagmi/connectors";
+import { injected } from "wagmi/connectors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AAWalletProvider } from "@/context/AAWalletContext.tsx";
 import { PaymasterProvider } from "@/context/PaymasterContext.tsx";
@@ -21,7 +21,6 @@ import {
   NATIVE_CURRENCY_NAME,
   NATIVE_CURRENCY_SYMBOL,
   NATIVE_CURRENCY_DECIMALS,
-  WALLET_CONNECT_PROJECT_ID,
 } from "./config";
 
 export const neroChain = {
@@ -38,16 +37,9 @@ export const neroChain = {
   },
 } as const satisfies Chain;
 
-if (!WALLET_CONNECT_PROJECT_ID) {
-  console.error("VITE_WALLET_CONNECT_PROJECT_ID is not set. WalletConnect will not function.");
-}
-
 const wagmiConfig = createConfig({
   chains: [neroChain],
-  connectors: [
-    injected(),
-    walletConnect({ projectId: WALLET_CONNECT_PROJECT_ID })
-  ],
+  connectors: [injected()],
   transports: {
     [neroChain.id]: http(),
   },

@@ -43,7 +43,7 @@ const purchaseCallData = lotteryInterface.encodeFunctionData(
   [lotteryId, USDC_TOKEN_ADDRESS, quantity]
 );
 // This callData would be part of the UserOperation sent to the EntryPoint.
-````
+```
 
 ### Paymaster Integration
 
