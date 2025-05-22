@@ -14,7 +14,6 @@ import type {
 import type { BigNumberish, BytesLike } from 'ethers';
 import type { IPresetBuilderOpts, UserOperationMiddlewareFn } from 'userop';
 
-// Correctly import signUserOpHash from Presets.Middleware
 const { getGasPrice, estimateUserOperationGas, signUserOpHash } = Presets.Middleware;
 
 export class SimpleAccount extends UserOperationBuilder {
@@ -156,19 +155,19 @@ export class SimpleAccount extends UserOperationBuilder {
     };
     console.log("SimpleAccount.init: Setting defaults for builder:", JSON.stringify({sender: defaults.sender, signatureLength: defaults.signature.length }));
 
-    const base = instance
+    let builder = instance
       .useDefaults(defaults)
       .useMiddleware(instance.resolveAccount)
-      .useMiddleware(getGasPrice(instance.provider));
+      .useMiddleware(getGasPrice(instance.provider))
+      .useMiddleware(estimateUserOperationGas(instance.provider));
 
     console.log("SimpleAccount.init: opts.paymasterMiddleware provided?", !!opts?.paymasterMiddleware);
 
-    const withPM = opts?.paymasterMiddleware
-      ? base.useMiddleware(opts.paymasterMiddleware)
-      : base.useMiddleware(estimateUserOperationGas(instance.provider));
+    if (opts?.paymasterMiddleware) {
+      builder = builder.useMiddleware(opts.paymasterMiddleware);
+    }
 
-    // Use the new signUserOpHash middleware
-    return withPM.useMiddleware(signUserOpHash(instance.signer));
+    return builder.useMiddleware(signUserOpHash(instance.signer));
   }
 
   public async getSenderNonce(): Promise<BigNumber> {
@@ -182,17 +181,14 @@ export class SimpleAccount extends UserOperationBuilder {
 
   public async getSenderInitCode(): Promise<string> {
     if (!this.proxy || this.proxy.address === ethers.constants.AddressZero) {
-        console.warn("SimpleAccount.getSenderInitCode: Proxy not properly initialized. Falling back to potentially pre-calculated this.initCode if nonce would be 0.");
-        return this.initCode;
+      console.warn("SimpleAccount.getSenderInitCode: Proxy not properly initialized. Cannot reliably determine initCode. Returning stored initCode.");
+      return this.initCode;
     }
 
-    const latestNonce = await this.entryPoint.getNonce(this.proxy.address, 0);
-    this.initCode = latestNonce.toHexString();
-    console.log("Override UserOp.nonce with on-chain latestNonce:", this.initCode);
-
     const currentNonce = await this.entryPoint.getNonce(this.proxy.address, 0);
+
     if (currentNonce.isZero()) {
-        console.log("SimpleAccount.getSenderInitCode: Nonce is 0, returning pre-calculated initCode:", this.initCode);
+        console.log("SimpleAccount.getSenderInitCode: Nonce is 0, returning deployment initCode:", this.initCode);
         return this.initCode;
     }
     console.log("SimpleAccount.getSenderInitCode: Nonce is not 0, returning '0x'.");
