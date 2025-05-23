@@ -18,12 +18,13 @@ import { useAAWallet } from "@/context/AAWalletContext";
 import { SocialLogin } from "./SocialLogin";
 import { LoginMethodCard } from "./LoginMethodCard";
 import { FaGoogle, FaPaperPlane, FaWallet } from "react-icons/fa";
+import { useColorModeValue } from "@/components/ui/color-mode";
 
 export const ConnectWallet: React.FC = () => {
   const { connect, connectors, error: wagmiConnectError, status: wagmiConnectStatus } = useConnect();
   const { address: wagmiEoaAddress, isConnected, connector: activeConnector, chain } = useAccount();
   const { disconnect: wagmiDisconnect } = useDisconnect();
-  const ethersSigner = useEthersSigner({ chainId: chain?.id });
+  const ethersSigner = useEthersSigner();
 
   const [loginMethod, setLoginMethod] = useState<"social" | "eoa" | null>(
     null
@@ -42,7 +43,14 @@ export const ConnectWallet: React.FC = () => {
     eoaAddress,
   } = useAAWallet();
 
-  const cardBg = "gray.750";
+  const cardBg = useColorModeValue("gray.800", "gray.800");
+  const textColor = useColorModeValue("whiteAlpha.900", "whiteAlpha.900");
+  const borderColor = useColorModeValue("gray.700", "gray.700");
+  const backButtonColor = useColorModeValue("gray.300", "gray.300");
+  const headingColor = useColorModeValue("whiteAlpha.900", "whiteAlpha.900");
+  const descriptionColor = useColorModeValue("gray.300", "gray.300");
+
+  const cardBgHard = "gray.750";
   const alpacaNatureGreen = "green.300";
   const alpacaWarmBrown = "orange.400";
 
@@ -122,7 +130,7 @@ export const ConnectWallet: React.FC = () => {
         borderWidth="1px"
         borderRadius="lg"
         shadow="md"
-        bg={cardBg}
+        bg={cardBgHard}
         color="whiteAlpha.900"
         borderColor="gray.600"
       >
@@ -187,7 +195,7 @@ export const ConnectWallet: React.FC = () => {
         borderWidth="1px"
         borderRadius="lg"
         shadow="lg"
-        bg={cardBg}
+        bg={cardBgHard}
         color="whiteAlpha.900"
         textAlign="center"
         borderColor="gray.600"
@@ -222,19 +230,19 @@ export const ConnectWallet: React.FC = () => {
       borderWidth="1px"
       borderRadius="xl"
       shadow="xl"
-      bg="gray.800"
-      color="whiteAlpha.900"
+      bg={cardBg}
+      color={textColor}
       width="100%"
       maxWidth={loginMethod ? "500px" : "650px"}
       mx="auto"
-      borderColor="gray.700"
+      borderColor={borderColor}
     >
       {!loginMethod ? (
         <VStack gap={6}>
-          <Heading as="h2" size="xl" textAlign="center" color="whiteAlpha.900">
+          <Heading as="h2" size="xl" textAlign="center" color={headingColor}>
             Join Alpaca Lotto
           </Heading>
-          <Text textAlign="center" fontSize="md" color="gray.300">
+          <Text textAlign="center" fontSize="md" color={descriptionColor}>
             Choose your preferred way to connect and start playing.
           </Text>
           <SimpleGrid columns={{ base: 1, md: 2 }} gap={6} width="100%">
@@ -263,10 +271,13 @@ export const ConnectWallet: React.FC = () => {
           <UIButton
             onClick={backToSelection}
             variant="plain"
-            colorPalette="gray"
+            color={backButtonColor}
             size="sm"
             alignSelf="flex-start"
             gap={1}
+            _hover={{
+                color: "white"
+            }}
           >
             <Icon as={FaPaperPlane} style={{ transform: "rotate(180deg)" }} />
             Back to options
@@ -278,15 +289,18 @@ export const ConnectWallet: React.FC = () => {
           <UIButton
             onClick={backToSelection}
             variant="plain"
-            colorPalette="gray"
+            color={backButtonColor}
             size="sm"
             alignSelf="flex-start"
             gap={1}
+             _hover={{
+                color: "white"
+            }}
           >
             <Icon as={FaPaperPlane} style={{ transform: "rotate(180deg)" }} />
             Back to options
           </UIButton>
-          <Heading as="h3" size="lg" textAlign="center" color="whiteAlpha.900">
+          <Heading as="h3" size="lg" textAlign="center" color={headingColor}>
             Connect Your Wallet
           </Heading>
           {isConnected && wagmiEoaAddress && !isAAWalletInitialized ? (
@@ -295,10 +309,10 @@ export const ConnectWallet: React.FC = () => {
               p={4}
               bg={"gray.750"}
               borderRadius="md"
-              borderColor="gray.600"
+              borderColor={"gray.600"}
               borderWidth="1px"
             >
-              <Text color="whiteAlpha.900">
+              <Text color={"whiteAlpha.900"}>
                 Wallet Connected:{" "}
                 <Code colorScheme="purple" fontSize="sm" variant="outline">
                   {wagmiEoaAddress}
@@ -359,7 +373,7 @@ export const ConnectWallet: React.FC = () => {
                         borderColor: "blue.500",
                       }}
                       borderColor="blue.400"
-                      color="whiteAlpha.900"
+                      color={"whiteAlpha.900"}
                     >
                       Connect with {connector.name}
                       {wagmiConnectStatus === "pending" &&
@@ -374,7 +388,7 @@ export const ConnectWallet: React.FC = () => {
                     </UIButton>
                   ))}
                 {connectors.length === 0 && (
-                  <Text color="gray.400">
+                  <Text color={descriptionColor}>
                     No wallet connectors found. Please install a browser wallet
                     like MetaMask.
                   </Text>

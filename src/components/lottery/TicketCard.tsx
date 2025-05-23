@@ -24,6 +24,7 @@ import {
   RPC_URL,
 } from "@/config";
 import LOTTO_ABI_JSON from "@/abis/AlpacaLotto.json";
+import { useColorModeValue } from "@/components/ui/color-mode";
 
 const LOTTO_ABI = LOTTO_ABI_JSON as any;
 const ERC20_ABI_MINIMAL = [
@@ -59,6 +60,22 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
     aaWalletAddress,
     isAAWalletInitialized,
   } = useAAWallet();
+
+
+  const cardBg = useColorModeValue("gray.700", "gray.700");
+  const textColor = useColorModeValue("whiteAlpha.900", "whiteAlpha.900");
+  const secondaryTextColor = useColorModeValue("gray.300", "gray.300");
+  const borderColor = useColorModeValue("gray.700", "gray.700");
+  const hoverBorderColor = useColorModeValue("teal.300", "teal.300");
+  const headingAccentColor = useColorModeValue("teal.300", "teal.300");
+  const inputBg = useColorModeValue("gray.600", "gray.600");
+  const inputBorder = useColorModeValue("gray.500", "gray.500");
+  const inputHoverBorder = useColorModeValue("gray.400", "gray.400");
+  const inputFocusBorder = useColorModeValue("teal.300", "teal.300");
+  const gasTextColor = useColorModeValue("gray.400", "gray.400");
+  const statusWarningColor = useColorModeValue("yellow.400", "yellow.400");
+  const statusErrorColor = useColorModeValue("red.400", "red.400");
+  const statusInfoColor = useColorModeValue("orange.300", "orange.300");
 
   const [quantity, setQuantity] = useState<number>(1);
   const [usdcAllowance, setUsdcAllowance] = useState<BigNumber>(BigNumber.from(0));
@@ -290,7 +307,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
 
   if (!lottery || lottery.id === 0 || !lottery.ticketPrice) {
     return (
-      <Box borderWidth="1px" borderRadius="lg" p={4} shadow="md" bg="gray.800" color="whiteAlpha.700">
+      <Box borderWidth="1px" borderRadius="lg" p={4} shadow="md" bg={"gray.800"} color={"whiteAlpha.700"}>
         <Text>Lottery data not fully loaded or invalid.</Text>
       </Box>
     );
@@ -353,11 +370,12 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
       borderRadius="lg"
       p={4}
       shadow="md"
-      bg="gray.700"
-      color="whiteAlpha.900"
+      bg={cardBg}
+      color={textColor}
+      borderColor={borderColor}
       onClick={handleCardClick}
       cursor="pointer"
-      _hover={{ borderColor: "teal.300", shadow: "lg" }}
+      _hover={{ borderColor: hoverBorderColor, shadow: "lg" }}
       transition="border-color 0.2s, box-shadow 0.2s"
     >
       <VStack align="stretch" gap={3}>
@@ -365,7 +383,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
         <Text 
               fontSize="xl" 
               fontWeight="bold" 
-              color="teal.300" 
+              color={headingAccentColor}
               mr={2}
               overflow="hidden"
               textOverflow="ellipsis"
@@ -377,15 +395,15 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
             {statusTag}
         </Flex>
         
-        <Text fontSize="sm" color="gray.300">Ticket Price: {formattedTicketPrice} USDC</Text>
-        <Text fontSize="sm" color="gray.300">
+        <Text fontSize="sm" color={secondaryTextColor}>Ticket Price: {formattedTicketPrice} USDC</Text>
+        <Text fontSize="sm" color={secondaryTextColor}>
           Draw Time: {new Date(lottery.drawTime * 1000).toLocaleString()}
         </Text>
       </VStack>
 
       <VStack align="stretch" gap={3} mt={4}>
         <HStack>
-          <Text fontSize="sm" color="gray.300">Quantity:</Text>
+          <Text fontSize="sm" color={secondaryTextColor}>Quantity:</Text>
           <NumberInputRoot
             size="sm"
             maxW="80px"
@@ -398,15 +416,15 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
             disabled={transaction.loading || isLotteryDrawn || !isLotteryActive}
           >
             <NumberInputField 
-              bg="gray.600" 
-              borderColor="gray.500" 
-              _hover={{borderColor: "gray.400"}}
-              _focus={{borderColor: "teal.300", boxShadow: `0 0 0 1px teal.300`}}
+              bg={inputBg} 
+              borderColor={inputBorder} 
+              _hover={{borderColor: inputHoverBorder}}
+              _focus={{borderColor: inputFocusBorder, boxShadow: `0 0 0 1px ${inputFocusBorder}`}}
             />
           </NumberInputRoot>
         </HStack>
-        <Text fontWeight="bold" fontSize="md" color="whiteAlpha.900">Total Cost: {formattedTotalCost} USDC</Text>
-        <Text fontSize="xs" color="gray.400">
+        <Text fontWeight="bold" fontSize="md" color={textColor}>Total Cost: {formattedTotalCost} USDC</Text>
+        <Text fontSize="xs" color={gasTextColor}>
           {getGasPaymentDisplay()}
         </Text>
         <Button
@@ -431,15 +449,15 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
           )}
         </Button>
         {!isLotteryActive && !isLotteryDrawn && (
-            <Text color={isLotteryNotStarted ? "yellow.400" : "orange.400"} fontSize="xs" textAlign="center">
+            <Text color={isLotteryNotStarted ? statusWarningColor : statusInfoColor} fontSize="xs" textAlign="center">
                 {isLotteryNotStarted ? "Lottery has not started yet." : "Lottery ended, awaiting draw."}
             </Text>
         )}
          {!isBalanceSufficient && isLotteryActive && (
-             <Text color="red.400" fontSize="xs" textAlign="center">Please ensure you have enough USDC.</Text>
+             <Text color={statusErrorColor} fontSize="xs" textAlign="center">Please ensure you have enough USDC.</Text>
          )}
          {isBalanceSufficient && !isAllowanceSufficient && isLotteryActive && (
-             <Text color="orange.300" fontSize="xs" textAlign="center">USDC spending needs to be approved.</Text>
+             <Text color={statusInfoColor} fontSize="xs" textAlign="center">USDC spending needs to be approved.</Text>
          )}
       </VStack>
     </Box>
