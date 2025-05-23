@@ -13,7 +13,7 @@ The architecture is designed to maximize the benefits of NERO Chain's Account Ab
 
 ## Architecture Diagram
 
-![AlpacaLotto System Architecture](./docs/images/architecture.png) 
+![AlpacaLotto System Architecture](./docs/architecture.png) 
 
 ## Account Abstraction (AA) Implementation
 

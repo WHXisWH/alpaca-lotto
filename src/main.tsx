@@ -48,8 +48,8 @@ const wagmiConfig = createConfig({
       metadata: {
         name: 'Alpaca Lotto',
         description: 'Alpaca Lotto - A fun and fair lottery game!',
-        url: 'https://your-app-domain.com',
-        icons: ['https://your-app-domain.com/logo.png']
+        url: 'https://alpaca-lotto.vercel.app',
+        icons: ['https://github.com/WHXisWH/alpaca-lotto/blob/main/public/images/alpaca-logo.png']
       }
     }),
     injected(),
