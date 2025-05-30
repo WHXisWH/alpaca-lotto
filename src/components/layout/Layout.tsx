@@ -1,22 +1,23 @@
-import React, { ReactNode } from 'react';
-import { Box, Flex, Heading, Image, Text, Link, Icon, HStack, Skeleton } from "@chakra-ui/react";
-import { FaGithub } from "react-icons/fa";
+import React, { ReactNode, useState } from 'react';
+import { Box, Flex, Heading, Image, Text, Link, Icon, HStack, Skeleton, Button as ChakraButton } from "@chakra-ui/react";
+import { FaGift, FaGithub, FaTwitter } from "react-icons/fa";
 
 interface LayoutProps {
   children: ReactNode;
+  onOpenReferralModal?: () => void; 
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const alpacaHeaderBg = "gray.800";
-  const alpacaFooterBg = "gray.750"; 
-  const alpacaTextPrimary = "whiteAlpha.900";
-  const alpacaTextSecondary = "gray.400";
-  const alpacaAccent = "teal.300";
-  const [isLogoLoaded, setIsLogoLoaded] = React.useState(false);
+export const Layout: React.FC<LayoutProps> = ({ children, onOpenReferralModal }) => {
+  const headerBg = "white";
+  const footerBg = "green.100"; 
+  const textPrimary = "yellow.900";
+  const textSecondary = "gray.700";
+  const accentColor = "green.600";
+  const [isLogoLoaded, setIsLogoLoaded] = useState(false);
 
   return (
-    <Flex direction="column" minHeight="100vh" bg="gray.900">
-      <Box as="header" bg={alpacaHeaderBg} shadow="md" color={alpacaTextPrimary}>
+    <Flex direction="column" minHeight="100vh" bg="green.50">
+      <Box as="header" bg={headerBg} shadow="sm" color={textPrimary} borderBottomWidth="1px" borderColor="gray.200">
         <Flex
           maxW="7xl"
           mx="auto"
@@ -26,17 +27,42 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           justify="space-between"
         >
           <HStack gap={3}>
-            <Skeleton boxSize="40px" loading={!isLogoLoaded} borderRadius="md">
+            <Skeleton boxSize="40px" loading={isLogoLoaded} borderRadius="lg">
               <Image 
                 src="/images/alpaca-logo.png" 
                 alt="Alpaca Lotto Logo" 
                 boxSize="40px" 
                 onLoad={() => setIsLogoLoaded(true)}
+                borderRadius="lg"
               />
             </Skeleton>
-            <Heading as="h1" size="lg" fontWeight="bold" color={alpacaAccent}>
+            <Heading as="h1" size="lg" fontWeight="bold" color={accentColor}>
               Alpaca Lotto
             </Heading>
+          </HStack>
+          <HStack gap={4}>
+            {onOpenReferralModal && (
+              <ChakraButton
+                size="sm"
+                variant="outline"
+                colorScheme="yellow"
+                color="yellow.700"
+                borderColor="yellow.300"
+                onClick={onOpenReferralModal}
+                _hover={{ bg: "yellow.50" }}
+                borderRadius="lg"
+                gap={2}
+              >
+                <Icon as={FaGift} />
+                Referral
+              </ChakraButton>
+            )}
+            <Link href="https://x.com/AlpacaLotto" target="_blank" rel="noopener noreferrer" display="flex" alignItems="center" _hover={{color: "blue.500"}}>
+                <Icon as={FaTwitter} boxSize={5} color="gray.700"/>
+            </Link>
+            <Link href="https://github.com/WHXisWH/alpaca-lotto" target="_blank" rel="noopener noreferrer" display="flex" alignItems="center" _hover={{color: "yellow.900"}}>
+              <Icon as={FaGithub} boxSize={5} color="gray.700"/>
+            </Link>
           </HStack>
         </Flex>
       </Box>
@@ -45,7 +71,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           {children}
         </Box>
       </Box>
-      <Box as="footer" bg={alpacaFooterBg} color={alpacaTextSecondary} borderTopWidth="1px" borderColor="gray.700">
+      <Box as="footer" bg={footerBg} color={textSecondary} borderTopWidth="1px" borderColor="gray.200">
         <Flex
           maxW="7xl"
           mx="auto"
@@ -59,10 +85,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Text textAlign="center" fontSize="sm">
             &copy; {new Date().getFullYear()} Alpaca Lotto - Built on NERO Chain with Account Abstraction
           </Text>
-          <Link href="https://github.com/your-repo-link" target="_blank" rel="noopener noreferrer" display="flex" alignItems="center" _hover={{color: alpacaAccent}}>
-            <Icon as={FaGithub} mr={1}/>
-            View on GitHub
-          </Link>
         </Flex>
       </Box>
     </Flex>

@@ -19,6 +19,15 @@ export const SocialLogin: React.FC = () => {
   const { initializeAAWalletFromSocial, loading: aaLoading, error: aaErrorFromContext } = useAAWallet();
   const [currentLoginProvider, setCurrentLoginProvider] = useState<string | null>(null);
 
+  const primaryTextColor = "yellow.900";
+  const secondaryTextColor = "gray.700";
+  const accentColorGreen = "green.600";
+  const cardBg = "yellow.50";
+  const borderColor = "gray.200";
+  const inputBg = "white";
+  const inputBorderColor = "gray.300";
+  const inputFocusBorderColor = "green.500";
+  const placeholderColor = "gray.500";
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setEmail(e.target.value);
@@ -54,35 +63,37 @@ export const SocialLogin: React.FC = () => {
     <Box
       p={6}
       borderWidth="1px"
-      borderRadius="lg"
-      shadow="md"
-      bg="gray.700" 
-      color="white"
+      borderRadius="xl"
+      shadow="sm"
+      bg={cardBg} 
+      color={primaryTextColor}
       width="100%"
       maxWidth="400px"
       mx="auto"
-      borderColor="gray.600"
+      borderColor={borderColor}
     >
       <VStack gap={4} align="stretch">
-        <Text fontSize="xl" fontWeight="bold" textAlign="center" color="whiteAlpha.900">
+        <Text fontSize="xl" fontWeight="bold" textAlign="center" color={primaryTextColor}>
           {isEmailLoginMode ? "Continue with Email" : "Join with Social Account"}
         </Text>
         
         {isEmailLoginMode ? (
           <VStack gap={3}>
             <Box width="100%">
-              <Text mb={1} fontSize="sm" color="whiteAlpha.800">Email Address</Text>
+              <Text mb={1} fontSize="sm" color={secondaryTextColor}>Email Address</Text>
               <Input
                 type="email"
                 placeholder="Enter your email"
                 value={email}
                 onChange={handleEmailChange}
-                bg="gray.600" 
-                color="whiteAlpha.900"
-                borderColor="gray.500" 
+                bg={inputBg}
+                color={primaryTextColor}
+                borderColor={inputBorderColor}
                 _hover={{ borderColor: "gray.400" }}
-                _focus={{ borderColor: "teal.300", boxShadow: "0 0 0 1px teal.300" }}
-                _placeholder={{ color: "gray.400" }}
+                _focus={{ borderColor: inputFocusBorderColor, boxShadow: `0 0 0 1px ${inputFocusBorderColor}` }}
+                _placeholder={{ color: placeholderColor }}
+                size="lg"
+                borderRadius="lg"
               />
             </Box>
             <Button
@@ -91,16 +102,20 @@ export const SocialLogin: React.FC = () => {
               onClick={() => handleLogin("email_passwordless", email)}
               loading={isButtonLoading("email_passwordless")}
               disabled={aaLoading || !email}
+              size="lg"
+              borderRadius="xl"
+              _hover={{ bg:"green.700", transform: 'scale(1.02)'}}
+              _active={{ bg:"green.800", transform: 'scale(0.98)'}}
             >
-               {isButtonLoading("email_passwordless") ? <Spinner size="sm" borderWidth="2px" animationDuration="0.45s"/> : <Text color="white">Continue with Email</Text>}
+               {isButtonLoading("email_passwordless") ? <Spinner size="sm" color="white"/> : <Text>Continue with Email</Text>}
             </Button>
             <Text
               fontSize="sm"
-              color="gray.400"
+              color={secondaryTextColor}
               cursor="pointer"
               textAlign="center"
               onClick={() => setIsEmailLoginMode(false)}
-              _hover={{ color: "teal.300" }}
+              _hover={{ color: accentColorGreen }}
             >
               Or use Google login
             </Text>
@@ -113,24 +128,27 @@ export const SocialLogin: React.FC = () => {
               onClick={() => handleLogin("google")}
               loading={isButtonLoading("google")}
               disabled={aaLoading}
-              borderColor="gray.500"
-              color="whiteAlpha.900"
-              _hover={{ bg: "red.600", color: "white", borderColor: "red.700" }}
+              borderColor={inputBorderColor}
+              color={primaryTextColor}
+              _hover={{ bg: "yellow.100" , transform: 'scale(1.02)'}}
+              _active={{ transform: 'scale(0.98)'}}
+              size="lg"
+              borderRadius="xl"
             >
-              <HStack gap={2} justifyContent="center">
-                <Icon as={FaGoogle} color={isButtonLoading("google") ? "gray.400" : "red.400"} _groupHover={{color: "white"}}/>
+              <HStack gap={3} justifyContent="center">
+                <Icon as={FaGoogle} color="red.500"/>
                 <Text color="currentColor"> 
                   Continue with Google
                 </Text>
               </HStack>
             </Button>
             
-            <HStack width="100%" alignItems="center" my={2} gap={0}>
-              <Box flex="1" height="1px" bg="gray.600" />
-              <Text fontSize="sm" color="gray.400" px={2}>
+            <HStack width="100%" alignItems="center" my={2} gap={2}>
+              <Box flex="1" height="1px" bg={borderColor} />
+              <Text fontSize="sm" color={placeholderColor} px={2}>
                 or
               </Text>
-              <Box flex="1" height="1px" bg="gray.600" />
+              <Box flex="1" height="1px" bg={borderColor} />
             </HStack>
             
             <Button
@@ -138,12 +156,15 @@ export const SocialLogin: React.FC = () => {
               width="100%"
               onClick={() => setIsEmailLoginMode(true)}
               disabled={aaLoading}
-              borderColor="gray.500"
-              color="whiteAlpha.900"
-              _hover={{ bg: "gray.600", borderColor: "gray.500" }}
+              borderColor={inputBorderColor}
+              color={primaryTextColor}
+              _hover={{ bg: "yellow.100", transform: 'scale(1.02)'}}
+              _active={{ transform: 'scale(0.98)'}}
+              size="lg"
+              borderRadius="xl"
             >
-              <HStack gap={2} justifyContent="center">
-                <Icon as={FaEnvelope} color="gray.400" _groupHover={{color: "whiteAlpha.800"}}/>
+              <HStack gap={3} justifyContent="center">
+                <Icon as={FaEnvelope} color={secondaryTextColor}/>
                 <Text color="currentColor"> 
                   Continue with Email
                 </Text>
@@ -154,12 +175,12 @@ export const SocialLogin: React.FC = () => {
         
         {aaLoading && currentLoginProvider && (
              <HStack justifyContent="center" alignItems="center" mt={2} gap={2}>
-                <Spinner size="sm" color="teal.300" borderWidth="2px" animationDuration="0.45s"/>
-                <Text fontSize="sm" color="gray.300" ml={2}>Processing {currentLoginProvider.replace("_", " ")}...</Text>
+                <Spinner size="sm" color={accentColorGreen} />
+                <Text fontSize="sm" color={secondaryTextColor} ml={2}>Processing {currentLoginProvider.replace("_", " ")}...</Text>
             </HStack>
         )}
 
-        <Text fontSize="xs" color="gray.500" textAlign="center" mt={3}>
+        <Text fontSize="xs" color={placeholderColor} textAlign="center" mt={3}>
           By continuing, you agree to our Terms of Service.
         </Text>
       </VStack>

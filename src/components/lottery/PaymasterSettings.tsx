@@ -4,10 +4,11 @@ import {
   Text,
   Spinner,
   Icon,
+  VStack
 } from "@chakra-ui/react";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { usePaymaster, PaymasterType, SupportedToken } from '@/context/PaymasterContext'; // Added SupportedToken
+import { usePaymaster, PaymasterType, SupportedToken } from '@/context/PaymasterContext';
 import { ethers } from 'ethers';
 import { MdWarning } from 'react-icons/md';
 
@@ -18,17 +19,21 @@ export const PaymasterSettings: React.FC = () => {
     supportedTokens,
     selectedToken,
     setSelectedToken,
-    loading: paymasterContextLoading, // Renamed to avoid conflict if any local loading state
+    loading: paymasterContextLoading,
     error: paymasterError,
     isFreeGasAvailable,
-    fetchSupportedTokens, // Added to dependencies of useEffect if used
-    isLoadingTokens, // Added
+    fetchSupportedTokens,
+    isLoadingTokens,
   } = usePaymaster();
 
+  const primaryTextColor = "yellow.900";
+  const secondaryTextColor = "gray.700";
+  const selectBg = "white";
+  const selectBorderColor = "gray.800"; 
+  const accentColor = "green.600";
+
   useEffect(() => {
-    if (typeof fetchSupportedTokens === "function" && !isLoadingTokens) { // Ensure fetchSupportedTokens is callable and not already loading
-        // Optionally call fetchSupportedTokens here if needed on component mount or when certain conditions change
-        // For now, assuming it's called appropriately elsewhere (e.g., in App.tsx or PaymasterContext itself)
+    if (typeof fetchSupportedTokens === "function" && !isLoadingTokens) {
     }
   }, [fetchSupportedTokens, isLoadingTokens]);
 
@@ -42,38 +47,39 @@ export const PaymasterSettings: React.FC = () => {
   ];
 
   const erc20Tokens = supportedTokens.filter(
-    (t: SupportedToken) => t.address && t.address !== ethers.constants.AddressZero && (t.type === 1 || t.type === 2) // Added type check for paymaster usage
+    (t: SupportedToken) => t.address && t.address !== ethers.constants.AddressZero && (t.type === 1 || t.type === 2)
   );
 
   return (
-    <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg" bg="gray.700" color="white">
-      <Box display="flex" flexDirection="column" gap={4}>
-        <Text fontSize="xl" fontWeight="bold" color="teal.300">
-          Gas Payment Options
-        </Text>
-
+    <Box p={5} bg="white" color={primaryTextColor} borderRadius="xl">
+      <VStack gap={4} align="stretch">
         {paymasterError && (
           <Alert
             status="error"
-            icon={<Icon as={MdWarning} boxSize={5} color="red.400" />}
+            icon={<Icon as={MdWarning} boxSize={5} color="red.500" />}
+            bg="red.50"
+            borderColor="red.200"
+            color="red.700"
+            borderRadius="lg"
           >
             {paymasterError}
           </Alert>
         )}
 
         <Box>
-          <Text mb={2}>Paymaster Type</Text>
+          <Text mb={2} fontWeight="medium" color={secondaryTextColor}>Paymaster Type</Text>
           <select
             style={{
               width: '100%',
-              padding: '0.5rem',
-              borderRadius: '4px',
-              background: '#2D3748', // Example dark theme background
-              color: 'white',
-              border: '1px solid #4A5568', // Example dark theme border
+              padding: '0.75rem',
+              borderRadius: '0.75rem',
+              background: selectBg,
+              color: primaryTextColor,
+              border: `3px solid ${selectBorderColor}`,
+              boxShadow: "sm"
             }}
             disabled={isLoadingTokens || paymasterContextLoading}
-            value={selectedPaymasterType ?? ''} // Handle null/undefined selectedPaymasterType
+            value={selectedPaymasterType ?? ''}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                 if (setSelectedPaymasterType) {
                     setSelectedPaymasterType(e.target.value as PaymasterType);
@@ -93,20 +99,21 @@ export const PaymasterSettings: React.FC = () => {
 
         {selectedPaymasterType === PaymasterType.TOKEN && (
           <Box>
-            <Text mb={2}>Select ERC20 Token for Gas</Text>
+            <Text mb={2} fontWeight="medium" color={secondaryTextColor}>Select ERC20 Token for Gas</Text>
             {isLoadingTokens ? (
-              <Spinner />
+              <Spinner color={accentColor} />
             ) : erc20Tokens.length > 0 ? (
               <select
                 style={{
                   width: '100%',
-                  padding: '0.5rem',
-                  borderRadius: '4px',
-                  background: '#2D3748',
-                  color: 'white',
-                  border: '1px solid #4A5568',
+                  padding: '0.75rem',
+                  borderRadius: '0.75rem',
+                  background: selectBg,
+                  color: primaryTextColor,
+                  border: `3px solid ${selectBorderColor}`,
+                  boxShadow: "sm"
                 }}
-                value={selectedToken?.address ?? ''} // Handle null/undefined selectedToken
+                value={selectedToken?.address ?? ''}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                   const addr = e.target.value;
                   const token = supportedTokens.find((t: SupportedToken) => t.address === addr) || null;
@@ -118,14 +125,14 @@ export const PaymasterSettings: React.FC = () => {
                 <option value="" disabled>
                   Select ERC20 token
                 </option>
-                {erc20Tokens.map((t: SupportedToken) => ( // Explicitly type 't'
+                {erc20Tokens.map((t: SupportedToken) => (
                   <option key={t.address} value={t.address}>
                     {t.symbol}
                   </option>
                 ))}
               </select>
             ) : (
-              <Text>No ERC20 tokens available for Paymaster.</Text>
+              <Text color={secondaryTextColor}>No ERC20 tokens available for Paymaster.</Text>
             )}
           </Box>
         )}
@@ -136,13 +143,18 @@ export const PaymasterSettings: React.FC = () => {
                   fetchSupportedTokens();
               }
           }}
-          loading={isLoadingTokens} // Use isLoadingTokens for button loading state
-          size="sm"
-          colorScheme="teal"
+          loading={isLoadingTokens}
+          size="md"
+          variant="outline"
+          borderRadius="lg"
+          color="green.700"
+          borderColor="green.300"
+          _hover={{bg: "green.50", transform: 'scale(1.02)'}}
+          _active={{transform: 'scale(0.98)', bg: "green.100"}}
         >
           Refresh Token List
         </Button>
-      </Box>
+      </VStack>
     </Box>
   );
 };

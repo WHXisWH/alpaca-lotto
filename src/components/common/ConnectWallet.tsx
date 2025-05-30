@@ -10,6 +10,8 @@ import {
   Heading,
   Icon,
   Center,
+  Image,
+  AspectRatio
 } from "@chakra-ui/react";
 import { Button as UIButton } from "@/components/ui/button";
 import { useAccount, useConnect, useDisconnect, Connector } from "wagmi";
@@ -17,8 +19,8 @@ import { useEthersSigner } from "@/utils/ethersAdapters";
 import { useAAWallet } from "@/context/AAWalletContext";
 import { SocialLogin } from "./SocialLogin";
 import { LoginMethodCard } from "./LoginMethodCard";
-import { FaGoogle, FaPaperPlane, FaWallet } from "react-icons/fa";
-import { useColorModeValue } from "@/components/ui/color-mode";
+import { FaGoogle, FaWallet } from "react-icons/fa";
+import { IoIosArrowRoundBack } from "react-icons/io";
 
 export const ConnectWallet: React.FC = () => {
   const { connect, connectors, error: wagmiConnectError, status: wagmiConnectStatus } = useConnect();
@@ -26,11 +28,8 @@ export const ConnectWallet: React.FC = () => {
   const { disconnect: wagmiDisconnect } = useDisconnect();
   const ethersSigner = useEthersSigner();
 
-  const [loginMethod, setLoginMethod] = useState<"social" | "eoa" | null>(
-    null
-  );
-  const [showEOAConnectorList, setShowEOAConnectorList] =
-    useState<boolean>(false);
+  const [loginMethod, setLoginMethod] = useState<"social" | "eoa" | null>(null);
+  const [showEOAConnectorList, setShowEOAConnectorList] = useState<boolean>(false);
 
   const {
     initializeAAWallet,
@@ -42,17 +41,16 @@ export const ConnectWallet: React.FC = () => {
     disconnectSocialLogin,
     eoaAddress,
   } = useAAWallet();
-
-  const cardBg = useColorModeValue("gray.800", "gray.800");
-  const textColor = useColorModeValue("whiteAlpha.900", "whiteAlpha.900");
-  const borderColor = useColorModeValue("gray.700", "gray.700");
-  const backButtonColor = useColorModeValue("gray.300", "gray.300");
-  const headingColor = useColorModeValue("whiteAlpha.900", "whiteAlpha.900");
-  const descriptionColor = useColorModeValue("gray.300", "gray.300");
-
-  const cardBgHard = "gray.750";
-  const alpacaNatureGreen = "green.300";
-  const alpacaWarmBrown = "orange.400";
+  
+  const cardBg = "white";
+  const textColor = "yellow.900";
+  const borderColor = "gray.200";
+  const backButtonColor = "gray.700";
+  const headingColor = "yellow.900";
+  const descriptionColor = "gray.700";
+  const cardInfoBg = "yellow.50";
+  const accentColorGreen = "green.600";
+  const accentColorOrange = "orange.500";
 
   useEffect(() => {
     if (isAAWalletInitialized) {
@@ -126,50 +124,52 @@ export const ConnectWallet: React.FC = () => {
   if (isAAWalletInitialized && aaWalletAddress) {
     return (
       <Box
-        p={4}
+        p={5}
         borderWidth="1px"
-        borderRadius="lg"
-        shadow="md"
-        bg={cardBgHard}
-        color="whiteAlpha.900"
-        borderColor="gray.600"
+        borderRadius="xl"
+        shadow="sm"
+        bg={cardInfoBg}
+        color={textColor}
+        borderColor={borderColor}
       >
         <VStack gap={3}>
           {isSocialLoggedIn ? (
             <VStack gap={1}>
-              <Text fontWeight="bold" fontSize="lg" color={alpacaNatureGreen}>
+              <Text fontWeight="bold" fontSize="lg" color={accentColorGreen}>
                 Welcome!
               </Text>
-              <Text fontSize="sm">Logged in with Social Account.</Text>
-              <Text fontSize="sm">Your Alpaca Smart Account:</Text>
+              <Text fontSize="sm" color={descriptionColor}>Logged in with Social Account.</Text>
+              <Text fontSize="sm" color={descriptionColor}>Your Alpaca Smart Account:</Text>
               <Code
-                colorPalette="green"
-                p={1}
+                colorScheme="green"
+                p={2}
+                borderRadius="lg"
                 display="block"
                 overflowX="auto"
                 fontSize="xs"
-                variant="outline"
+                bg="green.100"
+                color="green.800"
               >
                 {aaWalletAddress}
               </Code>
             </VStack>
           ) : (
             <VStack gap={1}>
-              <Text fontWeight="bold" fontSize="lg" color={alpacaNatureGreen}>
+              <Text fontWeight="bold" fontSize="lg" color={accentColorGreen}>
                 Wallet Connected & Smart Account Ready!
               </Text>
               <Text fontSize="sm">
                 EOA:{" "}
-                <Code colorPalette="purple" variant="outline" fontSize="xs">
+                <Code colorScheme="purple" variant="outline" fontSize="xs" p={1} borderRadius="lg" borderColor="purple.300" color="purple.700">
                   {eoaAddress}
                 </Code>
               </Text>
-              <Text fontSize="xs" color="gray.400">
+              <Text fontSize="xs" color={descriptionColor}>
                 Chain: {chain?.name} | Connector: {activeConnector?.name}
               </Text>
               <Text fontSize="sm">
                 Smart Account:{" "}
-                <Code colorPalette="green" variant="outline" fontSize="xs">
+                <Code colorScheme="green" variant="outline" fontSize="xs" p={1} borderRadius="lg" borderColor="green.300" color="green.700">
                   {aaWalletAddress}
                 </Code>
               </Text>
@@ -180,6 +180,9 @@ export const ConnectWallet: React.FC = () => {
             variant="outline"
             onClick={handleFullDisconnect}
             size="sm"
+            borderRadius="lg"
+            _hover={{transform: 'scale(1.02)'}}
+            _active={{transform: 'scale(0.98)'}}
           >
             Disconnect
           </UIButton>
@@ -193,30 +196,29 @@ export const ConnectWallet: React.FC = () => {
       <Box
         p={6}
         borderWidth="1px"
-        borderRadius="lg"
-        shadow="lg"
-        bg={cardBgHard}
-        color="whiteAlpha.900"
+        borderRadius="xl"
+        shadow="md"
+        bg={cardInfoBg}
+        color={textColor}
         textAlign="center"
-        borderColor="gray.600"
+        borderColor={borderColor}
       >
         <Spinner
           size="xl"
-          color={alpacaNatureGreen}
+          color={accentColorGreen}
           mb={4}
           borderWidth="4px"
-          animationDuration="0.45s"
         />
         <Text fontSize="lg" fontWeight="semibold">
           Initializing Your Lucky Wallet...
         </Text>
         {(isSocialLoggedIn || loginMethod === "social") && (
-          <Text fontSize="sm" color="gray.300">
+          <Text fontSize="sm" color={descriptionColor}>
             Processing secure login...
           </Text>
         )}
         {loginMethod === "eoa" && isConnected && (
-          <Text fontSize="sm" color="gray.300">
+          <Text fontSize="sm" color={descriptionColor}>
             Setting up your smart account...
           </Text>
         )}
@@ -226,26 +228,28 @@ export const ConnectWallet: React.FC = () => {
 
   return (
     <Box
-      p={{ base: 4, md: 6 }}
+      p={{ base: 5, md: 8 }}
       borderWidth="1px"
-      borderRadius="xl"
-      shadow="xl"
+      borderRadius="2xl"
+      shadow="sm"
       bg={cardBg}
       color={textColor}
       width="100%"
       maxWidth={loginMethod ? "500px" : "650px"}
       mx="auto"
       borderColor={borderColor}
+      _hover={{ shadow: 'md' }}
     >
       {!loginMethod ? (
         <VStack gap={6}>
-          <Heading as="h2" size="xl" textAlign="center" color={headingColor}>
+          <Image src="/images/alpaca-welcoming.png" alt="A row of alpacas" width="100%" maxW="1000px" height="120px" objectFit="contain" mx="auto" mb={2} />
+          <Heading as="h2" size={{base:"lg", md:"xl"}} textAlign="center" color={headingColor}>
             Join Alpaca Lotto
           </Heading>
-          <Text textAlign="center" fontSize="md" color={descriptionColor}>
+          <Text textAlign="center" fontSize={{base:"sm", md:"md"}} color={descriptionColor}>
             Choose your preferred way to connect and start playing.
           </Text>
-          <SimpleGrid columns={{ base: 1, md: 2 }} gap={6} width="100%">
+          <SimpleGrid columns={{ base: 1, md: 2 }} gap={{base:4, md:6}} width="100%">
             <LoginMethodCard
               icon={FaGoogle}
               title="Quick & Easy Login"
@@ -261,164 +265,157 @@ export const ConnectWallet: React.FC = () => {
               description="Connect your existing MetaMask, WalletConnect, or other browser wallet."
               btnText="Connect External Wallet"
               onClick={() => selectLoginMethod("eoa")}
-              colorScheme="orange"
+              colorScheme="orange" 
               btnDisabled={aaLoading}
             />
           </SimpleGrid>
         </VStack>
-      ) : loginMethod === "social" ? (
+      ) : (
         <VStack gap={4} align="stretch">
           <UIButton
             onClick={backToSelection}
-            variant="plain"
+            variant="ghost"
             color={backButtonColor}
             size="sm"
             alignSelf="flex-start"
             gap={1}
             _hover={{
-                color: "white"
+                color: "yellow.800",
+                bg: "yellow.100"
             }}
+            pl={1}
+            borderRadius="md"
           >
-            <Icon as={FaPaperPlane} style={{ transform: "rotate(180deg)" }} />
+            <Icon as={IoIosArrowRoundBack} boxSize={6} />
             Back to options
           </UIButton>
-          <SocialLogin />
-        </VStack>
-      ) : (
-        <VStack gap={4} align="stretch" width="100%">
-          <UIButton
-            onClick={backToSelection}
-            variant="plain"
-            color={backButtonColor}
-            size="sm"
-            alignSelf="flex-start"
-            gap={1}
-             _hover={{
-                color: "white"
-            }}
-          >
-            <Icon as={FaPaperPlane} style={{ transform: "rotate(180deg)" }} />
-            Back to options
-          </UIButton>
-          <Heading as="h3" size="lg" textAlign="center" color={headingColor}>
-            Connect Your Wallet
-          </Heading>
-          {isConnected && wagmiEoaAddress && !isAAWalletInitialized ? (
-            <VStack
-              gap={3}
-              p={4}
-              bg={"gray.750"}
-              borderRadius="md"
-              borderColor={"gray.600"}
-              borderWidth="1px"
-            >
-              <Text color={"whiteAlpha.900"}>
-                Wallet Connected:{" "}
-                <Code colorScheme="purple" fontSize="sm" variant="outline">
-                  {wagmiEoaAddress}
-                </Code>
-              </Text>
-              <Text fontSize="xs" color="gray.400">
-                Chain: {chain?.name} | Connector: {activeConnector?.name}
-              </Text>
-              <UIButton
-                colorPalette="orange"
-                onClick={handleInitializeAA}
-                loading={aaLoading}
-                disabled={!ethersSigner || aaLoading}
-                width="100%"
-              >
-                Activate Smart Account
-              </UIButton>
-              {aaError && (
-                <Text color="red.400" fontSize="sm">
-                  {aaError}
+          {loginMethod === 'social' ? <SocialLogin /> : (
+            <VStack gap={4} align="stretch" width="100%">
+              <Heading as="h3" size="lg" textAlign="center" color={headingColor}>
+                Connect Your Wallet
+              </Heading>
+              {isConnected && wagmiEoaAddress && !isAAWalletInitialized ? (
+                <VStack
+                  gap={3}
+                  p={4}
+                  bg={cardInfoBg}
+                  borderRadius="lg"
+                  borderColor={borderColor}
+                  borderWidth="1px"
+                >
+                  <Text color={textColor}>
+                    Wallet Connected:{" "}
+                    <Code colorScheme="purple" fontSize="sm" p={1} borderRadius="md" bg="purple.100" color="purple.800">
+                      {wagmiEoaAddress}
+                    </Code>
+                  </Text>
+                  <Text fontSize="xs" color={descriptionColor}>
+                    Chain: {chain?.name} | Connector: {activeConnector?.name}
+                  </Text>
+                  <UIButton
+                    colorPalette="green"
+                    onClick={handleInitializeAA}
+                    loading={aaLoading}
+                    disabled={!ethersSigner || aaLoading}
+                    width="100%"
+                    borderRadius="lg"
+                    _hover={{bg:"green.700", transform: 'scale(1.02)'}}
+                    _active={{bg:"green.800", transform: 'scale(0.98)'}}
+                  >
+                    Activate Smart Account
+                  </UIButton>
+                  {aaError && (
+                    <Text color="red.500" fontSize="sm">
+                      {aaError}
+                    </Text>
+                  )}
+                  <UIButton
+                    variant="outline"
+                    colorPalette="red"
+                    onClick={handleFullDisconnect}
+                    size="sm"
+                    mt={2}
+                    borderRadius="lg"
+                    _hover={{transform: 'scale(1.02)'}}
+                    _active={{transform: 'scale(0.98)'}}
+                  >
+                    Disconnect Wallet
+                  </UIButton>
+                </VStack>
+              ) : (
+                showEOAConnectorList && (
+                  <VStack gap={3} width="100%">
+                    {connectors
+                      .filter(
+                        (c) =>
+                          c.isAuthorized ||
+                          c.type === "injected" ||
+                          c.id === "walletConnect"
+                      )
+                      .map((connector) => (
+                        <UIButton
+                          key={connector.id}
+                          colorPalette="blue"
+                          variant="outline"
+                          onClick={() => handleConnect(connector.id)}
+                          loading={
+                            wagmiConnectStatus === "pending" &&
+                            activeConnector?.id === connector.id
+                          }
+                          disabled={wagmiConnectStatus === "pending"}
+                          width="100%"
+                          borderRadius="lg"
+                          _hover={{transform: 'scale(1.02)'}}
+                          _active={{transform: 'scale(0.98)'}}
+                        >
+                          Connect with {connector.name}
+                          {wagmiConnectStatus === "pending" &&
+                            activeConnector?.id === connector.id && (
+                              <Spinner
+                                size="sm"
+                                ml={2}
+                                borderWidth="2px" 
+                              />
+                            )}
+                        </UIButton>
+                      ))}
+                    {connectors.length === 0 && (
+                      <Text color={descriptionColor}>
+                        No wallet connectors found. Please install a browser wallet
+                        like MetaMask.
+                      </Text>
+                    )}
+                  </VStack>
+                )
+              )}
+              {wagmiConnectError && (
+                <Text color="red.500" mt={2} fontSize="sm" textAlign="center">
+                  Connection Error: {wagmiConnectError.message}
                 </Text>
               )}
-              <UIButton
-                variant="outline"
-                colorPalette="red"
-                onClick={handleFullDisconnect}
-                size="sm"
-                mt={2}
-              >
-                Disconnect Wallet
-              </UIButton>
+              {!isConnected && !showEOAConnectorList && (
+                <UIButton
+                  colorPalette="green"
+                  onClick={() => setShowEOAConnectorList(true)}
+                  width="100%"
+                  borderRadius="lg"
+                  _hover={{bg:"green.700", transform: 'scale(1.02)'}}
+                  _active={{bg:"green.800", transform: 'scale(0.98)'}}
+                >
+                  Show Connection Options
+                </UIButton>
+              )}
+              {isConnected && !wagmiEoaAddress && loginMethod === "eoa" && (
+                <Center pt={4}>
+                  <VStack gap={2}>
+                    <Spinner color={accentColorOrange} />
+                    <Text fontSize="sm" color={descriptionColor}>
+                      Awaiting wallet connection details...
+                    </Text>
+                  </VStack>
+                </Center>
+              )}
             </VStack>
-          ) : (
-            showEOAConnectorList && (
-              <VStack gap={3} width="100%">
-                {connectors
-                  .filter(
-                    (c) =>
-                      c.isAuthorized ||
-                      c.type === "injected" ||
-                      c.id === "walletConnect"
-                  )
-                  .map((connector) => (
-                    <UIButton
-                      key={connector.id}
-                      colorPalette="blue"
-                      variant="outline"
-                      onClick={() => handleConnect(connector.id)}
-                      loading={
-                        wagmiConnectStatus === "pending" &&
-                        activeConnector?.id === connector.id
-                      }
-                      disabled={wagmiConnectStatus === "pending"}
-                      width="100%"
-                      _hover={{
-                        bg: "blue.500",
-                        color: "white",
-                        borderColor: "blue.500",
-                      }}
-                      borderColor="blue.400"
-                      color={"whiteAlpha.900"}
-                    >
-                      Connect with {connector.name}
-                      {wagmiConnectStatus === "pending" &&
-                        activeConnector?.id === connector.id && (
-                          <Spinner
-                            size="sm"
-                            ml={2}
-                            borderWidth="2px"
-                            animationDuration="0.45s"
-                          />
-                        )}
-                    </UIButton>
-                  ))}
-                {connectors.length === 0 && (
-                  <Text color={descriptionColor}>
-                    No wallet connectors found. Please install a browser wallet
-                    like MetaMask.
-                  </Text>
-                )}
-              </VStack>
-            )
-          )}
-          {wagmiConnectError && (
-            <Text color="red.400" mt={2} fontSize="sm" textAlign="center">
-              Connection Error: {wagmiConnectError.message}
-            </Text>
-          )}
-          {!isConnected && !showEOAConnectorList && (
-            <UIButton
-              colorPalette="blue"
-              onClick={() => setShowEOAConnectorList(true)}
-              width="100%"
-            >
-              Show Connection Options
-            </UIButton>
-          )}
-          {isConnected && !wagmiEoaAddress && loginMethod === "eoa" && (
-            <Center pt={4}>
-              <VStack gap={2}>
-                <Spinner color={alpacaWarmBrown} />
-                <Text fontSize="sm" color="gray.300">
-                  Awaiting wallet connection details...
-                </Text>
-              </VStack>
-            </Center>
           )}
         </VStack>
       )}

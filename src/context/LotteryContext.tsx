@@ -13,6 +13,7 @@ import {
   LOTTERY_CONTRACT_ADDRESS,
   USDC_TOKEN_ADDRESS,
   RPC_URL,
+  USDC_DECIMALS,
 } from "../config";
 import { UserOperationBuilder, ISendUserOperationResponse as UserOpSdkResponse } from "userop";
 import { UserOperationEventEvent } from "@account-abstraction/contracts/dist/types/EntryPoint";
@@ -38,6 +39,7 @@ export interface Lottery {
   prizePool: BigNumber;
   drawn: boolean;
   winners?: string[];
+  winningTickets?: BigNumber[];
 }
 
 export interface OwnedTicketInfo {
@@ -51,7 +53,7 @@ interface TransactionState {
   error: string | null;
   successMessage: string | null;
   hash: string | null;
-  step: "idle" | "approving" | "purchasing" | "fetchingReceipt";
+  step: "idle" | "approving" | "purchasing" | "claiming" | "fetchingReceipt";
 }
 
 interface LotteryContextType {
@@ -62,6 +64,14 @@ interface LotteryContextType {
   purchaseTicketsForLottery: (
     lotteryId: number,
     quantity: number
+  ) => Promise<string | null>;
+  purchaseTicketsWithReferral: (
+    lotteryId: number,
+    quantity: number,
+    referrer: string
+  ) => Promise<string | null>;
+  claimPrizeForLottery: (
+    lotteryId: number
   ) => Promise<string | null>;
   checkAndApproveUSDC: (
     lotteryId: number,
@@ -82,7 +92,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const aaWalletContext = useAAWallet();
-  const { applyPaymasterToBuilder } = usePaymaster(); 
+  const { applyPaymasterToBuilder } = usePaymaster();
 
   const [lotteries, setLotteries] = useState<Lottery[]>([]);
   const [ownedTicketsInfo, setOwnedTicketsInfo] = useState<OwnedTicketInfo[]>(
@@ -153,9 +163,10 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
             prizePool: lotteryData.prizePool,
             drawn: lotteryData.drawn,
             winners: lotteryData.winners,
+            winningTickets: lotteryData.winningTickets,
           });
         } else {
-          console.warn(`Failed to fetch or validate lottery with ID ${lotteryId}:`, result.status === "rejected" ? result.reason : "Invalid data");
+          // console.warn(`Failed to fetch or validate lottery with ID ${lotteryId}:`, result.status === "rejected" ? result.reason : "Invalid data");
         }
       });
       
@@ -164,16 +175,17 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (sortedLotteries.length > 0) {
         const now = new Date().getTime() / 1000;
-        initialSelectedLottery = sortedLotteries.find(l => l.endTime > now && l.startTime <= now) || 
-                                sortedLotteries.sort((a,b) => b.endTime - a.endTime)[0] || // Fallback to latest end time
-                                sortedLotteries[0]; // Fallback to first
+        initialSelectedLottery = sortedLotteries.find(l => l.endTime > now && l.startTime <= now && !l.drawn) || 
+                                sortedLotteries.find(l => !l.drawn) || 
+                                sortedLotteries.sort((a,b) => b.drawTime - a.drawTime)[0] || 
+                                sortedLotteries[0]; 
         setSelectedLotteryForInfo(initialSelectedLottery);
       } else {
         setSelectedLotteryForInfo(null);
       }
 
     } catch (error: any) {
-      console.error("Failed to fetch lotteries:", error);
+      // console.error("Failed to fetch lotteries:", error);
       setTransaction((prev) => ({ ...prev, error: error?.message || "Failed to fetch lotteries" }));
       setSelectedLotteryForInfo(null);
     } finally {
@@ -220,10 +232,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
           return prev;
         });
       } catch (error) {
-        console.error(
-          `Failed to fetch owned tickets for lottery ${lotteryId}:`,
-          error
-        );
+        // console.error(`Failed to fetch owned tickets for lottery ${lotteryId}:`, error);
       }
     },
     [getLotteryContractReader, aaWalletContext.aaWalletAddress, lotteries]
@@ -308,7 +317,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
 
     } catch (err: any) {
       const readableError = err.error?.message || err.message || "An unknown error occurred during approval.";
-      console.error("Approval Error:", err);
+      // console.error("Approval Error:", err);
       setTransaction({
         loading: false,
         error: readableError,
@@ -320,12 +329,12 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-
-  const purchaseTicketsForLottery = async (
+  const _purchaseTicketsInternal = async (
     lotteryId: number,
-    quantity: number
+    quantity: number,
+    referrer?: string
   ): Promise<string | null> => {
-    if (
+     if (
       !aaWalletContext.aaWalletAddress ||
       !aaWalletContext.simpleAccount ||
       !aaWalletContext.sendUserOp || 
@@ -377,10 +386,19 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
 
     try {
       const lotteryContractInterface = new ethers.utils.Interface(LOTTO_ABI);
-      const purchaseCallData = lotteryContractInterface.encodeFunctionData(
-        "purchaseTickets",
-        [lotteryId, USDC_TOKEN_ADDRESS, quantity]
-      );
+      let purchaseCallData;
+      if (referrer && ethers.utils.isAddress(referrer)) {
+        purchaseCallData = lotteryContractInterface.encodeFunctionData(
+          "purchaseTicketsWithReferral",
+          [lotteryId, USDC_TOKEN_ADDRESS, quantity, referrer]
+        );
+      } else {
+        purchaseCallData = lotteryContractInterface.encodeFunctionData(
+          "purchaseTickets",
+          [lotteryId, USDC_TOKEN_ADDRESS, quantity]
+        );
+      }
+      
 
       let purchaseOpBuilder: UserOperationBuilder = aaWalletContext.simpleAccount.execute(
         LOTTERY_CONTRACT_ADDRESS,
@@ -423,7 +441,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
     } catch (err: any) {
-      console.error("Purchase Error:", err);
+      // console.error("Purchase Error:", err);
       const readableError =
         err.error?.message || err.message || "An unknown error occurred during purchase.";
       setTransaction({
@@ -437,6 +455,110 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const purchaseTicketsForLottery = async (
+    lotteryId: number,
+    quantity: number
+  ): Promise<string | null> => {
+    return _purchaseTicketsInternal(lotteryId, quantity);
+  };
+
+  const purchaseTicketsWithReferral = async (
+    lotteryId: number,
+    quantity: number,
+    referrer: string
+  ): Promise<string | null> => {
+    return _purchaseTicketsInternal(lotteryId, quantity, referrer);
+  };
+
+  const claimPrizeForLottery = async (
+    lotteryId: number
+  ): Promise<string | null> => {
+     if (
+      !aaWalletContext.aaWalletAddress ||
+      !aaWalletContext.simpleAccount ||
+      !aaWalletContext.sendUserOp || 
+      !applyPaymasterToBuilder 
+    ) {
+      setTransaction({
+        loading: false,
+        error: "AA Wallet or Paymaster context not initialized correctly for claiming prize.",
+        successMessage: null,
+        hash: null,
+        step: "idle",
+      });
+      return null;
+    }
+    
+    setTransaction({
+      loading: true,
+      error: null,
+      successMessage: "Preparing to claim prize...",
+      hash: null,
+      step: "claiming",
+    });
+
+    try {
+      const lotteryContractInterface = new ethers.utils.Interface(LOTTO_ABI);
+      const claimCallData = lotteryContractInterface.encodeFunctionData(
+        "claimPrize",
+        [lotteryId]
+      );
+
+      let claimOpBuilder: UserOperationBuilder = aaWalletContext.simpleAccount.execute(
+        LOTTERY_CONTRACT_ADDRESS,
+        BigNumber.from(0),
+        claimCallData
+      );
+      
+      claimOpBuilder = await applyPaymasterToBuilder(claimOpBuilder);
+
+      setTransaction((prev) => ({
+        ...prev,
+        successMessage: `Sending claim prize UserOp...`,
+      }));
+
+      const claimResponse: UserOpSdkResponse = await aaWalletContext.sendUserOp(claimOpBuilder);
+      const claimUserOpHash = claimResponse.userOpHash;
+
+      setTransaction((prev) => ({
+        ...prev,
+        successMessage: `Claim prize UserOp sent: ${claimUserOpHash}. Waiting for confirmation...`,
+        hash: claimUserOpHash,
+        step: "fetchingReceipt",
+      }));
+
+      const opReceipt: UserOperationEventEvent | null = await claimResponse.wait();
+
+      if (opReceipt && opReceipt.args && opReceipt.args.success) {
+         setTransaction({
+          loading: false,
+          error: null,
+          successMessage: `Prize claimed successfully for Lottery ID ${lotteryId}! UserOpHash: ${claimUserOpHash}`,
+          hash: claimUserOpHash,
+          step: "idle",
+        });
+        fetchLotteries();
+        return claimUserOpHash;
+      } else {
+        throw new Error(`Prize claim transaction failed. UserOpHash: ${claimUserOpHash}. Receipt: ${JSON.stringify(opReceipt)}`);
+      }
+
+    } catch (err: any) {
+      // console.error("Claim Prize Error:", err);
+      const readableError =
+        err.error?.message || err.message || "An unknown error occurred during prize claim.";
+      setTransaction({
+        loading: false,
+        error: readableError,
+        successMessage: null,
+        hash: transaction.hash,
+        step: "idle",
+      });
+      return null;
+    }
+  };
+
+
   const fetchLotteryOwner = useCallback(async () => {
     const contract = getLotteryContractReader();
     if (!contract || !aaWalletContext.eoaAddress) return;
@@ -446,7 +568,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
         owner?.toLowerCase() === aaWalletContext.eoaAddress?.toLowerCase()
       );
     } catch (error) {
-      console.error("Failed to fetch lottery owner:", error);
+      // console.error("Failed to fetch lottery owner:", error);
     }
   }, [getLotteryContractReader, aaWalletContext.eoaAddress]);
 
@@ -480,6 +602,8 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
         fetchLotteries,
         fetchOwnedLotteryTickets,
         purchaseTicketsForLottery,
+        purchaseTicketsWithReferral,
+        claimPrizeForLottery,
         checkAndApproveUSDC,
         transaction,
         clearTransactionState,

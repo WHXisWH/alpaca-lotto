@@ -8,7 +8,6 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { Button } from "@/components/ui/button";
-import { useColorModeValue } from "@/components/ui/color-mode";
 
 interface LoginMethodCardProps {
   icon: React.ElementType;
@@ -32,58 +31,44 @@ export function LoginMethodCard({
   btnDisabled = false,
 }: LoginMethodCardProps) {
 
-  const cardBg = useColorModeValue(
-    `${colorScheme}.100`,
-    `${colorScheme}.800`
-  );
-  const cardHoverBg = useColorModeValue(
-    `${colorScheme}.200`,
-    `${colorScheme}.700`
-  );
-  const borderColor = useColorModeValue(
-    `${colorScheme}.200`,
-    `${colorScheme}.700`
-  );
-  const headingColor = useColorModeValue(
-    "gray.800",        
-    "whiteAlpha.900"
-  );
-  const textColor = useColorModeValue(
-    "gray.600", 
-    "gray.300"
-  );
-  const iconColor = useColorModeValue(
-    `${colorScheme}.500`,
-    `${colorScheme}.300`
-  );
+  const cardBg = "white";
+  const cardHoverBg = "yellow.50";
+  const borderColor = "gray.200";
+  const headingColor = "yellow.900";
+  const textColor = "gray.700";
+  let iconColor = `${colorScheme}.600`;
+  if (colorScheme === "yellow") iconColor = "orange.500";
+
 
   return (
     <Box
       bg={cardBg}
       _hover={{
         bg: cardHoverBg,
-        shadow: "2xl",
-        transform: "translateY(-2px)",
+        shadow: "lg",
+        transform: "translateY(-2px) scale(1.02)",
+        borderColor: `${colorScheme}.300`
       }}
       cursor="pointer"
-      borderRadius="xl"
-      p={{ base: 4, md: 6 }}
+      borderRadius="2xl"
+      p={{ base: 5, md: 6 }}
       onClick={onClick}
       borderWidth="1px"
       borderColor={borderColor}
       display="flex"
       flexDirection="column"
       justifyContent="space-between"
-      minHeight={{ base: "auto", md: "240px" }}
+      minHeight={{ base: "auto", md: "260px" }}
       transition="all 0.2s ease-out"
       width="100%"
+      shadow="sm"
     >
       <VStack align="start" gap={3} flexGrow={1}>
         <HStack gap={3}>
           <Icon
             as={icon}
-            w={{ base: 6, md: 7 }}
-            h={{ base: 6, md: 7 }}
+            w={{ base: 7, md: 8 }}
+            h={{ base: 7, md: 8 }}
             color={iconColor}
           />
           <Heading size="md" color={headingColor}>
@@ -95,12 +80,16 @@ export function LoginMethodCard({
         </Text>
       </VStack>
       <Button
-        colorPalette={colorScheme}
+        colorPalette={colorScheme === "orange" ? "orange" : "green"}
         variant="solid"
         width="100%"
         mt={4}
         loading={btnLoading}
         disabled={btnDisabled || btnLoading}
+        size="lg"
+        borderRadius="xl"
+        _hover={{ transform: 'scale(1.02)', bg: colorScheme === "orange" ? "orange.600" : "green.700" }}
+        _active={{ transform: 'scale(0.98)', bg: colorScheme === "orange" ? "orange.700" : "green.800" }}
       >
         {btnText}
       </Button>

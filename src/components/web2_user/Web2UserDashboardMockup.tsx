@@ -32,10 +32,8 @@ import {
   FaCreditCard,
   FaCoins,
   FaQuestionCircle,
-  FaRobot,
   FaPaperPlane,
 } from "react-icons/fa";
-import { useColorModeValue } from "@/components/ui/color-mode";
 
 export const Web2UserDashboardMockup: React.FC = () => {
   const {
@@ -59,27 +57,25 @@ export const Web2UserDashboardMockup: React.FC = () => {
   >([]);
   const [isBotTyping, setIsBotTyping] = useState(false);
 
-
-  const mainBg = useColorModeValue("gray.800", "gray.800");
-  const textColor = useColorModeValue("whiteAlpha.900", "whiteAlpha.900");
-  const secondaryTextColor = useColorModeValue("gray.300", "gray.300");
-  const borderColor = useColorModeValue("gray.700", "gray.700");
-  const separatorColor = useColorModeValue("gray.600", "gray.600");
-  const cardBg = useColorModeValue("gray.750", "gray.750");
-  const cardBorderColor = useColorModeValue("gray.600", "gray.600");
-  const headingAccentColor = useColorModeValue("teal.300", "teal.300");
-  const dialogBg = useColorModeValue("gray.750", "gray.750");
-  const inputBg = useColorModeValue("gray.700", "gray.700");
-  const inputBorder = useColorModeValue("gray.500", "gray.500");
-  const inputHoverBorder = useColorModeValue("gray.400", "gray.400");
-  const placeholderColor = useColorModeValue("gray.500", "gray.500");
-  const buttonHoverBg = useColorModeValue("gray.600", "gray.600");
-  const chatHeaderBg = useColorModeValue("gray.700", "gray.700");
-  const chatUserMsgBg = useColorModeValue("blue.400", "blue.400");
-  const chatBotMsgBg = useColorModeValue("gray.600", "gray.600");
-  const supportBlue = useColorModeValue("blue.400", "blue.400");
-  const natureGreen = useColorModeValue("green.400", "green.400");
-
+  const mainBg = "yellow.50";
+  const textColor = "yellow.900";
+  const secondaryTextColor = "gray.700";
+  const borderColor = "gray.200";
+  const separatorColor = "gray.200";
+  const cardBg = "white";
+  const cardBorderColor = "gray.200";
+  const headingAccentColor = "green.600";
+  const dialogBg = "white";
+  const inputBg = "white";
+  const inputBorder = "gray.300";
+  const inputHoverBorder = "yellow.400";
+  const placeholderColor = "gray.500"; 
+  const buttonHoverBg = "yellow.100";
+  const chatHeaderBg = "yellow.100";
+  const chatUserMsgBg = "blue.500"; 
+  const chatBotMsgBg = "yellow.100";
+  const supportBlue = "blue.500";
+  const natureGreen = "green.600";
 
   const [isBotIconLoaded, setIsBotIconLoaded] = useState(false);
   const [isBotAvatarLoaded, setIsBotAvatarLoaded] = useState(false);
@@ -144,8 +140,8 @@ export const Web2UserDashboardMockup: React.FC = () => {
 
   return (
     <Box
-      p={{ base: 3, md: 5 }}
-      shadow="xl"
+      p={{ base: 4, md: 5 }}
+      shadow="sm"
       borderWidth="1px"
       borderRadius="xl"
       bg={mainBg}
@@ -165,12 +161,13 @@ export const Web2UserDashboardMockup: React.FC = () => {
 
         <SimpleGrid columns={{ base: 1, md: 2 }} gap={6}>
           <Card.Root
-            variant="unstyled" 
-            bg={cardBg}
-            shadow="lg"
+            shadow="sm"
             borderRadius="xl"
             borderColor={cardBorderColor}
             borderWidth="1px"
+            bg={cardBg}
+            _hover={{ shadow: 'md', transform: 'translateY(-2px)' }}
+            transition="all 0.2s ease-out"
           >
             <Card.Body p={5}>
               <VStack gap={4} align="stretch">
@@ -185,9 +182,14 @@ export const Web2UserDashboardMockup: React.FC = () => {
                   Secure and fast.
                 </Text>
                 <Button
-                  colorPalette="blue"
+                  colorPalette="green" 
+                  bg="green.600"
+                  color="white"
+                  _hover={{bg:"green.700", transform: 'scale(1.02)'}}
+                  _active={{bg:"green.800", transform: 'scale(0.98)'}}
                   onClick={onCreditCardModalOpen}
                   gap={2}
+                  borderRadius="lg"
                 >
                   <FaCreditCard />
                   Add Funds with Credit Card
@@ -196,28 +198,29 @@ export const Web2UserDashboardMockup: React.FC = () => {
             </Card.Body>
           </Card.Root>
 
-
           <Card.Root
-            variant="unstyled"
-            bg={cardBg}
-            shadow="lg"
+            shadow="sm"
             borderRadius="xl"
             borderColor={cardBorderColor}
             borderWidth="1px"
+            bg={cardBg}
+            _hover={{ shadow: 'md', transform: 'translateY(-2px)' }}
+            transition="all 0.2s ease-out"
           >
             <Card.Body p={5}>
               <VStack gap={4} align="stretch">
                 <HStack gap={3}>
                   <Skeleton
                     boxSize="24px"
-                    loading={!isBotAvatarLoaded}
-                    borderRadius="sm"
+                    loading={!isBotIconLoaded}
+                    borderRadius="md"
                   >
                     <Image
                       src="/images/alpaca-ai-bot-icon.png"
                       alt="Alpaca AI Assistant Icon"
                       boxSize="24px"
                       onLoad={() => setIsBotIconLoaded(true)}
+                      borderRadius="md"
                     />
                   </Skeleton>
                   <Heading size="md" color={textColor}>
@@ -230,10 +233,15 @@ export const Web2UserDashboardMockup: React.FC = () => {
                 </Text>
                 <Button
                   colorPalette="green"
+                  bg="green.600"
+                  color="white"
+                  _hover={{bg:"green.700", transform: 'scale(1.02)'}}
+                  _active={{bg:"green.800", transform: 'scale(0.98)'}}
                   onClick={onAiBotModalOpen}
                   gap={2}
+                  borderRadius="lg"
                 >
-                  <FaQuestionCircle />
+                  <ChakraIcon as={FaQuestionCircle} />
                   Ask Alpaca Bot
                 </Button>
               </VStack>
@@ -249,7 +257,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
           modal
         >
           <Portal>
-            <DialogBackdrop bg="blackAlpha.800" />
+            <DialogBackdrop bg="blackAlpha.600" />
             <DialogPositioner>
               <DialogContent
                 bg={dialogBg}
@@ -274,6 +282,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                     top="12px"
                     right="12px"
                     _hover={{ bg: buttonHoverBg }}
+                    borderRadius="md"
                   />
                 </DialogCloseTrigger>
                 <DialogBody py={6}>
@@ -288,7 +297,6 @@ export const Web2UserDashboardMockup: React.FC = () => {
                         size="xl"
                         color={supportBlue}
                         borderWidth="4px"
-                        animationDuration="0.45s"
                       />
                       <Text color={secondaryTextColor}>
                         Processing your payment securely...
@@ -329,9 +337,9 @@ export const Web2UserDashboardMockup: React.FC = () => {
                         as={FaCreditCard}
                         w={12}
                         h={12}
-                        color="red.400"
+                        color="red.500"
                       />
-                      <Text fontSize="lg" fontWeight="bold" color="red.300">
+                      <Text fontSize="lg" fontWeight="bold" color="red.600">
                         Payment Failed
                       </Text>
                       <Text color={secondaryTextColor}>
@@ -344,19 +352,9 @@ export const Web2UserDashboardMockup: React.FC = () => {
                         This is a mock interface for adding funds. No real
                         transaction will occur.
                       </Text>
-                      <InputGroup
-                        startElement={
-                          <Text
-                            color="gray.400"
-                            pl={3}
-                            pr={2}
-                            style={{ pointerEvents: "none" }}
-                          >
-                            $
-                          </Text>
-                        }
-                      >
+                      <InputGroup>
                         <Input
+                          size="lg"
                           type="number"
                           placeholder="Enter amount in USDC"
                           value={creditCardAmount}
@@ -369,14 +367,15 @@ export const Web2UserDashboardMockup: React.FC = () => {
                             boxShadow: `0 0 0 1px ${supportBlue}`,
                           }}
                           _placeholder={{ color: placeholderColor }}
+                          borderRadius="lg"
                         />
                       </InputGroup>
                       <Box
                         textAlign="center"
                         fontSize="xs"
-                        color="gray.400"
+                        color={secondaryTextColor}
                         p={2}
-                        bg={useColorModeValue("gray.700", "gray.700")}
+                        bg={"yellow.100"}
                         borderRadius="md"
                       >
                         Simulating secure payment processing by a third-party
@@ -392,11 +391,16 @@ export const Web2UserDashboardMockup: React.FC = () => {
                     mr={3}
                     _hover={{ bg: buttonHoverBg }}
                     disabled={isProcessingPayment || paymentSuccess === true}
+                    borderRadius="lg"
                   >
                     Cancel
                   </Button>
                   <Button
-                    colorPalette="blue"
+                    colorPalette="green"
+                    bg="green.600"
+                    color="white"
+                    _hover={{bg:"green.700"}}
+                    _active={{bg:"green.800"}}
                     onClick={handleCreditCardSubmit}
                     loading={isProcessingPayment}
                     disabled={
@@ -405,6 +409,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                       paymentSuccess === false ||
                       !creditCardAmount
                     }
+                    borderRadius="lg"
                   >
                     {isProcessingPayment ? "Processing..." : "Pay Now (Mock)"}
                   </Button>
@@ -422,7 +427,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
           modal
         >
           <Portal>
-            <DialogBackdrop bg="blackAlpha.800" />
+            <DialogBackdrop bg="blackAlpha.600" />
             <DialogPositioner>
               <DialogContent
                 bg={dialogBg}
@@ -448,6 +453,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                     top="12px"
                     right="12px"
                     _hover={{ bg: buttonHoverBg }}
+                    borderRadius="md"
                   />
                 </DialogCloseTrigger>
                 <DialogBody py={4} px={{ base: 3, md: 6 }} overflowY="auto">
@@ -481,19 +487,6 @@ export const Web2UserDashboardMockup: React.FC = () => {
                     maxHeight="300px"
                     overflowY="auto"
                     pr={2}
-                    css={{
-                      "&::-webkit-scrollbar": {
-                        width: "6px",
-                      },
-                      "&::-webkit-scrollbar-track": {
-                        width: "8px",
-                        background: "rgba(0,0,0,0.1)",
-                      },
-                      "&::-webkit-scrollbar-thumb": {
-                        background: "gray.500",
-                        borderRadius: "24px",
-                      },
-                    }}
                   >
                     {aiBotResponses.map((msg, index) => (
                       <React.Fragment key={index}>
@@ -504,7 +497,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                           px={3}
                           py={2}
                           borderRadius="lg"
-                          borderBottomRightRadius="2px"
+                          borderBottomRightRadius="md"
                           maxWidth="80%"
                         >
                           <Text fontSize="sm">{msg.user}</Text>
@@ -518,8 +511,8 @@ export const Web2UserDashboardMockup: React.FC = () => {
                           >
                             <Skeleton
                               boxSize="24px"
-                              loading={!isBotAvatarLoaded}
-                              borderRadius="sm"
+                              loading={!isBotIconLoaded} 
+                              borderRadius="md"
                               flexShrink={0}
                             >
                               <Image
@@ -536,7 +529,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                               px={3}
                               py={2}
                               borderRadius="lg"
-                              borderBottomLeftRadius="2px"
+                              borderBottomLeftRadius="md"
                             >
                               <Text fontSize="sm" whiteSpace="pre-wrap">
                                 {msg.bot}
@@ -551,10 +544,9 @@ export const Web2UserDashboardMockup: React.FC = () => {
                         <Spinner
                           size="xs"
                           color={natureGreen}
-                          borderWidth="2px"
-                          animationDuration="0.45s"
+                          borderWidth="2px" 
                         />
-                        <Text fontSize="sm" color="gray.400">
+                        <Text fontSize="sm" color={secondaryTextColor}>
                           Alpaca Bot is typing...
                         </Text>
                       </HStack>
@@ -584,12 +576,18 @@ export const Web2UserDashboardMockup: React.FC = () => {
                       resize="none"
                       rows={1}
                       fontSize="sm"
+                      borderRadius="lg"
                     />
                     <Button
                       colorPalette="green"
+                      bg="green.600"
+                      color="white"
+                      _hover={{bg:"green.700", transform: 'scale(1.02)'}}
+                      _active={{bg:"green.800", transform: 'scale(0.98)'}}
                       onClick={handleAiBotSubmit}
                       disabled={isBotTyping || !aiBotMessage.trim()}
                       gap={2}
+                      borderRadius="lg"
                     >
                       Send
                       <FaPaperPlane />

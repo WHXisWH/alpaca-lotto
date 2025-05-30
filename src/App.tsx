@@ -11,6 +11,8 @@ import {
   Flex,
   Spacer,
   Tabs,
+  Image,
+  useDisclosure, 
 } from "@chakra-ui/react";
 import { Button as UIButton } from "@/components/ui/button";
 import { CloseButton as UICloseButton } from "@/components/ui/close-button";
@@ -26,10 +28,11 @@ import {
   LotteryInfo,
 } from "./components/lottery";
 import { Web2UserDashboardMockup } from "./components/web2_user/Web2UserDashboardMockup";
+import { ReferralDialog } from "./components/referral/ReferralModal"; 
 import { useAAWallet } from "./context/AAWalletContext";
 import { usePaymaster } from "./context/PaymasterContext";
 import { useLottery } from "./context/LotteryContext";
-import { MdWarning, MdInfo, MdCopyAll, MdRefresh, MdExpandMore, MdExpandLess } from "react-icons/md";
+import { MdWarning, MdCopyAll, MdRefresh, MdExpandMore, MdExpandLess } from "react-icons/md";
 import { ethers, BigNumber } from "ethers";
 import { USDC_TOKEN_ADDRESS, USDC_DECIMALS, RPC_URL } from "./config";
 import { toaster } from "@/components/ui/toaster";
@@ -39,7 +42,7 @@ const ERC20_ABI_MINIMAL = [
 ];
 
 function App() {
-  const { address: wagmiEoaAddress, isConnected, chain, connector: activeConnector } = useAccount();
+  const { address: wagmiEoaAddress, isConnected, chain } = useAccount();
   const ethersSigner = useEthersSigner({ chainId: chain?.id });
   const { disconnect: wagmiDisconnect } = useDisconnect();
 
@@ -51,7 +54,6 @@ function App() {
     error: aaError,
     clearError: clearAAError,
     isSocialLoggedIn,
-    eoaAddress,
     disconnectSocialLogin,
   } = useAAWallet();
 
@@ -67,13 +69,18 @@ function App() {
   const [isGasPanelOpen, setIsGasPanelOpen] = useState<boolean>(true);
   const [currentTab, setCurrentTab] = useState<string>("buyTickets");
 
+  const { open: isReferralModalOpen, onOpen: onReferralModalOpen, onClose: onReferralModalClose } = useDisclosure();
+
   const toggleGasPanel = () => setIsGasPanelOpen(!isGasPanelOpen);
 
-  const alpacaAppBg = "gray.850";
-  const globalInfoBg = "gray.750";
-  const borderColor = "gray.600";
-  const tabSelectedBg = "gray.700"; 
-  const tabDefaultBg = "gray.800";
+  const appContainerBg = "white"; 
+  const globalInfoBg = "yellow.50"; 
+  const borderColor = "gray.200"; 
+  const selectedTabBg = "yellow.50"; 
+  const defaultTabBg = "white"; 
+  const primaryTextColor = "yellow.900";
+  const secondaryTextColor = "gray.700";
+  const accentColor = "green.600";
 
   const fetchUSDCBalance = useCallback(async () => {
     if (!aaWalletAddress || !isAAWalletInitialized) {
@@ -97,7 +104,6 @@ function App() {
         setUsdcBalance(numberBalance.toFixed(2));
       }
     } catch (e) {
-      console.error("Failed to fetch USDC balance:", e);
       setUsdcBalance("Error");
       toaster.create({ title: "Balance Error", description: "Could not fetch USDC balance.", type: "error" });
     } finally {
@@ -114,18 +120,21 @@ function App() {
   useEffect(() => {
     if (lotteries.length > 0 && contextSetSelectedLottery) {
         const now = new Date().getTime() / 1000;
-        const activeLottery = lotteries.find(l => l.endTime > now && l.startTime <= now);
+        const activeLottery = lotteries.find(l => l.endTime > now && l.startTime <= now && !l.drawn);
         if (activeLottery) {
             contextSetSelectedLottery(activeLottery);
         } else {
-            const sortedByEndTime = [...lotteries].sort((a,b) => b.endTime - a.endTime);
-            contextSetSelectedLottery(sortedByEndTime[0] || lotteries[0]);
+            const notDrawnLotteries = lotteries.filter(l => !l.drawn);
+            if (notDrawnLotteries.length > 0) {
+                 contextSetSelectedLottery(notDrawnLotteries.sort((a,b) => b.drawTime - a.drawTime)[0] || notDrawnLotteries[0]);
+            } else {
+                 contextSetSelectedLottery(lotteries.sort((a,b) => b.drawTime - a.drawTime)[0] || lotteries[0]);
+            }
         }
     } else if (lotteries.length === 0 && contextSetSelectedLottery) {
         contextSetSelectedLottery(null);
     }
   }, [lotteries, contextSetSelectedLottery]);
-
 
   useEffect(() => {
     if (
@@ -178,7 +187,6 @@ function App() {
     navigator.clipboard.writeText(text).then(() => {
       toaster.create({ title: "Copied!", description: "Address copied to clipboard.", type: "success" });
     }).catch(err => {
-      toaster.create({ title: "Copy Failed", description: "Could not copy address.", type: "error" });
     });
   };
 
@@ -187,8 +195,8 @@ function App() {
   };
 
   return (
-    <Layout>
-      <Box bg={alpacaAppBg} p={{base:2, md:4}} borderRadius="xl" minH="80vh">
+    <Layout onOpenReferralModal={isAAWalletInitialized ? onReferralModalOpen : undefined}>
+      <Box bg={appContainerBg} p={{base:3, md:5}} borderRadius="2xl" minH="80vh" shadow="sm" borderWidth="1px" borderColor={borderColor}>
         <VStack gap={4} align="stretch" width="100%">
           {!isAAWalletInitialized && !aaLoading && <ConnectWallet />}
           
@@ -197,13 +205,14 @@ function App() {
               status="error"
               variant="solid"
               mt={2}
-              bg="red.800"
-              borderColor="red.600"
-              icon={<Icon as={MdWarning} boxSize={5} color="red.200" />}
+              bg="red.500"
+              borderColor="red.300"
+              icon={<Icon as={MdWarning} boxSize={5} color="white" />}
+              borderRadius="xl"
             >
               <VStack align="start" gap={1}>
-                  <Text fontWeight="bold" color="red.100">Account Error</Text>
-                  <Text fontSize="sm" color="red.200">{aaError}</Text>
+                  <Text fontWeight="bold" color="white">Account Error</Text>
+                  <Text fontSize="sm" color="red.100">{aaError}</Text>
               </VStack>
               <UICloseButton
                 onClick={clearAAError}
@@ -211,8 +220,9 @@ function App() {
                 right="8px"
                 top="8px"
                 size="sm"
-                color="red.200"
-                _hover={{bg: "red.700"}}
+                color="white"
+                _hover={{bg: "red.600"}}
+                borderRadius="md"
               />
             </UIAlert>
           )}
@@ -222,13 +232,15 @@ function App() {
               status="error"
               variant="solid"
               mt={2}
-              bg="red.800"
-              borderColor="red.600"
-              icon={<Icon as={MdWarning} boxSize={5} color="red.200" />}
+              bg="red.500"
+              borderColor="red.300"
+              icon={<Icon as={MdWarning} boxSize={5} color="white" />}
+              borderRadius="xl"
             >
-              <VStack align="start" gap={1}>
-                  <Text fontWeight="bold" color="red.100">System Error</Text>
-                  <Text fontSize="sm" color="red.200">{paymasterError}</Text>
+               <VStack align="start" gap={1}>
+                  <Text fontWeight="bold" color="white">System Error</Text>
+
+                  <Text fontSize="sm" color="red.100">{paymasterError}</Text>
               </VStack>
               <UICloseButton
                 onClick={clearPaymasterError}
@@ -236,115 +248,116 @@ function App() {
                 right="8px"
                 top="8px"
                 size="sm"
-                color="red.200"
-                 _hover={{bg: "red.700"}}
+                color="white"
+                 _hover={{bg: "red.600"}}
+                 borderRadius="md"
               />
             </UIAlert>
           )}
 
           {loadingMessage && (
-              <VStack bg="gray.750" p={4} borderRadius="lg" gap={3} alignItems="center" shadow="lg" borderColor="gray.600" borderWidth="1px" mt={2}>
-                  <Spinner size="lg" color="green.300" borderWidth="4px" animationDuration="0.45s" />
-                  <Text color="whiteAlpha.800" fontWeight="medium">{loadingMessage}</Text>
+              <VStack bg="white" p={6} borderRadius="xl" gap={4} alignItems="center" shadow="md" borderColor={borderColor} borderWidth="1px" mt={2}>
+                  <Spinner size="xl" color={accentColor} borderWidth="4px" />
+                  <Text color={primaryTextColor} fontWeight="medium" fontSize="lg">{loadingMessage}</Text>
               </VStack>
           )}
 
           {isAAWalletInitialized && aaWalletAddress && (
             <Box 
-              p={3} 
+              p={4} 
               borderWidth="1px" 
-              borderRadius="lg" 
+              borderRadius="xl" 
               bg={globalInfoBg} 
               borderColor={borderColor} 
-              shadow="md"
+              shadow="sm"
             >
-              <Flex direction={{base: "column", md: "row"}} alignItems={{base: "flex-start", md: "center"}} gap={{base: 2, md: 4}}>
+              <Flex direction={{base: "column", md: "row"}} alignItems={{base: "flex-start", md: "center"}} gap={{base: 3, md: 4}}>
                 <Box>
-                  <Text fontSize="xs" color="gray.400">Smart Account:</Text>
+                  <Text fontSize="xs" color={secondaryTextColor}>Smart Account:</Text>
                   <HStack>
                     <Code 
-                      color="green.300" 
-                      variant="plain"
-                      bg="transparent"
-                      px={1} 
+                      color="green.700"
+                      variant="subtle"
+                      bg="green.100"
+                      px={2}
+                      py={1}
+                      borderRadius="lg"
                       fontSize="sm"
                       fontWeight="medium"
                     >
                       {`${aaWalletAddress.substring(0, 6)}...${aaWalletAddress.substring(aaWalletAddress.length - 4)}`}
                     </Code>
                     <UIButton
-                      size="xs"
+                      size="sm"
                       variant="ghost"
                       onClick={() => copyToClipboard(aaWalletAddress)}
-                      color="gray.400"
-                      _hover={{ color: "teal.300", bg:"gray.600" }}
+                      color={secondaryTextColor}
+                      _hover={{ color: accentColor, bg: "yellow.100" }}
                       aria-label="Copy address"
                       px={1}
                       minW="auto"
+                      borderRadius="md"
                     >
-                      <Icon as={MdCopyAll} boxSize={4}/>
+                      <Icon as={MdCopyAll} boxSize={5}/>
                     </UIButton>
                   </HStack>
                 </Box>
                 <Box>
-                  <Text fontSize="xs" color="gray.400">USDC Balance:</Text>
+                  <Text fontSize="xs" color={secondaryTextColor}>USDC Balance:</Text>
                   <HStack>
-                    <Text fontSize="sm" color="whiteAlpha.800" fontWeight="medium">
-                      {isBalanceLoading ? <Spinner size="xs" /> : `${usdcBalance} USDC`}
+                    <Text fontSize="sm" color={primaryTextColor} fontWeight="bold">
+                      {isBalanceLoading ? <Spinner size="sm" color={accentColor} /> : `${usdcBalance} USDC`}
                     </Text>
                      <UIButton
-                        size="xs"
+                        size="sm"
                         variant="ghost"
                         onClick={fetchUSDCBalance}
-                        color="gray.400"
-                        _hover={{ color: "teal.300", bg:"gray.600" }}
+                        color={secondaryTextColor}
+                        _hover={{ color: accentColor, bg: "yellow.100" }}
                         aria-label="Refresh Balance"
                         loading={isBalanceLoading}
                         px={1}
                         minW="auto"
+                        borderRadius="md"
                     >
-                       <Icon as={MdRefresh} boxSize={4} />
+                       <Icon as={MdRefresh} boxSize={5} />
                      </UIButton>
                   </HStack>
                 </Box>
                 <Spacer display={{base:"none", md:"block"}}/>
                 <UIButton 
-                    variant="solid" 
-                    colorScheme="red" 
-                    bg="red.500"
-                    color="white"
-                    _hover={{bg: "red.600"}}
-                    _active={{bg: "red.700"}}
-                    size="sm" 
-                    onClick={handleDisconnectApp} 
-                    mt={{base: 2, md: 0}}
+                  variant="outline"
+                  size="sm" 
+                  onClick={handleDisconnectApp} 
+                  mt={{base: 2, md: 0}}
+                  borderRadius="lg"
+                  color="red.600"
+                  borderColor="red.300"
+                  _hover={{transform: 'scale(1.02)', bg: 'red.50'}}
+                  _active={{transform: 'scale(0.98)', bg: 'red.100'}}
                 >
                   Disconnect
                 </UIButton>
               </Flex>
               
-              <Box mt={3} borderWidth="1px" borderColor={borderColor} borderRadius="md">
+              <Box mt={4} borderWidth="1px" borderColor={borderColor} borderRadius="xl" overflow="hidden" bg="white">
                 <Flex 
                   as="header" 
                   p={3} 
                   onClick={toggleGasPanel} 
                   cursor="pointer" 
                   alignItems="center" 
-                  bg="gray.700"
-                  _hover={{bg: "gray.650"}}
-                  borderTopRadius="md"
-                  borderBottomRadius={isGasPanelOpen ? "none" : "md"}
+                  _hover={{bg: "gray.50"}}
                   borderBottomWidth={isGasPanelOpen ? "1px" : "0px"}
                   borderColor={borderColor}
+                  transition="all 0.2s ease-in-out"
                 >
-                  <Heading size="sm" color="teal.300">Gas Payment Options</Heading>
+                  <Heading size="sm" color={primaryTextColor}>Gas Payment Options</Heading>
                   <Spacer />
-                  <Icon as={isGasPanelOpen ? MdExpandLess : MdExpandMore} boxSize={6} color="gray.400"/>
+                  <Icon as={isGasPanelOpen ? MdExpandLess : MdExpandMore} boxSize={6} color={secondaryTextColor}/>
                 </Flex>
                 {isGasPanelOpen && (
-                  <Box borderBottomRadius="md" borderTopWidth="1px" borderColor={borderColor}>
-                     <PaymasterSettings />
-                  </Box>
+                  <PaymasterSettings />
                 )}
               </Box>
             </Box>
@@ -357,13 +370,11 @@ function App() {
                 onValueChange={handleTabChange}
                 mt={4} 
                 width="100%"
-                borderColor={borderColor} 
             >
                 <Tabs.List 
-                    borderBottomWidth="2px" 
+                    borderBottomWidth="1px" 
                     borderColor={borderColor}
-                    bg={globalInfoBg} 
-                    borderTopRadius="lg"
+                    borderTopRadius="xl"
                 >
                     <Tabs.Trigger 
                         value="buyTickets" 
@@ -371,14 +382,13 @@ function App() {
                         py={3}
                         fontSize="md"
                         fontWeight="semibold"
-                        color="gray.400"
-                        bg={currentTab === "buyTickets" ? tabSelectedBg : tabDefaultBg}
-                        borderTopLeftRadius="lg"
-                        borderBottomWidth={currentTab === "buyTickets" ? "2px" : "0px"}
-                        borderBottomColor={currentTab === "buyTickets" ? "teal.300" : "transparent"}
-                        _selected={{ color: "teal.300" }}
-                        _hover={{bg: tabSelectedBg, color: "whiteAlpha.800"}}
-                        transition="background-color 0.2s, color 0.2s, border-bottom-color 0.2s"
+                        color={currentTab === "buyTickets" ? accentColor : secondaryTextColor}
+                        bg={currentTab === "buyTickets" ? selectedTabBg : defaultTabBg}
+                        borderTopLeftRadius="xl"
+                        borderBottomWidth={"2px"}
+                        borderBottomColor={currentTab === "buyTickets" ? accentColor : "transparent"}
+                        _hover={{bg: "yellow.100", color: primaryTextColor}}
+                        transition="all 0.2s ease-in-out"
                     >
                         Buy Tickets
                     </Tabs.Trigger>
@@ -388,14 +398,13 @@ function App() {
                         py={3} 
                         fontSize="md"
                         fontWeight="semibold"
-                        color="gray.400"
-                        bg={currentTab === "myTickets" ? tabSelectedBg : tabDefaultBg}
-                        borderTopRightRadius="lg"
-                        borderBottomWidth={currentTab === "myTickets" ? "2px" : "0px"}
-                        borderBottomColor={currentTab === "myTickets" ? "teal.300" : "transparent"}
-                        _selected={{ color: "teal.300" }}
-                        _hover={{bg: tabSelectedBg, color: "whiteAlpha.800"}}
-                        transition="background-color 0.2s, color 0.2s, border-bottom-color 0.2s"
+                        color={currentTab === "myTickets" ? accentColor : secondaryTextColor}
+                        bg={currentTab === "myTickets" ? selectedTabBg : defaultTabBg}
+                        borderTopRightRadius="xl"
+                        borderBottomWidth={"2px"}
+                        borderBottomColor={currentTab === "myTickets" ? accentColor : "transparent"}
+                        _hover={{bg: "yellow.100", color: primaryTextColor}}
+                        transition="all 0.2s ease-in-out"
                     >
                         My Tickets
                     </Tabs.Trigger>
@@ -404,17 +413,18 @@ function App() {
                 <Box 
                     borderWidth="0px 1px 1px 1px"
                     borderColor={borderColor}
-                    borderBottomRadius="lg"
-                    bg={tabSelectedBg}
+                    borderBottomRadius="xl"
+                    bg={currentTab === "buyTickets" ? selectedTabBg : defaultTabBg}
+                    shadow="sm"
                 >
-                    <Tabs.Content value="buyTickets" p={{base:3, md:4}}>
+                    <Tabs.Content value="buyTickets" p={{base:4, md:6}}>
                         <VStack gap={6} width="100%">
                           {isSocialLoggedIn && currentTab === "buyTickets" && <Web2UserDashboardMockup />}
                           <LotteryInfo />
                           <TicketGrid />
                         </VStack>
                     </Tabs.Content>
-                    <Tabs.Content value="myTickets" p={{base:3, md:4}}>
+                    <Tabs.Content value="myTickets" p={{base:4, md:6}}>
                         <OwnedTickets />
                     </Tabs.Content>
                 </Box>
@@ -422,12 +432,17 @@ function App() {
           )}
           
           {!isAAWalletInitialized && !aaLoading && !loadingMessage && (
-             <Text textAlign="center" mt={8} color="gray.400" pb={10}>
-               Please choose a login method to start your Alpaca Lotto adventure!
-             </Text>
+            <VStack gap={4} textAlign="center" mt={8} pb={10}>
+                <Image src="/images/alpaca-welcoming-friends.png" alt="Friendly alpacas welcoming you" maxW="300px" mb={4} />
+                <Heading size={{base:"lg", md:"xl"}} color={primaryTextColor}>Welcome to Alpaca Lotto!</Heading>
+                <Text color={secondaryTextColor} fontSize={{base:"md", md:"lg"}}>
+                    Connect your wallet or use social login to start your lucky adventure!
+                </Text>
+            </VStack>
           )}
         </VStack>
       </Box>
+      {isAAWalletInitialized && <ReferralDialog isOpen={isReferralModalOpen} onClose={onReferralModalClose} />}
     </Layout>
   );
 }
