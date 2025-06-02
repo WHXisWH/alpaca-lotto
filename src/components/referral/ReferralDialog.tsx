@@ -24,7 +24,6 @@ import { useAAWallet } from '@/context/AAWalletContext';
 import { FaInfoCircle } from 'react-icons/fa';
 import { Tooltip } from "@/components/ui/tooltip";
 
-
 interface ReferralDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -47,7 +46,6 @@ export const ReferralDialog: React.FC<ReferralDialogProps> = ({ isOpen, onClose 
   const borderColor = "gray.200";
   const buttonHoverBg = "yellow.100";
 
-
   const handleSubmitReferral = async () => {
     if (!isAAWalletInitialized || !aaWalletAddress) {
       toaster.create({ title: "Error", description: "Please connect and initialize your wallet first.", type: "error" });
@@ -63,20 +61,49 @@ export const ReferralDialog: React.FC<ReferralDialogProps> = ({ isOpen, onClose 
     }
 
     setIsLoading(true);
-
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500)); 
-      const mockSuccess = Math.random() > 0.3; 
-      
-      if (mockSuccess) { 
-        toaster.create({ title: "Referral Submitted!", description: "Your referral has been submitted. Rewards will be processed if eligible.", type: "success" });
+      const backendApiUrl = import.meta.env.VITE_BACKEND_API_URL;
+      if (!backendApiUrl) {
+        toaster.create({ title: "Configuration Error", description: "Backend API URL is not configured.", type: "error" });
+        setIsLoading(false);
+        return;
+      }
+
+      const response = await fetch(`${backendApiUrl}/api/referral`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentUserAA: aaWalletAddress,
+          referrerAA: referrerAddress,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        toaster.create({
+          title: "Referral Submitted!",
+          description: data.message || "Your referral has been submitted successfully.",
+          type: "success"
+        });
         setReferrerAddress('');
         onClose();
       } else {
-        toaster.create({ title: "Submission Failed", description: "Mock: Referral submission failed. Please try again.", type: "error" });
+        toaster.create({
+          title: "Submission Failed",
+          description: data.message || "Failed to submit referral. Please try again.",
+          type: "error"
+        });
       }
     } catch (error) {
-      toaster.create({ title: "Submission Error", description: "An error occurred while submitting your referral.", type: "error" });
+      console.error("Referral submission error:", error);
+      toaster.create({
+          title: "Submission Error",
+          description: "An unexpected error occurred while submitting your referral. Check console for details.",
+          type: "error"
+      });
     } finally {
       setIsLoading(false);
     }
