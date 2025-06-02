@@ -13,6 +13,7 @@ import {
   Tabs,
   Image,
   useDisclosure, 
+  Link as ChakraLink, // Added for "How to Play" link for new users
 } from "@chakra-ui/react";
 import { Button as UIButton } from "@/components/ui/button";
 import { CloseButton as UICloseButton } from "@/components/ui/close-button";
@@ -28,11 +29,12 @@ import {
   LotteryInfo,
 } from "./components/lottery";
 import { Web2UserDashboardMockup } from "./components/web2_user/Web2UserDashboardMockup";
-import { ReferralDialog } from "./components/referral/ReferralModal"; 
+import { ReferralDialog } from "./components/referral/ReferralDialog"; 
+import { HowToPlayDialog } from "./components/play_guide/HowToPlayDialog";
 import { useAAWallet } from "./context/AAWalletContext";
 import { usePaymaster } from "./context/PaymasterContext";
 import { useLottery } from "./context/LotteryContext";
-import { MdWarning, MdCopyAll, MdRefresh, MdExpandMore, MdExpandLess } from "react-icons/md";
+import { MdWarning, MdCopyAll, MdRefresh, MdExpandMore, MdExpandLess, MdHelpOutline } from "react-icons/md";
 import { ethers, BigNumber } from "ethers";
 import { USDC_TOKEN_ADDRESS, USDC_DECIMALS, RPC_URL } from "./config";
 import { toaster } from "@/components/ui/toaster";
@@ -69,7 +71,9 @@ function App() {
   const [isGasPanelOpen, setIsGasPanelOpen] = useState<boolean>(true);
   const [currentTab, setCurrentTab] = useState<string>("buyTickets");
 
-  const { open: isReferralModalOpen, onOpen: onReferralModalOpen, onClose: onReferralModalClose } = useDisclosure();
+  const { open: isReferralDialogOpen, onOpen: onReferralDialogOpen, onClose: onReferralDialogClose } = useDisclosure();
+  const { open: isHowToPlayDialogOpen, onOpen: onHowToPlayDialogOpen, onClose: onHowToPlayDialogClose } = useDisclosure();
+
 
   const toggleGasPanel = () => setIsGasPanelOpen(!isGasPanelOpen);
 
@@ -195,10 +199,23 @@ function App() {
   };
 
   return (
-    <Layout onOpenReferralModal={isAAWalletInitialized ? onReferralModalOpen : undefined}>
+    <Layout 
+        onOpenReferralModal={isAAWalletInitialized ? onReferralDialogOpen : undefined}
+        onOpenHowToPlayDialog={onHowToPlayDialogOpen}
+    >
       <Box bg={appContainerBg} p={{base:3, md:5}} borderRadius="2xl" minH="80vh" shadow="sm" borderWidth="1px" borderColor={borderColor}>
         <VStack gap={4} align="stretch" width="100%">
-          {!isAAWalletInitialized && !aaLoading && <ConnectWallet />}
+          {!isAAWalletInitialized && !aaLoading && (
+            <>
+              <ConnectWallet />
+              <Text textAlign="center" mt={2}>
+                New to Alpaca Lotto?{' '}
+                <ChakraLink color={accentColor} fontWeight="semibold" onClick={onHowToPlayDialogOpen} cursor="pointer">
+                  Check out how to play!
+                </ChakraLink>
+              </Text>
+            </>
+          )}
           
           {aaError && (
             <UIAlert
@@ -433,7 +450,6 @@ function App() {
           
           {!isAAWalletInitialized && !aaLoading && !loadingMessage && (
             <VStack gap={4} textAlign="center" mt={8} pb={10}>
-                <Image src="/images/alpaca-welcoming-friends.png" alt="Friendly alpacas welcoming you" maxW="300px" mb={4} />
                 <Heading size={{base:"lg", md:"xl"}} color={primaryTextColor}>Welcome to Alpaca Lotto!</Heading>
                 <Text color={secondaryTextColor} fontSize={{base:"md", md:"lg"}}>
                     Connect your wallet or use social login to start your lucky adventure!
@@ -442,7 +458,8 @@ function App() {
           )}
         </VStack>
       </Box>
-      {isAAWalletInitialized && <ReferralDialog isOpen={isReferralModalOpen} onClose={onReferralModalClose} />}
+      <ReferralDialog isOpen={isReferralDialogOpen} onClose={onReferralDialogClose} />
+      <HowToPlayDialog isOpen={isHowToPlayDialogOpen} onClose={onHowToPlayDialogClose} />
     </Layout>
   );
 }

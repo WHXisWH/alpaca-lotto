@@ -1,16 +1,19 @@
-import React, { useEffect } from 'react';
+import React from "react";
 import {
+  chakra,
   Box,
   Text,
   Spinner,
   Icon,
-  VStack
+  VStack,
 } from "@chakra-ui/react";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { usePaymaster, PaymasterType, SupportedToken } from '@/context/PaymasterContext';
-import { ethers } from 'ethers';
-import { MdWarning } from 'react-icons/md';
+import { usePaymaster, PaymasterType, SupportedToken } from "@/context/PaymasterContext";
+import { ethers } from "ethers";
+import { MdWarning } from "react-icons/md";
+
+const ChakraSelect = chakra("select");
 
 export const PaymasterSettings: React.FC = () => {
   const {
@@ -29,30 +32,23 @@ export const PaymasterSettings: React.FC = () => {
   const primaryTextColor = "yellow.900";
   const secondaryTextColor = "gray.700";
   const selectBg = "white";
-  const selectBorderColor = "gray.800"; 
+  const selectBorderColor = "gray.300";
   const accentColor = "green.600";
 
-  useEffect(() => {
-    if (typeof fetchSupportedTokens === "function" && !isLoadingTokens) {
-    }
-  }, [fetchSupportedTokens, isLoadingTokens]);
-
-
   const paymasterTypeOptions = [
-    { label: 'Native Token (NERO)', value: PaymasterType.NATIVE },
-    ...(isFreeGasAvailable
-      ? [{ label: 'Sponsored Gas (Free)', value: PaymasterType.FREE_GAS }]
-      : []),
-    { label: 'ERC20 Token', value: PaymasterType.TOKEN },
+    { label: "Native Token (NERO)", value: PaymasterType.NATIVE },
+    ...(isFreeGasAvailable ? [{ label: "Sponsored Gas (Free)", value: PaymasterType.FREE_GAS }] : []),
+    { label: "ERC20 Token", value: PaymasterType.TOKEN },
   ];
 
   const erc20Tokens = supportedTokens.filter(
-    (t: SupportedToken) => t.address && t.address !== ethers.constants.AddressZero && (t.type === 1 || t.type === 2)
+    (t: SupportedToken) =>
+      t.address && t.address !== ethers.constants.AddressZero && (t.type === 1 || t.type === 2)
   );
 
   return (
-    <Box p={5} bg="white" color={primaryTextColor} borderRadius="xl">
-      <VStack gap={4} align="stretch">
+    <Box p={5} bg="white" borderRadius="xl" boxShadow="md" color={primaryTextColor}>
+      <VStack gap={6} align="stretch">
         {paymasterError && (
           <Alert
             status="error"
@@ -67,60 +63,70 @@ export const PaymasterSettings: React.FC = () => {
         )}
 
         <Box>
-          <Text mb={2} fontWeight="medium" color={secondaryTextColor}>Paymaster Type</Text>
-          <select
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              borderRadius: '0.75rem',
-              background: selectBg,
-              color: primaryTextColor,
-              border: `3px solid ${selectBorderColor}`,
-              boxShadow: "sm"
-            }}
-            disabled={isLoadingTokens || paymasterContextLoading}
-            value={selectedPaymasterType ?? ''}
+          <Text mb={2} fontWeight="medium" color={secondaryTextColor}>
+            Paymaster Type
+          </Text>
+          <ChakraSelect
+            w="100%"
+            textAlign="center" 
+            textAlignLast="center"
+            value={selectedPaymasterType ?? ""}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                if (setSelectedPaymasterType) {
-                    setSelectedPaymasterType(e.target.value as PaymasterType);
-                }
+              const v = e.target.value as PaymasterType;
+              setSelectedPaymasterType(v);
+              if (v !== PaymasterType.TOKEN) {
+                setSelectedToken(null);
+              }
             }}
+            bg={selectBg}
+            border="1px solid"
+            borderColor={selectBorderColor}
+            color={primaryTextColor}
+            _focus={{ borderColor: accentColor }}
+            borderRadius="lg"
+            height="40px"
+            px={3}
+            disabled={paymasterContextLoading || isLoadingTokens}
           >
             <option value="" disabled>
               Select paymaster type
             </option>
-            {paymasterTypeOptions.map(opt => (
+            {paymasterTypeOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
             ))}
-          </select>
+          </ChakraSelect>
         </Box>
 
         {selectedPaymasterType === PaymasterType.TOKEN && (
           <Box>
-            <Text mb={2} fontWeight="medium" color={secondaryTextColor}>Select ERC20 Token for Gas</Text>
+            <Text mb={2} fontWeight="medium" color={secondaryTextColor}>
+              Select ERC20 Token for Gas
+            </Text>
             {isLoadingTokens ? (
               <Spinner color={accentColor} />
             ) : erc20Tokens.length > 0 ? (
-              <select
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  borderRadius: '0.75rem',
-                  background: selectBg,
-                  color: primaryTextColor,
-                  border: `3px solid ${selectBorderColor}`,
-                  boxShadow: "sm"
-                }}
-                value={selectedToken?.address ?? ''}
+              <ChakraSelect
+                w="100%"
+                textAlign="center" 
+                textAlignLast="center"
+                value={selectedToken?.address ?? ""}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                   const addr = e.target.value;
-                  const token = supportedTokens.find((t: SupportedToken) => t.address === addr) || null;
-                  if (setSelectedToken) {
-                    setSelectedToken(token);
-                  }
+                  const token =
+                    supportedTokens.find((t: SupportedToken) => t.address === addr) || null;
+                  setSelectedToken(token);
                 }}
+                bg={selectBg}
+                border="1px solid"
+                borderColor={selectBorderColor}
+                color={primaryTextColor}
+                _focus={{ borderColor: accentColor }}
+                borderRadius="lg"
+                height="40px"
+                px={3}
+                disabled={isLoadingTokens}
               >
                 <option value="" disabled>
                   Select ERC20 token
@@ -130,18 +136,18 @@ export const PaymasterSettings: React.FC = () => {
                     {t.symbol}
                   </option>
                 ))}
-              </select>
+              </ChakraSelect>
             ) : (
-              <Text color={secondaryTextColor}>No ERC20 tokens available for Paymaster.</Text>
+              <Text color={secondaryTextColor} fontSize="sm">
+                No ERC20 tokens available for Paymaster.
+              </Text>
             )}
           </Box>
         )}
 
         <Button
           onClick={() => {
-              if (fetchSupportedTokens) {
-                  fetchSupportedTokens();
-              }
+            fetchSupportedTokens?.();
           }}
           loading={isLoadingTokens}
           size="md"
@@ -149,8 +155,8 @@ export const PaymasterSettings: React.FC = () => {
           borderRadius="lg"
           color="green.700"
           borderColor="green.300"
-          _hover={{bg: "green.50", transform: 'scale(1.02)'}}
-          _active={{transform: 'scale(0.98)', bg: "green.100"}}
+          _hover={{ bg: "green.50", transform: "scale(1.02)" }}
+          _active={{ transform: "scale(0.98)", bg: "green.100" }}
         >
           Refresh Token List
         </Button>
