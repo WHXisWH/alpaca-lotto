@@ -35,11 +35,14 @@ export const PaymasterSettings: React.FC = () => {
   const selectBorderColor = "gray.300";
   const accentColor = "green.600";
 
-  const paymasterTypeOptions = [
-    { label: "Native Token (NERO)", value: PaymasterType.NATIVE },
-    ...(isFreeGasAvailable ? [{ label: "Sponsored Gas (Free)", value: PaymasterType.FREE_GAS }] : []),
-    { label: "ERC20 Token", value: PaymasterType.TOKEN },
-  ];
+  const paymasterTypeOptions: { label: string; value: PaymasterType }[] = [];
+
+  if (isFreeGasAvailable) {
+    paymasterTypeOptions.push({ label: "Sponsored Gas (Free)", value: PaymasterType.FREE_GAS });
+  }
+  paymasterTypeOptions.push({ label: "ERC20 Token", value: PaymasterType.TOKEN });
+  paymasterTypeOptions.push({ label: "Native Token (NERO)", value: PaymasterType.NATIVE });
+
 
   const erc20Tokens = supportedTokens.filter(
     (t: SupportedToken) =>
@@ -68,7 +71,7 @@ export const PaymasterSettings: React.FC = () => {
           </Text>
           <ChakraSelect
             w="100%"
-            textAlign="center" 
+            textAlign="center"
             textAlignLast="center"
             value={selectedPaymasterType ?? ""}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -109,7 +112,7 @@ export const PaymasterSettings: React.FC = () => {
             ) : erc20Tokens.length > 0 ? (
               <ChakraSelect
                 w="100%"
-                textAlign="center" 
+                textAlign="center"
                 textAlignLast="center"
                 value={selectedToken?.address ?? ""}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
