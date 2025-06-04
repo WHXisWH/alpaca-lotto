@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/tag";
 import { NumberInputRoot, NumberInputField } from "@/components/ui/number-input";
-// import { toaster } from "@/components/ui/toaster";
 import { ethers, BigNumber } from "ethers";
 import { useLottery, Lottery } from "@/context/LotteryContext";
 import { PaymasterType, usePaymaster } from "@/context/PaymasterContext";
@@ -80,6 +79,8 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
   const [isDataLoading, setIsDataLoading] = useState<boolean>(false);
   const [isAllowanceSufficient, setIsAllowanceSufficient] = useState<boolean>(false);
   const [isBalanceSufficient, setIsBalanceSufficient] = useState<boolean>(false);
+  const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
 
   const prevTransactionErrorRef = useRef<string | null>(null);
   const prevPaymasterErrorRef = useRef<string | null>(null);
@@ -197,40 +198,40 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
 
   const handlePurchaseOrApprove = async () => {
     if (!lottery || quantity <= 0) {
-        // setTimeout(() => toaster.create({
-        //     title: "Invalid Input",
-        //     description: "Please select a valid lottery and quantity.",
-        //     type: "error"
-        // }), 0);
         console.error("TicketCard: Invalid Input - Please select a valid lottery and quantity.");
+        setFeedback({ message: "Please select a valid lottery and quantity.", type: 'error' });
+        setTimeout(() => setFeedback(null), 5000);
         return;
     }
 
     prevTransactionErrorRef.current = null;
     prevSuccessMessageRef.current = null;
     clearTransactionState();
+    setFeedback(null);
 
     if (!isBalanceSufficient) {
+      setFeedback({ message: "Insufficient USDC balance.", type: 'error' });
+      setTimeout(() => setFeedback(null), 5000);
       return;
     }
 
     if (!isAllowanceSufficient) {
       const approveResult = await checkAndApproveUSDC(lottery.id, quantity);
       if (!approveResult.approved) {
-        if (approveResult.error && approveResult.error !== prevTransactionErrorRef.current) {
-        //   setTimeout(() => toaster.create({ title: "Approval Failed", description: approveResult.error || "Failed to approve USDC.", type: "error" }), 0); // 註釋掉 toaster
-          console.error("TicketCard: Approval Failed -", approveResult.error || "Failed to approve USDC.");
-          prevTransactionErrorRef.current = approveResult.error;
-        } else if (!approveResult.error) {
-        //   setTimeout(() => toaster.create({ title: "Approval Failed", description: "Failed to approve USDC. Please try again.", type: "error" }), 0); // 註釋掉 toaster
-          console.error("TicketCard: Approval Failed - Failed to approve USDC. Please try again.");
+        const errorMsg = approveResult.error || "Failed to approve USDC. Please try again.";
+        if (errorMsg !== prevTransactionErrorRef.current) {
+          console.error("TicketCard: Approval Failed -", errorMsg);
+          setFeedback({ message: `Approval Failed: ${errorMsg}`, type: 'error' });
+          prevTransactionErrorRef.current = errorMsg;
         }
       } else {
-        // setTimeout(() => toaster.create({ title: "Approval Successful", description: `USDC approved. You can now purchase tickets. Tx: ${approveResult.approvalTxHash}`, type: "success" }), 0); // 註釋掉 toaster
-        console.log("TicketCard: Approval Successful -", `USDC approved. You can now purchase tickets. Tx: ${approveResult.approvalTxHash}`);
-        prevSuccessMessageRef.current = `USDC approved. You can now purchase tickets. Tx: ${approveResult.approvalTxHash}`;
+        const successMsg = `USDC approved. You can now purchase tickets. Tx: ${approveResult.approvalTxHash}`;
+        console.log("TicketCard: Approval Successful -", successMsg);
+        setFeedback({ message: "USDC Approved successfully!", type: 'success' });
+        prevSuccessMessageRef.current = successMsg;
         fetchLotteryCardData();
       }
+      setTimeout(() => setFeedback(null), 7000);
       return;
     }
 
@@ -239,16 +240,14 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
 
   useEffect(() => {
     if (transaction.error && transaction.error !== prevTransactionErrorRef.current) {
-    //   setTimeout(() => { 
-    //     toaster.create({
-    //       title: "Transaction Failed",
-    //       description: transaction.error,
-    //       type: "error",
-    //     });
-    //   }, 0);
       console.error("TicketCard: Transaction Failed from useEffect -", transaction.error);
+      setFeedback({ message: transaction.error, type: 'error' });
       prevTransactionErrorRef.current = transaction.error;
-      clearTransactionState();
+      const timer = setTimeout(() => {
+          setFeedback(null);
+          clearTransactionState();
+      }, 7000);
+      return () => clearTimeout(timer);
     }
   }, [transaction.error, clearTransactionState]);
 
@@ -260,30 +259,15 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
       transaction.step === "idle" &&
       transaction.successMessage !== prevSuccessMessageRef.current
     ) {
-    //   setTimeout(() => { 
-    //     toaster.create({
-    //       title: "Transaction Successful",
-    //       description: (
-    //         <Box>
-    //           {transaction.successMessage}
-    //           <Link
-    //             href={`https://testnet.neroscan.io/tx/${transaction.hash}`}
-    //             target="_blank"
-    //             rel="noopener noreferrer"
-    //             color="teal.500"
-    //             ml={1}
-    //           >
-    //             View on Explorer
-    //           </Link>
-    //         </Box>
-    //       ),
-    //       type: "success",
-    //     });
-    //   }, 0);
       console.log("TicketCard: Transaction Successful from useEffect -", transaction.successMessage, "Hash:", transaction.hash);
+      setFeedback({ message: transaction.successMessage, type: 'success' });
       prevSuccessMessageRef.current = transaction.successMessage;
       prevTransactionErrorRef.current = null;
-      clearTransactionState();
+      const timer = setTimeout(() => {
+          setFeedback(null);
+          clearTransactionState();
+      }, 5000);
+      return () => clearTimeout(timer);
     }
   }, [
     transaction.successMessage,
@@ -295,16 +279,14 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
 
   useEffect(() => {
     if (paymasterError && paymasterError !== prevPaymasterErrorRef.current) {
-    //   setTimeout(() => { 
-    //     toaster.create({
-    //       title: "Paymaster Error",
-    //       description: paymasterError,
-    //       type: "error",
-    //     });
-    //   }, 0);
       console.error("TicketCard: Paymaster Error from useEffect -", paymasterError);
+      setFeedback({ message: paymasterError, type: 'error' });
       prevPaymasterErrorRef.current = paymasterError;
-      if (clearPaymasterError) clearPaymasterError();
+      const timer = setTimeout(() => {
+        setFeedback(null);
+        if (clearPaymasterError) clearPaymasterError();
+      }, 7000);
+      return () => clearTimeout(timer);
     }
   }, [paymasterError, clearPaymasterError]);
 
@@ -464,6 +446,16 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
             </Text>
           )}
         </Button>
+        {feedback && (
+            <Text
+            fontSize="xs"
+            color={feedback.type === 'success' ? statusInfoColor : statusErrorColor}
+            mt={1}
+            textAlign="center"
+            >
+            {feedback.message}
+            </Text>
+        )}
         {!isLotteryActive && !isLotteryDrawn && (
             <Text color={isLotteryNotStarted ? statusWarningColor : statusInfoColor} fontSize="xs" textAlign="center">
                 {isLotteryNotStarted ? "Lottery has not started yet." : "Lottery ended, awaiting draw."}

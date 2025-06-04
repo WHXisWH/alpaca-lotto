@@ -26,6 +26,7 @@ import {
   FaTicketAlt,
   FaTrophy,
   FaQuestionCircle,
+  FaInfoCircle, // Added for new user tip
 } from "react-icons/fa";
 
 const Ul = chakra("ul");
@@ -48,6 +49,10 @@ export const HowToPlayDialog: React.FC<HowToPlayDialogProps> = ({
   const buttonHoverBg = "yellow.100";
   const codeBg = "orange.100";
   const codeColor = "orange.800";
+  const tipBg = "blue.50"; // Background for the new user tip
+  const tipBorderColor = "blue.200";
+  const tipTextColor = "blue.700";
+
 
   if (!isOpen) return null;
 
@@ -183,10 +188,31 @@ export const HowToPlayDialog: React.FC<HowToPlayDialogProps> = ({
                     <CustomLi num={5}>
                       <Box>
                         <Text fontWeight="bold">First-Time Purchase Prep:</Text>
-                        <Ul mt={1} pl={5}>
-                          <Li listStyleType="disc"><Code bg={codeBg} color={codeColor} px={1} borderRadius="md" fontSize="xs">Approve USDC</Code> one-time allowance.</Li>
-                          <Li listStyleType="disc">Ensure balance for tickets and Gas.</Li>
+                        <Ul mt={1} pl={5} gap={1}>
+                          <Li listStyleType="disc">
+                            <Code bg={codeBg} color={codeColor} px={1} borderRadius="md" fontSize="xs">
+                              Approve USDC
+                            </Code>{" "}
+                             one-time allowance for spending.
+                          </Li>
+                          <Li listStyleType="disc">Ensure sufficient USDC balance for tickets and Gas.</Li>
                         </Ul>
+                        <Box
+                          mt={2}
+                          p={3}
+                          bg={tipBg}
+                          borderWidth="1px"
+                          borderColor={tipBorderColor}
+                          borderRadius="md"
+                          display="flex"
+                          alignItems="flex-start"
+                          gap={2}
+                        >
+                          <Icon as={FaInfoCircle} color={tipTextColor} mt="0.15em" boxSize={4} flexShrink={0}/>
+                          <Text fontSize="xs" color={tipTextColor} lineHeight="short">
+                            <Text as="span" fontWeight="bold">First-time AA Wallet Users:</Text> You'll need some USDC in your Smart Account for ticket purchases. If your balance is zero, please add funds (e.g., via the 'Fund Your Account' option if you used social login, or by transferring USDC to your Smart Account address). After funding, refresh the page. For the initial USDC approval, ensure the 'Gas Payment Option' is set to 'Sponsored Gas (Free)'. Once approved, you can select your preferred gas payment method for actual ticket purchases.
+                          </Text>
+                        </Box>
                       </Box>
                     </CustomLi>
                     <CustomLi num={6}>
