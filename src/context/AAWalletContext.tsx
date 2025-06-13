@@ -5,7 +5,7 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import { ethers, Signer as EthersSigner, Wallet as EthersWallet, BigNumber } from "ethers";
+import { ethers, Signer as EthersSigner, BigNumber } from "ethers";
 import { Client, UserOperationBuilder, IPresetBuilderOpts, IUserOperation, ISendUserOperationResponse, Presets } from "userop";
 import { SimpleAccount } from "@/lib/aa/SimpleAccount";
 import {
@@ -83,6 +83,20 @@ export const AAWalletProvider: React.FC<{ children: React.ReactNode }> = ({
   const [web3authProvider, setWeb3authProvider] = useState<SafeEventEmitterProvider | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
+  
+  const resetState = useCallback(() => {
+    setEoaAddress(undefined);
+    setEoaSigner(undefined);
+    setAaWalletAddress(undefined);
+    setSimpleAccount(undefined);
+    setClient(undefined);
+    setProvider(defaultProvider);
+    setIsAAWalletInitialized(false);
+    setIsSocialLoggedIn(false);
+    setWeb3authProvider(null);
+    setError(null);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     const initWeb3Auth = async () => {
@@ -123,10 +137,7 @@ export const AAWalletProvider: React.FC<{ children: React.ReactNode }> = ({
         setWeb3Auth(w3a);
 
         if (w3a.provider && w3a.status === ADAPTER_STATUS.CONNECTED) {
-            console.log("Web3Auth init: Provider exists and status is connected. Setting provider.");
             setWeb3authProvider(w3a.provider);
-        } else {
-            console.log("Web3Auth init: Provider does not exist or status is not connected initially.", "Status:", w3a.status);
         }
 
       } catch (err: any) {
@@ -175,10 +186,8 @@ export const AAWalletProvider: React.FC<{ children: React.ReactNode }> = ({
       if (!web3Auth) {
         setError("Web3Auth not initialized."); setLoading(false); return;
       }
-      console.log(`Social Login: Attempting connect via web3auth.connect(). Hint: ${loginProviderHint}`);
-      setLoading(true); setError(null); setEoaAddress(undefined); setEoaSigner(undefined);
-      setAaWalletAddress(undefined); setSimpleAccount(undefined); setIsAAWalletInitialized(false);
-      setWeb3authProvider(null);
+      setLoading(true);
+      resetState();
 
       try {
         const freshW3aProvider = await web3Auth.connect(); 
@@ -186,34 +195,19 @@ export const AAWalletProvider: React.FC<{ children: React.ReactNode }> = ({
         if (!freshW3aProvider) {
             throw new Error("Web3Auth connect() did not return a provider.");
         }
-        console.log("Social Login: Web3Auth connect() successful, provider obtained.");
         setWeb3authProvider(freshW3aProvider);
 
         if (web3Auth.status !== ADAPTER_STATUS.CONNECTED) {
             throw new Error(`Web3Auth adapter status is not CONNECTED after connect. Status: ${web3Auth.status}`);
         }
 
-        const userInfo : Partial<UserAuthInfo & { publicAddress?: string, address?: string, eoaAddress?: string, accounts?: string[], blockchains?: { eip155?: { address?: string } } }> = await web3Auth.getUserInfo();
-        console.log("Social Login: UserInfo:", JSON.stringify(userInfo, null, 2));
-        
-        console.log("Social Login: Attempting to request private key via 'eth_private_key' on fresh provider...");
-        const pk = await freshW3aProvider.request({ method: "eth_private_key" });
-        console.log("Social Login: Raw response from 'eth_private_key' request:", pk);
-
-        if (!pk || typeof pk !== 'string') {
-          throw new Error(`Failed to get a valid private key string. Received: ${JSON.stringify(pk)}`);
-        }
-        const privateKeyString = pk as string;
-        console.log("Social Login: Private key retrieved.");
-
-        const ethersJsonRpcProvider = new ethers.providers.JsonRpcProvider(RPC_URL);
-        const connectedSocialSigner = new EthersWallet(privateKeyString, ethersJsonRpcProvider);
-        const signerAddress = await connectedSocialSigner.getAddress();
-        console.log("Social Login: Ethers.Wallet (signer) created. Address:", signerAddress);
+        const ethersProvider = new ethers.providers.Web3Provider(freshW3aProvider);
+        const socialLoginSigner = ethersProvider.getSigner();
+        const signerAddress = await socialLoginSigner.getAddress();
         
         setEoaAddress(signerAddress);
-        setEoaSigner(connectedSocialSigner);
-        setProvider(ethersJsonRpcProvider);
+        setEoaSigner(socialLoginSigner);
+        setProvider(ethersProvider);
 
         const _client = await Client.init( RPC_URL, { overrideBundlerRpc: BUNDLER_RPC_URL, entryPoint: ENTRYPOINT_ADDRESS });
         setClient(_client);
@@ -225,38 +219,41 @@ export const AAWalletProvider: React.FC<{ children: React.ReactNode }> = ({
             entryPoint: ENTRYPOINT_ADDRESS, factory: ACCOUNT_FACTORY_ADDRESS,
             overrideBundlerRpc: BUNDLER_RPC_URL, paymasterMiddleware: paymasterInstance,
         };
-        const aaAccountBuilder = await SimpleAccount.init( connectedSocialSigner, RPC_URL, opts );
+        const aaAccountBuilder = await SimpleAccount.init( socialLoginSigner, RPC_URL, opts );
         setSimpleAccount(aaAccountBuilder);
         const _aaAddr = await aaAccountBuilder.getSender();
         setAaWalletAddress(_aaAddr as `0x${string}`);
         setIsAAWalletInitialized(true);
         setIsSocialLoggedIn(true);
-        console.log("Social Login: AA Wallet initialization complete. AA Address:", _aaAddr);
         
       } catch (err: any) {
         console.error("Social Login: Error during AA Wallet initialization:", err);
         setError(`Social Login Error: ${err.message || err.toString()}`);
-        setIsAAWalletInitialized(false); setIsSocialLoggedIn(false);
+        resetState();
         if (web3Auth && web3Auth.status === ADAPTER_STATUS.CONNECTED) {
-            console.log("Social Login: Attempting logout due to error...");
-            try { await web3Auth.logout(); console.log("Social Login: Logout successful after error.");}
+            try { await web3Auth.logout(); }
             catch (logoutError: any) { console.error("Social Login: Error during auto-logout:", logoutError); }
         }
       } finally { setLoading(false); }
     },
-    [web3Auth]
+    [web3Auth, resetState]
   );
 
   const disconnectSocialLogin = useCallback( async () => {
-    if (!web3Auth) { return; }
-    try { if (web3Auth.status === ADAPTER_STATUS.CONNECTED) { await web3Auth.logout(); }
-      setWeb3authProvider(null); 
-    } catch (err: any) { setError(err.message || "Failed to logout.");
-    } finally {
-      setIsSocialLoggedIn(false); setEoaAddress(undefined); setEoaSigner(undefined);
-      setAaWalletAddress(undefined); setSimpleAccount(undefined); setIsAAWalletInitialized(false); setClient(undefined);
+    if (!web3Auth) { 
+        resetState();
+        return; 
     }
-  }, [web3Auth]);
+    try { 
+      if (web3Auth.status === ADAPTER_STATUS.CONNECTED) { 
+        await web3Auth.logout(); 
+      }
+    } catch (err: any) { 
+      setError(err.message || "Failed to logout.");
+    } finally {
+      resetState();
+    }
+  }, [web3Auth, resetState]);
 
   const buildUserOp = useCallback( async ( target: string, value: BigNumber, callData: string ): Promise<IUserOperation> => {
       if (!simpleAccount || !client) { throw new Error("AA Wallet not initialized."); }

@@ -1,3 +1,5 @@
+import { SupportedToken } from "./context/PaymasterContext";
+
 export const RPC_URL =
   import.meta.env.VITE_NERO_RPC_URL || "https://rpc-testnet.nerochain.io";
 
@@ -38,3 +40,18 @@ export const USDC_DECIMALS = 18;
 export const WEB3AUTH_CLIENT_ID = import.meta.env.VITE_WEB3AUTH_CLIENT_ID || "YOUR_WEB3AUTH_CLIENT_ID_FALLBACK";
 
 export const WALLET_CONNECT_PROJECT_ID = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID || "";
+
+export const TOKEN_LIST: SupportedToken[] = [
+  {
+    address: USDC_TOKEN_ADDRESS,
+    symbol: 'USDC',
+    decimals: 18,
+    type: 2
+  },
+  {
+    address: PACALUCK_TOKEN_ADDRESS,
+    symbol: 'PLT',
+    decimals: 18,
+    type: 1
+  }
+];

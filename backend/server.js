@@ -3,6 +3,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const referralRoutes = require('./routes/referralRoutes');
+const { initializeDatabase } = require('./services/databaseService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,18 +22,32 @@ app.use((err, req, res, next) => {
   res.status(500).send({ success: false, message: 'Something broke!' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Alpaca Lotto Backend listening on port ${PORT}`);
-  if (!process.env.MINTER_PRIVATE_KEY) {
-    console.warn('WARNING: MINTER_PRIVATE_KEY is not set in .env file. Minting functionality will fail.');
-  }
-  if (!process.env.RPC_URL) {
-    console.warn('WARNING: RPC_URL is not set in .env file.');
-  }
-  if (!process.env.ALPACALOTTO_CONTRACT_ADDRESS) {
-    console.warn('WARNING: ALPACALOTTO_CONTRACT_ADDRESS is not set in .env file.');
-  }
-  if (!process.env.PACALUCKTOKEN_CONTRACT_ADDRESS) {
-    console.warn('WARNING: PACALUCKTOKEN_CONTRACT_ADDRESS is not set in .env file.');
-  }
-});
+const startServer = async () => {
+    try {
+        await initializeDatabase();
+
+        app.listen(PORT, () => {
+            console.log(`Alpaca Lotto Backend listening on port ${PORT}`);
+            if (!process.env.MINTER_PRIVATE_KEY) {
+              console.warn('WARNING: MINTER_PRIVATE_KEY is not set in .env file. Minting functionality will fail.');
+            }
+            if (!process.env.RPC_URL) {
+              console.warn('WARNING: RPC_URL is not set in .env file.');
+            }
+            if (!process.env.ALPACALOTTO_CONTRACT_ADDRESS) {
+              console.warn('WARNING: ALPACALOTTO_CONTRACT_ADDRESS is not set in .env file.');
+            }
+            if (!process.env.PACALUCKTOKEN_CONTRACT_ADDRESS) {
+              console.warn('WARNING: PACALUCKTOKEN_CONTRACT_ADDRESS is not set in .env file.');
+            }
+            if (!process.env.DATABASE_URL) {
+                console.warn('WARNING: DATABASE_URL is not set in .env file. Database connection will fail.');
+            }
+        });
+    } catch (error) {
+        console.error("Failed to start server:", error);
+        process.exit(1);
+    }
+};
+
+startServer();

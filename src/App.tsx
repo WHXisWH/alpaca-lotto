@@ -13,13 +13,12 @@ import {
   Tabs,
   Image,
   useDisclosure, 
-  Link as ChakraLink, // Added for "How to Play" link for new users
+  Link as ChakraLink,
 } from "@chakra-ui/react";
 import { Button as UIButton } from "@/components/ui/button";
 import { CloseButton as UICloseButton } from "@/components/ui/close-button";
 import { Alert as UIAlert } from "@/components/ui/alert";
 import { useAccount, useDisconnect } from "wagmi";
-import { useEthersSigner } from "./utils/ethersAdapters";
 import { Layout } from "./components/layout";
 import { ConnectWallet } from "./components/common";
 import {
@@ -31,25 +30,26 @@ import {
 import { Web2UserDashboardMockup } from "./components/web2_user/Web2UserDashboardMockup";
 import { ReferralDialog } from "./components/referral/ReferralDialog"; 
 import { HowToPlayDialog } from "./components/play_guide/HowToPlayDialog";
+import { TransactionStatusDialog } from "./components/lottery/TransactionStatusDialog";
 import { useAAWallet } from "./context/AAWalletContext";
-import { usePaymaster } from "./context/PaymasterContext";
+import { usePaymaster, SupportedToken } from "./context/PaymasterContext";
 import { useLottery } from "./context/LotteryContext";
-import { MdWarning, MdCopyAll, MdRefresh, MdExpandMore, MdExpandLess, MdHelpOutline } from "react-icons/md";
+import { MdWarning, MdCopyAll, MdRefresh, MdExpandMore, MdExpandLess } from "react-icons/md";
 import { ethers, BigNumber } from "ethers";
-import { USDC_TOKEN_ADDRESS, USDC_DECIMALS, RPC_URL } from "./config";
+import { RPC_URL, TOKEN_LIST } from "./config";
 import { toaster } from "@/components/ui/toaster";
 
 const ERC20_ABI_MINIMAL = [
   "function balanceOf(address account) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)",
 ];
 
 function App() {
-  const { address: wagmiEoaAddress, isConnected, chain } = useAccount();
-  const ethersSigner = useEthersSigner({ chainId: chain?.id });
+  const { isConnected } = useAccount();
   const { disconnect: wagmiDisconnect } = useDisconnect();
 
   const {
-    initializeAAWallet,
     isAAWalletInitialized,
     aaWalletAddress,
     loading: aaLoading,
@@ -62,17 +62,19 @@ function App() {
   const {
     error: paymasterError,
     clearError: clearPaymasterError,
+    supportedTokens
   } = usePaymaster();
 
-  const { lotteries, setSelectedLotteryForInfo: contextSetSelectedLottery } = useLottery();
+  const { lotteries, setSelectedLotteryForInfo: contextSetSelectedLottery, transaction, clearTransactionState } = useLottery();
 
-  const [usdcBalance, setUsdcBalance] = useState<string>("0.00");
-  const [isBalanceLoading, setIsBalanceLoading] = useState<boolean>(false);
+  const [tokenBalances, setTokenBalances] = useState<Record<string, { balance: string; isLoading: boolean }>>({});
   const [isGasPanelOpen, setIsGasPanelOpen] = useState<boolean>(true);
   const [currentTab, setCurrentTab] = useState<string>("buyTickets");
+  const [isBalancesVisible, setIsBalancesVisible] = useState(false);
 
   const { open: isReferralDialogOpen, onOpen: onReferralDialogOpen, onClose: onReferralDialogClose } = useDisclosure();
   const { open: isHowToPlayDialogOpen, onOpen: onHowToPlayDialogOpen, onClose: onHowToPlayDialogClose } = useDisclosure();
+  const { open: isTxModalOpen, onOpen: onTxModalOpen, onClose: onTxModalClose } = useDisclosure();
 
 
   const toggleGasPanel = () => setIsGasPanelOpen(!isGasPanelOpen);
@@ -85,41 +87,45 @@ function App() {
   const primaryTextColor = "yellow.900";
   const secondaryTextColor = "gray.700";
   const accentColor = "green.600";
-
-  const fetchUSDCBalance = useCallback(async () => {
+  
+  const fetchTokenBalance = useCallback(async (token: SupportedToken) => {
     if (!aaWalletAddress || !isAAWalletInitialized) {
-      setUsdcBalance("0.00");
       return;
     }
-    setIsBalanceLoading(true);
+    setTokenBalances(prev => ({ ...prev, [token.symbol]: { balance: "0.00", isLoading: true } }));
     try {
       const readerProvider = new ethers.providers.JsonRpcProvider(RPC_URL);
-      const usdcContract = new ethers.Contract(
-        USDC_TOKEN_ADDRESS,
-        ERC20_ABI_MINIMAL,
-        readerProvider
-      );
-      const balanceBN: BigNumber = await usdcContract.balanceOf(aaWalletAddress);
-      const formattedBalance = ethers.utils.formatUnits(balanceBN, USDC_DECIMALS);
+      const tokenContract = new ethers.Contract(token.address, ERC20_ABI_MINIMAL, readerProvider);
+      const balanceBN: BigNumber = await tokenContract.balanceOf(aaWalletAddress);
+      const formattedBalance = ethers.utils.formatUnits(balanceBN, token.decimals);
       const numberBalance = parseFloat(formattedBalance);
-      if (isNaN(numberBalance)) {
-        setUsdcBalance("Error");
-      } else {
-        setUsdcBalance(numberBalance.toFixed(2));
-      }
+      const displayBalance = isNaN(numberBalance) ? "Error" : numberBalance.toFixed(2);
+      setTokenBalances(prev => ({ ...prev, [token.symbol]: { balance: displayBalance, isLoading: false } }));
     } catch (e) {
-      setUsdcBalance("Error");
-      toaster.create({ title: "Balance Error", description: "Could not fetch USDC balance.", type: "error" });
-    } finally {
-      setIsBalanceLoading(false);
+      setTokenBalances(prev => ({ ...prev, [token.symbol]: { balance: "Error", isLoading: false } }));
     }
   }, [aaWalletAddress, isAAWalletInitialized]);
 
+  const fetchAllBalances = useCallback(() => {
+    const tokensToFetch = TOKEN_LIST.filter(t => t.address);
+    if(supportedTokens && supportedTokens.length > 0) {
+        supportedTokens.forEach(st => {
+            if(!tokensToFetch.some(t => t.address.toLowerCase() === st.address.toLowerCase())) {
+                tokensToFetch.push(st);
+            }
+        });
+    }
+    tokensToFetch.forEach(fetchTokenBalance);
+  }, [fetchTokenBalance, supportedTokens]);
+
+
   useEffect(() => {
     if (isAAWalletInitialized) {
-      fetchUSDCBalance();
+      fetchAllBalances();
+    } else {
+      setTokenBalances({});
     }
-  }, [isAAWalletInitialized, fetchUSDCBalance]);
+  }, [isAAWalletInitialized, fetchAllBalances]);
   
   useEffect(() => {
     if (lotteries.length > 0 && contextSetSelectedLottery) {
@@ -139,52 +145,22 @@ function App() {
         contextSetSelectedLottery(null);
     }
   }, [lotteries, contextSetSelectedLottery]);
-
+  
   useEffect(() => {
-    if (
-      isConnected &&
-      wagmiEoaAddress &&
-      ethersSigner &&
-      !isAAWalletInitialized &&
-      !aaLoading &&
-      !isSocialLoggedIn
-    ) {
-      initializeAAWallet(wagmiEoaAddress, ethersSigner);
+    if(transaction.loading || transaction.error || transaction.successMessage) {
+        onTxModalOpen();
+    } else {
+        onTxModalClose();
     }
-  }, [
-    isConnected,
-    wagmiEoaAddress,
-    ethersSigner,
-    initializeAAWallet,
-    isAAWalletInitialized,
-    aaLoading,
-    isSocialLoggedIn,
-  ]);
+  }, [transaction.loading, transaction.error, transaction.successMessage, onTxModalOpen, onTxModalClose]);
 
-  const displayLoadingMessage = () => {
-    if (aaLoading && !isAAWalletInitialized && isSocialLoggedIn) {
-        return "Finalizing your secure social login & smart account...";
-    }
-    if (aaLoading && !isAAWalletInitialized && isConnected && !isSocialLoggedIn) {
-        return "Initializing your smart account with your connected wallet...";
-    }
-    if (aaLoading && !isAAWalletInitialized) {
-        return "Setting up your Alpaca Lotto account...";
-    }
-    return null;
-  }
-
-  const loadingMessage = displayLoadingMessage();
-
-  const handleDisconnectApp = async () => {
+  const handleFullDisconnect = async () => {
     if (isSocialLoggedIn) {
       await disconnectSocialLogin();
     }
     if (isConnected) {
       wagmiDisconnect();
     }
-    setUsdcBalance("0.00");
-    if(contextSetSelectedLottery) contextSetSelectedLottery(null);
   };
 
   const copyToClipboard = (text: string) => {
@@ -272,10 +248,10 @@ function App() {
             </UIAlert>
           )}
 
-          {loadingMessage && (
+          {aaLoading && !isAAWalletInitialized && (
               <VStack bg="white" p={6} borderRadius="xl" gap={4} alignItems="center" shadow="md" borderColor={borderColor} borderWidth="1px" mt={2}>
                   <Spinner size="xl" color={accentColor} borderWidth="4px" />
-                  <Text color={primaryTextColor} fontWeight="medium" fontSize="lg">{loadingMessage}</Text>
+                  <Text color={primaryTextColor} fontWeight="medium" fontSize="lg">Initializing Your Smart Account...</Text>
               </VStack>
           )}
 
@@ -320,32 +296,33 @@ function App() {
                   </HStack>
                 </Box>
                 <Box>
-                  <Text fontSize="xs" color={secondaryTextColor}>USDC Balance:</Text>
-                  <HStack>
+                    <HStack cursor="pointer" onClick={() => setIsBalancesVisible(!isBalancesVisible)}>
+                        <Text fontSize="xs" color={secondaryTextColor}>Token Balances</Text>
+                        <Icon as={isBalancesVisible ? MdExpandLess : MdExpandMore} color={secondaryTextColor} />
+                         <UIButton
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => { e.stopPropagation(); fetchAllBalances(); }}
+                            color={secondaryTextColor}
+                            _hover={{ color: accentColor, bg: "yellow.100" }}
+                            aria-label="Refresh Balances"
+                            loading={Object.values(tokenBalances).some(b => b.isLoading)}
+                            px={1}
+                            minW="auto"
+                            borderRadius="md"
+                        >
+                           <Icon as={MdRefresh} boxSize={5} />
+                         </UIButton>
+                    </HStack>
                     <Text fontSize="sm" color={primaryTextColor} fontWeight="bold">
-                      {isBalanceLoading ? <Spinner size="sm" color={accentColor} /> : `${usdcBalance} USDC`}
+                       {tokenBalances['USDC']?.isLoading ? <Spinner size="xs"/> : `${tokenBalances['USDC']?.balance || '0.00'} USDC`}
                     </Text>
-                     <UIButton
-                        size="sm"
-                        variant="ghost"
-                        onClick={fetchUSDCBalance}
-                        color={secondaryTextColor}
-                        _hover={{ color: accentColor, bg: "yellow.100" }}
-                        aria-label="Refresh Balance"
-                        loading={isBalanceLoading}
-                        px={1}
-                        minW="auto"
-                        borderRadius="md"
-                    >
-                       <Icon as={MdRefresh} boxSize={5} />
-                     </UIButton>
-                  </HStack>
                 </Box>
                 <Spacer display={{base:"none", md:"block"}}/>
                 <UIButton 
                   variant="outline"
                   size="sm" 
-                  onClick={handleDisconnectApp} 
+                  onClick={handleFullDisconnect} 
                   mt={{base: 2, md: 0}}
                   borderRadius="lg"
                   color="red.600"
@@ -357,6 +334,19 @@ function App() {
                 </UIButton>
               </Flex>
               
+              {isBalancesVisible && (
+                <HStack wrap="wrap" gap={4} mt={2} p={2} bg="whiteAlpha.500" borderRadius="md">
+                    {Object.entries(tokenBalances).filter(([symbol]) => symbol !== 'USDC').map(([symbol, { balance, isLoading }]) => (
+                        <Box key={symbol}>
+                            <Text fontSize="xs" color={secondaryTextColor}>{symbol}:</Text>
+                            <Text fontSize="sm" fontWeight="bold" color={primaryTextColor}>
+                                {isLoading ? <Spinner size="xs" /> : balance}
+                            </Text>
+                        </Box>
+                    ))}
+                </HStack>
+              )}
+
               <Box mt={4} borderWidth="1px" borderColor={borderColor} borderRadius="xl" overflow="hidden" bg="white">
                 <Flex 
                   as="header" 
@@ -448,7 +438,7 @@ function App() {
             </Tabs.Root>
           )}
           
-          {!isAAWalletInitialized && !aaLoading && !loadingMessage && (
+          {!isAAWalletInitialized && !aaLoading && (
             <VStack gap={4} textAlign="center" mt={8} pb={10}>
                 <Heading size={{base:"lg", md:"xl"}} color={primaryTextColor}>Welcome to Alpaca Lotto!</Heading>
                 <Text color={secondaryTextColor} fontSize={{base:"md", md:"lg"}}>
@@ -460,6 +450,11 @@ function App() {
       </Box>
       <ReferralDialog isOpen={isReferralDialogOpen} onClose={onReferralDialogClose} />
       <HowToPlayDialog isOpen={isHowToPlayDialogOpen} onClose={onHowToPlayDialogClose} />
+      <TransactionStatusDialog
+        isOpen={isTxModalOpen}
+        onClose={() => { onTxModalClose(); clearTransactionState(); }}
+        transactionState={transaction}
+      />
     </Layout>
   );
 }
