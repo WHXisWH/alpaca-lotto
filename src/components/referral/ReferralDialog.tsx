@@ -48,15 +48,15 @@ export const ReferralDialog: React.FC<ReferralDialogProps> = ({ isOpen, onClose 
 
   const handleSubmitReferral = async () => {
     if (!isAAWalletInitialized || !aaWalletAddress) {
-      toaster.create({ title: "Error", description: "Please connect and initialize your wallet first.", type: "error" });
+      toaster.create({ title: "Error", description: "Please connect and initialize your wallet first.", type: "error", closable: true });
       return;
     }
     if (!referrerAddress || !ethers.utils.isAddress(referrerAddress)) {
-      toaster.create({ title: "Invalid Address", description: "Please enter a valid referrer Ethereum address.", type: "error" });
+      toaster.create({ title: "Invalid Address", description: "Please enter a valid referrer Ethereum address.", type: "error", closable: true });
       return;
     }
     if (referrerAddress.toLowerCase() === aaWalletAddress.toLowerCase()) {
-      toaster.create({ title: "Invalid Referrer", description: "You cannot refer yourself.", type: "error" });
+      toaster.create({ title: "Invalid Referrer", description: "You cannot refer yourself.", type: "error", closable: true });
       return;
     }
 
@@ -64,7 +64,7 @@ export const ReferralDialog: React.FC<ReferralDialogProps> = ({ isOpen, onClose 
     try {
       const backendApiUrl = import.meta.env.VITE_BACKEND_API_URL;
       if (!backendApiUrl) {
-        toaster.create({ title: "Configuration Error", description: "Backend API URL is not configured.", type: "error" });
+        toaster.create({ title: "Configuration Error", description: "Backend API URL is not configured.", type: "error", closable: true });
         setIsLoading(false);
         return;
       }
@@ -86,7 +86,8 @@ export const ReferralDialog: React.FC<ReferralDialogProps> = ({ isOpen, onClose 
         toaster.create({
           title: "Referral Submitted!",
           description: data.message || "Your referral has been submitted successfully.",
-          type: "success"
+          type: "success",
+          closable: true,
         });
         setReferrerAddress('');
         onClose();
@@ -94,7 +95,8 @@ export const ReferralDialog: React.FC<ReferralDialogProps> = ({ isOpen, onClose 
         toaster.create({
           title: "Submission Failed",
           description: data.message || "Failed to submit referral. Please try again.",
-          type: "error"
+          type: "error",
+          closable: true,
         });
       }
     } catch (error) {
@@ -102,7 +104,8 @@ export const ReferralDialog: React.FC<ReferralDialogProps> = ({ isOpen, onClose 
       toaster.create({
           title: "Submission Error",
           description: "An unexpected error occurred while submitting your referral. Check console for details.",
-          type: "error"
+          type: "error",
+          closable: true,
       });
     } finally {
       setIsLoading(false);

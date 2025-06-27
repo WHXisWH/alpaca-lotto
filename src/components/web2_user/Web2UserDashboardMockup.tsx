@@ -33,7 +33,13 @@ import {
   FaCoins,
   FaQuestionCircle,
   FaPaperPlane,
+  FaExclamationTriangle,
 } from "react-icons/fa";
+
+const initialBotMessage = {
+  user: "",
+  bot: "Hey there! I'm your friendly Alpaca Assistant. Feel free to ask me anything about how to play, funding your account, or what makes our Smart Accounts so special! I'm here to help you get started on your lucky journey! 🦙✨",
+};
 
 export const Web2UserDashboardMockup: React.FC = () => {
   const {
@@ -50,11 +56,12 @@ export const Web2UserDashboardMockup: React.FC = () => {
   const [creditCardAmount, setCreditCardAmount] = useState("");
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState<boolean | null>(null);
+  const [fundedAmount, setFundedAmount] = useState("");
 
   const [aiBotMessage, setAiBotMessage] = useState("");
   const [aiBotResponses, setAiBotResponses] = useState<
     { user: string; bot: string }[]
-  >([]);
+  >([initialBotMessage]);
   const [isBotTyping, setIsBotTyping] = useState(false);
 
   const mainBg = "yellow.50";
@@ -69,13 +76,14 @@ export const Web2UserDashboardMockup: React.FC = () => {
   const inputBg = "white";
   const inputBorder = "gray.300";
   const inputHoverBorder = "yellow.400";
-  const placeholderColor = "gray.500"; 
+  const placeholderColor = "gray.500";
   const buttonHoverBg = "yellow.100";
   const chatHeaderBg = "yellow.100";
-  const chatUserMsgBg = "blue.500"; 
+  const chatUserMsgBg = "blue.500";
   const chatBotMsgBg = "yellow.100";
   const supportBlue = "blue.500";
   const natureGreen = "green.600";
+  const errorRed = "red.500";
 
   const [isBotIconLoaded, setIsBotIconLoaded] = useState(false);
   const [isBotAvatarLoaded, setIsBotAvatarLoaded] = useState(false);
@@ -87,46 +95,46 @@ export const Web2UserDashboardMockup: React.FC = () => {
     }
     setIsProcessingPayment(true);
     setPaymentSuccess(null);
+    setFundedAmount(creditCardAmount);
+
     setTimeout(() => {
       setIsProcessingPayment(false);
-      setPaymentSuccess(true);
-      setCreditCardAmount("");
-      setTimeout(() => {
-        onCreditCardModalClose();
-        setPaymentSuccess(null);
-      }, 2500);
+      const isSuccess = Math.random() > 0.1;
+      setPaymentSuccess(isSuccess);
+
+      if (isSuccess) {
+        setCreditCardAmount("");
+        setTimeout(() => {
+          onCreditCardModalClose();
+          setPaymentSuccess(null);
+        }, 2500);
+      }
     }, 2000);
   };
 
   const handleAiBotSubmit = () => {
     if (!aiBotMessage.trim()) return;
     const userMsg = aiBotMessage;
+    const userMsgLower = userMsg.toLowerCase();
     setAiBotResponses((prev) => [...prev, { user: userMsg, bot: "" }]);
     setAiBotMessage("");
     setIsBotTyping(true);
 
     setTimeout(() => {
-      let botResponse =
-        "I am an Alpaca Assistant here to help! How can I assist you with funding your account or understanding Alpaca Lotto today?";
-      if (
-        userMsg.toLowerCase().includes("hello") ||
-        userMsg.toLowerCase().includes("hi")
-      ) {
-        botResponse =
-          "Hello there! How can I help you get started with Alpaca Lotto?";
-      } else if (
-        userMsg.toLowerCase().includes("fund") ||
-        userMsg.toLowerCase().includes("deposit") ||
-        userMsg.toLowerCase().includes("credit card")
-      ) {
-        botResponse =
-          "You can add funds using the 'Add Funds with Credit Card' option. If you don't have a credit card, I can guide you on other ways to get USDC for NERO Chain. Would you like to know more about that?";
-      } else if (userMsg.toLowerCase().includes("exchange")) {
-        botResponse =
-          "You can purchase NERO or USDC on NERO Chain from exchanges like (example: MEXC, Gate.io - please verify actual exchanges supporting NERO) and then transfer to your Smart Account address. I can provide a general guide if you like!";
-      } else if (userMsg.toLowerCase().includes("help")) {
-        botResponse =
-          "I can help with questions about funding your account, how to play, or understanding your smart wallet. What's on your mind?";
+      let botResponse = "I'm sorry, I'm not sure how to answer that. I can help with questions about funding your account, game rules, or what makes Alpaca Lotto special.";
+
+      if (userMsgLower.includes("hello") || userMsgLower.includes("hi")) {
+        botResponse = "Hello there! I'm the Alpaca Assistant. How can I help you get started with Alpaca Lotto today?";
+      } else if (userMsgLower.includes("fund") || userMsgLower.includes("deposit") || userMsgLower.includes("credit card") || userMsgLower.includes("buy usdc")) {
+        botResponse = "You can easily add USDC using the 'Fund Your Account' button. This simulates a secure credit card payment. For larger amounts, you can also buy USDC on an exchange and send it to your Smart Account address shown at the top of the page.";
+      } else if (userMsgLower.includes("what is a smart account") || userMsgLower.includes("smart wallet")) {
+        botResponse = "Great question! Think of a Smart Account as your personal, highly secure vault on the blockchain. Unlike old crypto wallets, you can log in with your social account, and it allows for cool features like paying for transaction fees with USDC instead of the chain's native token. It’s security and convenience, combined!";
+      } else if (userMsgLower.includes("different") || userMsgLower.includes("better") || userMsgLower.includes("advantage")) {
+        botResponse = "Alpaca Lotto is special for a few key reasons:\n1. **Easy Login**: Use your social account, no need to remember complicated seed phrases.\n2. **Simple Payments**: Buy tickets and pay for gas fees directly with USDC.\n3. **Top-Notch Security**: Your Smart Account is non-custodial, meaning only you have control over your funds.";
+      } else if (userMsgLower.includes("safe") || userMsgLower.includes("security")) {
+        botResponse = "Your security is our top priority. Your Smart Account is secured by your social login, and it is non-custodial, which means Alpaca Lotto never has access to your private keys or funds. You are always in full control.";
+      } else if (userMsgLower.includes("help")) {
+        botResponse = "I can help with questions about funding your account, how to play, understanding your smart wallet, or what makes Alpaca Lotto unique. What's on your mind?";
       }
 
       setAiBotResponses((prev) => {
@@ -154,7 +162,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
           Your Alpaca Lotto Dashboard
         </Heading>
         <Text textAlign="center" color={secondaryTextColor} fontSize="md">
-          Manage your funds and get help here. Let's get you ready to play!
+          Welcome! This is your hub for managing funds and getting help.
         </Text>
 
         <Separator my={3} borderColor={separatorColor} />
@@ -178,11 +186,10 @@ export const Web2UserDashboardMockup: React.FC = () => {
                   </Heading>
                 </HStack>
                 <Text fontSize="sm" color={secondaryTextColor}>
-                  Easily add USDC to your smart account using your credit card.
-                  Secure and fast.
+                  Easily add USDC to your smart account. This is a secure simulation of a credit card transaction.
                 </Text>
                 <Button
-                  colorPalette="green" 
+                  colorPalette="green"
                   bg="green.600"
                   color="white"
                   _hover={{bg:"green.700", transform: 'scale(1.02)'}}
@@ -192,7 +199,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                   borderRadius="lg"
                 >
                   <FaCreditCard />
-                  Add Funds with Credit Card
+                  Add Funds
                 </Button>
               </VStack>
             </Card.Body>
@@ -228,8 +235,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                   </Heading>
                 </HStack>
                 <Text fontSize="sm" color={secondaryTextColor}>
-                  Have questions? Our friendly Alpaca Bot can help you with
-                  funding options or game rules.
+                  Have questions? Our friendly Alpaca Bot can explain game rules, funding options, or our technology.
                 </Text>
                 <Button
                   colorPalette="green"
@@ -253,6 +259,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
           open={isCreditCardModalOpen}
           onOpenChange={(detail) => {
             if (!detail.open) onCreditCardModalClose();
+            if (paymentSuccess !== null) setPaymentSuccess(null);
           }}
           modal
         >
@@ -274,7 +281,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                   color={supportBlue}
                   fontWeight="bold"
                 >
-                  Add Funds via Credit Card (Mock)
+                  Fund Your Account (Simulation)
                 </DialogHeader>
                 <DialogCloseTrigger asChild>
                   <UICloseButton
@@ -323,7 +330,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                         Payment Successful!
                       </Text>
                       <Text color={secondaryTextColor}>
-                        Funds will be reflected in your account shortly.
+                        {fundedAmount} USDC will be reflected in your account shortly.
                       </Text>
                     </VStack>
                   ) : paymentSuccess === false ? (
@@ -334,12 +341,12 @@ export const Web2UserDashboardMockup: React.FC = () => {
                       gap={3}
                     >
                       <ChakraIcon
-                        as={FaCreditCard}
+                        as={FaExclamationTriangle}
                         w={12}
                         h={12}
-                        color="red.500"
+                        color={errorRed}
                       />
-                      <Text fontSize="lg" fontWeight="bold" color="red.600">
+                      <Text fontSize="lg" fontWeight="bold" color={errorRed}>
                         Payment Failed
                       </Text>
                       <Text color={secondaryTextColor}>
@@ -349,8 +356,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                   ) : (
                     <VStack gap={4}>
                       <Text color={secondaryTextColor} fontSize="sm">
-                        This is a mock interface for adding funds. No real
-                        transaction will occur.
+                        This is a simulated interface for adding funds. No real transaction will occur.
                       </Text>
                       <InputGroup>
                         <Input
@@ -378,8 +384,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                         bg={"yellow.100"}
                         borderRadius="md"
                       >
-                        Simulating secure payment processing by a third-party
-                        provider.
+                        Simulating secure payment processing by a third-party provider.
                       </Box>
                     </VStack>
                   )}
@@ -387,13 +392,16 @@ export const Web2UserDashboardMockup: React.FC = () => {
                 <DialogFooter borderTopWidth="1px" borderColor={cardBorderColor}>
                   <Button
                     variant="ghost"
-                    onClick={onCreditCardModalClose}
+                    onClick={() => {
+                      onCreditCardModalClose();
+                      if (paymentSuccess !== null) setTimeout(() => setPaymentSuccess(null), 300);
+                    }}
                     mr={3}
                     _hover={{ bg: buttonHoverBg }}
                     disabled={isProcessingPayment || paymentSuccess === true}
                     borderRadius="lg"
                   >
-                    Cancel
+                    {paymentSuccess === false ? "Try Again" : "Cancel"}
                   </Button>
                   <Button
                     colorPalette="green"
@@ -406,12 +414,12 @@ export const Web2UserDashboardMockup: React.FC = () => {
                     disabled={
                       isProcessingPayment ||
                       paymentSuccess === true ||
-                      paymentSuccess === false ||
                       !creditCardAmount
                     }
+                    display={paymentSuccess === false ? 'none' : 'inline-flex'}
                     borderRadius="lg"
                   >
-                    {isProcessingPayment ? "Processing..." : "Pay Now (Mock)"}
+                    {isProcessingPayment ? "Processing..." : `Pay ${creditCardAmount ? creditCardAmount : ''} USDC`}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -445,7 +453,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                   color={natureGreen}
                   fontWeight="bold"
                 >
-                  Chat with Alpaca AI Assistant (Mock)
+                  Chat with Alpaca AI Assistant
                 </DialogHeader>
                 <DialogCloseTrigger asChild>
                   <UICloseButton
@@ -490,18 +498,20 @@ export const Web2UserDashboardMockup: React.FC = () => {
                   >
                     {aiBotResponses.map((msg, index) => (
                       <React.Fragment key={index}>
-                        <Box
-                          alignSelf="flex-end"
-                          bg={chatUserMsgBg}
-                          color="white"
-                          px={3}
-                          py={2}
-                          borderRadius="lg"
-                          borderBottomRightRadius="md"
-                          maxWidth="80%"
-                        >
-                          <Text fontSize="sm">{msg.user}</Text>
-                        </Box>
+                        {msg.user && (
+                            <Box
+                            alignSelf="flex-end"
+                            bg={chatUserMsgBg}
+                            color="white"
+                            px={3}
+                            py={2}
+                            borderRadius="lg"
+                            borderBottomRightRadius="md"
+                            maxWidth="80%"
+                            >
+                                <Text fontSize="sm">{msg.user}</Text>
+                            </Box>
+                        )}
                         {msg.bot && (
                           <HStack
                             alignSelf="flex-start"
@@ -511,7 +521,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                           >
                             <Skeleton
                               boxSize="24px"
-                              loading={!isBotIconLoaded} 
+                              loading={!isBotIconLoaded}
                               borderRadius="md"
                               flexShrink={0}
                             >
@@ -544,7 +554,7 @@ export const Web2UserDashboardMockup: React.FC = () => {
                         <Spinner
                           size="xs"
                           color={natureGreen}
-                          borderWidth="2px" 
+                          borderWidth="2px"
                         />
                         <Text fontSize="sm" color={secondaryTextColor}>
                           Alpaca Bot is typing...

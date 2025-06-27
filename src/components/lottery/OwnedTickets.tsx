@@ -7,16 +7,16 @@ import {
   SimpleGrid,
   Heading,
   Image,
-  Separator, 
+  Separator,
   Flex,
 } from "@chakra-ui/react";
 import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/tag";
-import { toaster } from "@/components/ui/toaster"; 
+import { toaster } from "@/components/ui/toaster";
 import { useLottery, OwnedTicketInfo, Lottery } from "@/context/LotteryContext";
 import { useAAWallet } from "@/context/AAWalletContext";
-import { ethers, BigNumber } from "ethers"; 
-import { USDC_DECIMALS } from "@/config"; 
+import { ethers, BigNumber } from "ethers";
+import { USDC_DECIMALS } from "@/config";
 
 
 export const OwnedTickets: React.FC = () => {
@@ -69,14 +69,14 @@ export const OwnedTickets: React.FC = () => {
 
   const handleClaimPrize = async (lotteryId: number) => {
     setClaimingLotteryId(lotteryId);
-    clearTransactionState(); 
+    clearTransactionState();
     const claimResult = await claimPrizeForLottery(lotteryId);
-    
+
     setTimeout(() => {
         if (transaction.successMessage && claimResult) {
-           toaster.create({ title: "Claim Submitted", description: transaction.successMessage, type: "success"});
+           toaster.create({ title: "Claim Submitted", description: transaction.successMessage, type: "success", closable: true });
         } else if (transaction.error) {
-           toaster.create({ title: "Claim Failed", description: transaction.error, type: "error"});
+           toaster.create({ title: "Claim Failed", description: transaction.error, type: "error", closable: true });
         }
          clearTransactionState();
     }, 0);
@@ -93,7 +93,7 @@ export const OwnedTickets: React.FC = () => {
   if (transaction.loading && transaction.step !== "claiming" && ownedTicketsInfo.length === 0) {
     return <Spinner color={accentColor} />;
   }
-  
+
   if (drawnTickets.length === 0 && undrawnTickets.length === 0) {
     return (
         <VStack bg={emptyStateBg} p={10} borderRadius="2xl" gap={4} borderWidth="1px" borderColor={borderColor} shadow="sm">

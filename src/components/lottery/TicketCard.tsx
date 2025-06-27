@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Text,
   VStack,
   HStack,
   Spinner,
-  Link,
   Flex,
+  Switch as ChakraSwitch,
 } from "@chakra-ui/react";
 import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/tag";
@@ -20,14 +20,18 @@ import {
   LOTTERY_CONTRACT_ADDRESS,
   USDC_TOKEN_ADDRESS,
   RPC_URL,
+  PACALUCK_TOKEN_ADDRESS,
 } from "@/config";
 import LOTTO_ABI_JSON from "@/abis/AlpacaLotto.json";
+import PACALUCK_ABI_JSON from "@/abis/PacaLuckToken.json";
 
 const LOTTO_ABI = LOTTO_ABI_JSON as any;
+const PACALUCK_ABI = PACALUCK_ABI_JSON as any;
 const ERC20_ABI_MINIMAL = [
   "function allowance(address owner, address spender) view returns (uint256)",
   "function balanceOf(address account) view returns (uint256)"
 ];
+const PLT_TICKET_COST = 100;
 
 const getReadProvider = () => new ethers.providers.JsonRpcProvider(RPC_URL);
 
@@ -38,6 +42,7 @@ interface LotteryCardProps {
 const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
   const {
     purchaseTicketsForLottery,
+    purchaseTicketsWithPLT,
     checkAndApproveUSDC,
     transaction,
     clearTransactionState,
@@ -74,17 +79,19 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
   const statusInfoColor = "blue.600";
 
   const [quantity, setQuantity] = useState<number>(1);
+  const [usePLT, setUsePLT] = useState(false);
   const [usdcAllowance, setUsdcAllowance] = useState<BigNumber>(BigNumber.from(0));
   const [usdcBalance, setUsdcBalance] = useState<BigNumber>(BigNumber.from(0));
+  const [pltBalance, setPltBalance] = useState<BigNumber>(BigNumber.from(0));
   const [isDataLoading, setIsDataLoading] = useState<boolean>(false);
   const [isAllowanceSufficient, setIsAllowanceSufficient] = useState<boolean>(false);
   const [isBalanceSufficient, setIsBalanceSufficient] = useState<boolean>(false);
-  const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  const isPLTBalanceSufficient = useMemo(() => {
+    const totalPLTCost = BigNumber.from(PLT_TICKET_COST).mul(quantity);
+    return pltBalance.gte(totalPLTCost);
+  }, [pltBalance, quantity]);
 
-  const prevTransactionErrorRef = useRef<string | null>(null);
-  const prevPaymasterErrorRef = useRef<string | null>(null);
-  const prevSuccessMessageRef = useRef<string | null>(null);
 
   const handleCardClick = () => {
     if (setSelectedLotteryForInfo) {
@@ -97,6 +104,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
     if (!aaWalletAddress || !lottery || quantity <= 0) {
       setUsdcAllowance(BigNumber.from(0));
       setUsdcBalance(BigNumber.from(0));
+      setPltBalance(BigNumber.from(0));
       setIsAllowanceSufficient(false);
       setIsBalanceSufficient(false);
       setIsDataLoading(false);
@@ -104,20 +112,18 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
     }
     try {
       const readerProvider = getReadProvider();
-      const usdcContract = new ethers.Contract(
-        USDC_TOKEN_ADDRESS,
-        ERC20_ABI_MINIMAL,
-        readerProvider
-      );
+      const usdcContract = new ethers.Contract(USDC_TOKEN_ADDRESS, ERC20_ABI_MINIMAL, readerProvider);
+      const pltContract = new ethers.Contract(PACALUCK_TOKEN_ADDRESS, PACALUCK_ABI, readerProvider);
 
-      const allowance: BigNumber = await usdcContract.allowance(
-        aaWalletAddress,
-        LOTTERY_CONTRACT_ADDRESS
-      );
-      const balance: BigNumber = await usdcContract.balanceOf(aaWalletAddress);
+      const [allowance, balance, pltBal] = await Promise.all([
+        usdcContract.allowance(aaWalletAddress, LOTTERY_CONTRACT_ADDRESS),
+        usdcContract.balanceOf(aaWalletAddress),
+        pltContract.balanceOf(aaWalletAddress),
+      ]);
 
       setUsdcAllowance(allowance);
       setUsdcBalance(balance);
+      setPltBalance(pltBal);
 
       if (lottery.ticketPrice) {
         const totalCost = lottery.ticketPrice.mul(quantity);
@@ -131,6 +137,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
     } catch (e) {
       setUsdcAllowance(BigNumber.from(0));
       setUsdcBalance(BigNumber.from(0));
+      setPltBalance(BigNumber.from(0));
       setIsAllowanceSufficient(false);
       setIsBalanceSufficient(false);
     } finally {
@@ -145,14 +152,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
   }, [isAAWalletInitialized, lottery, quantity, fetchLotteryCardData, transaction.successMessage]);
 
   useEffect(() => {
-    if (
-      !isAAWalletInitialized ||
-      !simpleAccount ||
-      !estimateGasCost ||
-      !lottery ||
-      lottery.id === 0 ||
-      quantity <= 0
-    ) {
+    if (!isAAWalletInitialized || !simpleAccount || !estimateGasCost || !lottery || lottery.id === 0 || quantity <= 0) {
       return;
     }
 
@@ -160,17 +160,17 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
     const doEstimate = async () => {
         setIsDataLoading(true);
         if (clearPaymasterError) clearPaymasterError();
-        prevPaymasterErrorRef.current = null;
         try {
             const lotteryContractInterface = new ethers.utils.Interface(LOTTO_ABI);
-            const purchaseCallData = lotteryContractInterface.encodeFunctionData( "purchaseTickets", [lottery.id, USDC_TOKEN_ADDRESS, quantity]);
+            let purchaseCallData: string;
 
-            const builderForEstimation = simpleAccount.execute(
-            LOTTERY_CONTRACT_ADDRESS,
-            BigNumber.from(0),
-            purchaseCallData
-            );
+            if (usePLT) {
+                purchaseCallData = lotteryContractInterface.encodeFunctionData("purchaseTicketsWithPLT", [lottery.id, quantity]);
+            } else {
+                purchaseCallData = lotteryContractInterface.encodeFunctionData("purchaseTickets", [lottery.id, USDC_TOKEN_ADDRESS, quantity]);
+            }
 
+            const builderForEstimation = simpleAccount.execute(LOTTERY_CONTRACT_ADDRESS, BigNumber.from(0), purchaseCallData);
             await estimateGasCost(builderForEstimation);
         } catch (e: any) {
         } finally {
@@ -180,115 +180,34 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
 
     gasEstimateDebounceTimer = setTimeout(doEstimate, 800);
 
-    return () => {
-        clearTimeout(gasEstimateDebounceTimer);
-    };
+    return () => clearTimeout(gasEstimateDebounceTimer);
   }, [
-    isAAWalletInitialized,
-    simpleAccount,
-    estimateGasCost,
-    lottery?.id,
-    lottery?.ticketPrice?.toString(),
-    quantity,
-    selectedPaymasterType,
-    selectedToken?.address,
-    clearPaymasterError
+    isAAWalletInitialized, simpleAccount, estimateGasCost, lottery?.id,
+    quantity, selectedPaymasterType, selectedToken?.address, clearPaymasterError, usePLT
   ]);
 
 
   const handlePurchaseOrApprove = async () => {
-    if (!lottery || quantity <= 0) {
-        console.error("TicketCard: Invalid Input - Please select a valid lottery and quantity.");
-        setFeedback({ message: "Please select a valid lottery and quantity.", type: 'error' });
-        setTimeout(() => setFeedback(null), 5000);
-        return;
-    }
+    if (!lottery || quantity <= 0) return;
 
-    prevTransactionErrorRef.current = null;
-    prevSuccessMessageRef.current = null;
     clearTransactionState();
-    setFeedback(null);
 
-    if (!isBalanceSufficient) {
-      setFeedback({ message: "Insufficient USDC balance.", type: 'error' });
-      setTimeout(() => setFeedback(null), 5000);
-      return;
-    }
+    if (usePLT) {
+        if (!isPLTBalanceSufficient) return;
+        await purchaseTicketsWithPLT(lottery.id, quantity);
+    } else {
+        if (!isBalanceSufficient) return;
 
-    if (!isAllowanceSufficient) {
-      const approveResult = await checkAndApproveUSDC(lottery.id, quantity);
-      if (!approveResult.approved) {
-        const errorMsg = approveResult.error || "Failed to approve USDC. Please try again.";
-        if (errorMsg !== prevTransactionErrorRef.current) {
-          console.error("TicketCard: Approval Failed -", errorMsg);
-          setFeedback({ message: `Approval Failed: ${errorMsg}`, type: 'error' });
-          prevTransactionErrorRef.current = errorMsg;
+        if (!isAllowanceSufficient) {
+            const approveResult = await checkAndApproveUSDC(lottery.id, quantity);
+            if (approveResult.approved) {
+                fetchLotteryCardData();
+            }
+            return;
         }
-      } else {
-        const successMsg = `USDC approved. You can now purchase tickets. Tx: ${approveResult.approvalTxHash}`;
-        console.log("TicketCard: Approval Successful -", successMsg);
-        setFeedback({ message: "USDC Approved successfully!", type: 'success' });
-        prevSuccessMessageRef.current = successMsg;
-        fetchLotteryCardData();
-      }
-      setTimeout(() => setFeedback(null), 7000);
-      return;
+        await purchaseTicketsForLottery(lottery.id, quantity);
     }
-
-    await purchaseTicketsForLottery(lottery.id, quantity);
   };
-
-  useEffect(() => {
-    if (transaction.error && transaction.error !== prevTransactionErrorRef.current) {
-      console.error("TicketCard: Transaction Failed from useEffect -", transaction.error);
-      setFeedback({ message: transaction.error, type: 'error' });
-      prevTransactionErrorRef.current = transaction.error;
-      const timer = setTimeout(() => {
-          setFeedback(null);
-          clearTransactionState();
-      }, 7000);
-      return () => clearTimeout(timer);
-    }
-  }, [transaction.error, clearTransactionState]);
-
-  useEffect(() => {
-    if (
-      transaction.successMessage &&
-      transaction.hash &&
-      !transaction.loading &&
-      transaction.step === "idle" &&
-      transaction.successMessage !== prevSuccessMessageRef.current
-    ) {
-      console.log("TicketCard: Transaction Successful from useEffect -", transaction.successMessage, "Hash:", transaction.hash);
-      setFeedback({ message: transaction.successMessage, type: 'success' });
-      prevSuccessMessageRef.current = transaction.successMessage;
-      prevTransactionErrorRef.current = null;
-      const timer = setTimeout(() => {
-          setFeedback(null);
-          clearTransactionState();
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [
-    transaction.successMessage,
-    transaction.hash,
-    transaction.loading,
-    transaction.step,
-    clearTransactionState,
-  ]);
-
-  useEffect(() => {
-    if (paymasterError && paymasterError !== prevPaymasterErrorRef.current) {
-      console.error("TicketCard: Paymaster Error from useEffect -", paymasterError);
-      setFeedback({ message: paymasterError, type: 'error' });
-      prevPaymasterErrorRef.current = paymasterError;
-      const timer = setTimeout(() => {
-        setFeedback(null);
-        if (clearPaymasterError) clearPaymasterError();
-      }, 7000);
-      return () => clearTimeout(timer);
-    }
-  }, [paymasterError, clearPaymasterError]);
 
   if (!lottery || lottery.id === 0 || !lottery.ticketPrice) {
     return (
@@ -299,14 +218,12 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
   }
 
   const totalUsdcCost = lottery.ticketPrice.mul(quantity);
-  const formattedTicketPrice = ethers.utils.formatUnits(
-    lottery.ticketPrice,
-    USDC_DECIMALS
-  );
-  const formattedTotalCost = ethers.utils.formatUnits(
-    totalUsdcCost,
-    USDC_DECIMALS
-  );
+  const formattedTicketPrice = ethers.utils.formatUnits(lottery.ticketPrice, USDC_DECIMALS);
+  const totalPltCost = PLT_TICKET_COST * quantity;
+  const formattedTotalCost = usePLT
+    ? `${totalPltCost} PLT`
+    : `${ethers.utils.formatUnits(totalUsdcCost, USDC_DECIMALS)} USDC`;
+
 
   const getGasPaymentDisplay = () => {
     const gasEstimatingForPaymaster = paymasterLoading && !gasCost.native && !gasCost.erc20 && !paymasterError;
@@ -317,14 +234,8 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
       return `Gas: ${gasCost.native?.formatted || "N/A"} NERO`;
     if (selectedPaymasterType === PaymasterType.FREE_GAS)
       return "Gas: Sponsored (Free)";
-    if (
-      selectedToken &&
-      gasCost.erc20 &&
-      gasCost.erc20.token?.symbol === selectedToken.symbol
-    )
-      return `Gas: ${
-        gasCost.erc20.formatted || "N/A"
-      } ${selectedToken.symbol}`;
+    if (selectedToken && gasCost.erc20 && gasCost.erc20.token?.symbol === selectedToken.symbol)
+      return `Gas: ${gasCost.erc20.formatted || "N/A"} ${selectedToken.symbol}`;
     if (paymasterError) return "Gas: Estimation Failed";
     return "Gas: Select payment option";
   };
@@ -346,139 +257,85 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
     statusTag = <Tag colorScheme="orange" variant="solid" size="sm" borderRadius="lg">Awaiting Draw</Tag>;
   }
 
-  const buttonText = !isAllowanceSufficient ? "Approve USDC" : "Purchase Tickets";
-  const isButtonDisabled = transaction.loading || isLotteryDrawn || !isLotteryActive || (!isBalanceSufficient && isAllowanceSufficient) || isDataLoading;
-
+  const buttonText = usePLT ? "Purchase with PLT" : (!isAllowanceSufficient ? "Approve USDC" : "Purchase Tickets");
+  const isButtonDisabled = transaction.loading || isLotteryDrawn || !isLotteryActive ||
+    (usePLT ? !isPLTBalanceSufficient : !isBalanceSufficient && isAllowanceSufficient) || isDataLoading;
 
   return (
     <Box
-      borderWidth="1px"
-      borderRadius="xl"
-      p={5}
-      shadow="sm"
-      bg={cardBg}
-      color={textColor}
-      borderColor={borderColor}
-      onClick={handleCardClick}
-      cursor="pointer"
-      _hover={{ borderColor: hoverBorderColor, shadow: "lg", transform: 'translateY(-2px) scale(1.02)'}}
-      _active={{transform: 'scale(0.98)'}}
-      transition="all 0.2s ease-out"
+      borderWidth="1px" borderRadius="xl" p={5} shadow="sm" bg={cardBg}
+      color={textColor} borderColor={borderColor} onClick={handleCardClick}
+      cursor="pointer" _hover={{ borderColor: hoverBorderColor, shadow: "lg", transform: 'translateY(-2px) scale(1.02)'}}
+      _active={{transform: 'scale(0.98)'}} transition="all 0.2s ease-out"
     >
       <VStack align="stretch" gap={3}>
         <Flex alignItems="center" justifyContent="space-between">
-        <Text
-              fontSize="md"
-              fontWeight="bold"
-              color={headingAccentColor}
-              mr={2}
-              overflow="hidden"
-              textOverflow="ellipsis"
-              whiteSpace="nowrap"
-              minWidth="0"
-            >
+            <Text fontSize="md" fontWeight="bold" color={headingAccentColor} mr={2} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" minWidth="0">
               {lottery.name}
             </Text>
             {statusTag}
         </Flex>
-
-        <Text fontSize="sm" color={secondaryTextColor}>Ticket Price: {formattedTicketPrice} USDC</Text>
-        <Text fontSize="sm" color={secondaryTextColor}>
-          Draw Time: {new Date(lottery.drawTime * 1000).toLocaleString()}
-        </Text>
+        <Text fontSize="sm" color={secondaryTextColor}>Ticket Price: {formattedTicketPrice} USDC or {PLT_TICKET_COST} PLT</Text>
       </VStack>
 
       <VStack align="stretch" gap={4} mt={4}>
         <HStack>
           <Text fontSize="sm" color={secondaryTextColor}>Quantity:</Text>
-          <NumberInputRoot
-            size="md"
-            maxW="100px"
-            value={quantity.toString()}
-            min={1}
+          <NumberInputRoot size="md" maxW="100px" value={quantity.toString()} min={1}
             onValueChange={(details) => {
                 const val = details.valueAsNumber;
                 setQuantity(isNaN(val) || val < 1 ? 1 : val);
             }}
             disabled={transaction.loading || isLotteryDrawn || !isLotteryActive}
           >
-            <NumberInputField
-              bg={inputBg}
-              borderColor={inputBorder}
-              _hover={{borderColor: inputHoverBorder}}
-              _focus={{borderColor: inputFocusBorder, boxShadow: `0 0 0 1px ${inputFocusBorder}`}}
-              borderRadius="lg"
-            />
+            <NumberInputField bg={inputBg} borderColor={inputBorder} _hover={{borderColor: inputHoverBorder}} _focus={{borderColor: inputFocusBorder, boxShadow: `0 0 0 1px ${inputFocusBorder}`}} borderRadius="lg" />
           </NumberInputRoot>
         </HStack>
 
-        <Text fontWeight="bold" fontSize="lg" color={textColor}>Total Cost: {formattedTotalCost} USDC</Text>
-        <Text fontSize="xs" color={gasTextColor}>
-          {getGasPaymentDisplay()}
-        </Text>
+        <Flex justify="space-between" align="center">
+            <Text mb='0' fontSize="sm" color={secondaryTextColor} flex="1" mr="2">
+                Use PLT Balance ({ethers.utils.formatUnits(pltBalance, 18)} PLT available)
+            </Text>
+            <ChakraSwitch.Root
+                id='use-plt-switch'
+                colorScheme="green"
+                checked={usePLT}
+                onCheckedChange={(e) => setUsePLT(e.checked)}
+                disabled={!isPLTBalanceSufficient}
+            >
+                <ChakraSwitch.Thumb />
+            </ChakraSwitch.Root>
+        </Flex>
+
+        <Text fontWeight="bold" fontSize="lg" color={textColor}>Total Cost: {formattedTotalCost}</Text>
+        <Text fontSize="xs" color={gasTextColor}>{getGasPaymentDisplay()}</Text>
+
         <Button
-          colorPalette={!isAllowanceSufficient && isBalanceSufficient ? "orange" : "green"}
-          onClick={(e) => {
-            e.stopPropagation();
-            handlePurchaseOrApprove();
-          }}
+          colorPalette={!isAllowanceSufficient && isBalanceSufficient && !usePLT ? "orange" : "green"}
+          onClick={(e) => { e.stopPropagation(); handlePurchaseOrApprove(); }}
           loading={transaction.loading && (transaction.step === "approving" || transaction.step === "purchasing" || transaction.step === "fetchingReceipt")}
-          disabled={isButtonDisabled}
-          size="lg"
-          borderRadius="xl"
-          bg={(!isAllowanceSufficient && isBalanceSufficient) ? "orange.500" : "green.600"}
+          disabled={isButtonDisabled} size="lg" borderRadius="xl"
+          bg={(!isAllowanceSufficient && isBalanceSufficient && !usePLT) ? "orange.500" : "green.600"}
           color="white"
-          _hover={{ bg: (!isAllowanceSufficient && isBalanceSufficient) ? "orange.600" : "green.700", transform: 'scale(1.02)'}}
-          _active={{ bg: (!isAllowanceSufficient && isBalanceSufficient) ? "orange.700" : "green.800", transform: 'scale(0.98)'}}
+          _hover={{ bg: (!isAllowanceSufficient && isBalanceSufficient && !usePLT) ? "orange.600" : "green.700", transform: 'scale(1.02)'}}
+          _active={{ bg: (!isAllowanceSufficient && isBalanceSufficient && !usePLT) ? "orange.700" : "green.800", transform: 'scale(0.98)'}}
         >
-          {transaction.loading || isDataLoading ? (
-            <Spinner size="sm" color="white" />
-          ) : (
-            <Text
-              fontSize="sm"
-              fontWeight="medium"
-              whiteSpace="wrap"
-              overflow="hidden"
-              textOverflow="ellipsis"
-              maxW="100%"
-            >
-              {buttonText}
-            </Text>
-          )}
+          {transaction.loading || isDataLoading ? <Spinner size="sm" color="white" /> : <Text fontSize="sm" fontWeight="medium" whiteSpace="wrap" overflow="hidden" textOverflow="ellipsis" maxW="100%">{buttonText}</Text>}
         </Button>
-        {feedback && (
-            <Text
-            fontSize="xs"
-            color={feedback.type === 'success' ? statusInfoColor : statusErrorColor}
-            mt={1}
-            textAlign="center"
-            >
-            {feedback.message}
-            </Text>
-        )}
-        {!isLotteryActive && !isLotteryDrawn && (
-            <Text color={isLotteryNotStarted ? statusWarningColor : statusInfoColor} fontSize="xs" textAlign="center">
-                {isLotteryNotStarted ? "Lottery has not started yet." : "Lottery ended, awaiting draw."}
-            </Text>
-        )}
-         {!isBalanceSufficient && isLotteryActive && (
-             <Text color={statusErrorColor} fontSize="xs" textAlign="center">Please ensure you have enough USDC.</Text>
-         )}
-         {isBalanceSufficient && !isAllowanceSufficient && isLotteryActive && (
-             <Text color={statusInfoColor} fontSize="xs" textAlign="center">USDC spending needs to be approved.</Text>
-         )}
+
+        {paymasterError && <Text fontSize="xs" color={statusErrorColor} mt={1} textAlign="center">{paymasterError}</Text>}
+        {!isLotteryActive && !isLotteryDrawn && <Text color={isLotteryNotStarted ? statusWarningColor : statusInfoColor} fontSize="xs" textAlign="center">{isLotteryNotStarted ? "Lottery has not started yet." : "Lottery ended, awaiting draw."}</Text>}
+        {!usePLT && !isBalanceSufficient && isLotteryActive && <Text color={statusErrorColor} fontSize="xs" textAlign="center">Please ensure you have enough USDC.</Text>}
+        {usePLT && !isPLTBalanceSufficient && isLotteryActive && <Text color={statusErrorColor} fontSize="xs" textAlign="center">Insufficient PLT balance for this quantity.</Text>}
+        {!usePLT && isBalanceSufficient && !isAllowanceSufficient && isLotteryActive && <Text color={statusInfoColor} fontSize="xs" textAlign="center">USDC spending needs to be approved.</Text>}
       </VStack>
     </Box>
   );
 };
 
 const lotteryPropsAreEqual = (prevProps: LotteryCardProps, nextProps: LotteryCardProps): boolean => {
-  if (prevProps.lottery === nextProps.lottery) {
-    return true;
-  }
-  if (!prevProps.lottery || !nextProps.lottery) {
-    return false;
-  }
+  if (prevProps.lottery === nextProps.lottery) return true;
+  if (!prevProps.lottery || !nextProps.lottery) return false;
 
   return (
     prevProps.lottery.id === nextProps.lottery.id &&
