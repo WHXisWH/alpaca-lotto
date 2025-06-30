@@ -6,7 +6,6 @@ import {
   HStack,
   Spinner,
   Flex,
-  Switch as ChakraSwitch,
 } from "@chakra-ui/react";
 import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/tag";
@@ -193,18 +192,9 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
     clearTransactionState();
 
     if (usePLT) {
-        if (!isPLTBalanceSufficient) return;
         await purchaseTicketsWithPLT(lottery.id, quantity);
     } else {
         if (!isBalanceSufficient) return;
-
-        if (!isAllowanceSufficient) {
-            const approveResult = await checkAndApproveUSDC(lottery.id, quantity);
-            if (approveResult.approved) {
-                fetchLotteryCardData();
-            }
-            return;
-        }
         await purchaseTicketsForLottery(lottery.id, quantity);
     }
   };
@@ -257,9 +247,39 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
     statusTag = <Tag colorScheme="orange" variant="solid" size="sm" borderRadius="lg">Awaiting Draw</Tag>;
   }
 
-  const buttonText = usePLT ? "Purchase with PLT" : (!isAllowanceSufficient ? "Approve USDC" : "Purchase Tickets");
-  const isButtonDisabled = transaction.loading || isLotteryDrawn || !isLotteryActive ||
-    (usePLT ? !isPLTBalanceSufficient : !isBalanceSufficient && isAllowanceSufficient) || isDataLoading;
+  const getButtonState = () => {
+    if (usePLT) {
+      return {
+        text: "Purchase with PLT",
+        disabled: transaction.loading || !isLotteryActive || !isPLTBalanceSufficient || isDataLoading,
+        color: "green"
+      };
+    }
+
+    if (!isBalanceSufficient) {
+      return {
+        text: "Purchase Tickets",
+        disabled: true,
+        color: "green"
+      };
+    }
+
+    if (!isAllowanceSufficient) {
+      return {
+        text: "Approve USDC",
+        disabled: transaction.loading || !isLotteryActive || isDataLoading,
+        color: "orange"
+      };
+    }
+
+    return {
+      text: "Purchase Tickets",
+      disabled: transaction.loading || !isLotteryActive || isDataLoading,
+      color: "green"
+    };
+  };
+
+  const { text: buttonText, disabled: isButtonDisabled, color: buttonColor } = getButtonState();
 
   return (
     <Box
@@ -292,42 +312,55 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
           </NumberInputRoot>
         </HStack>
 
-        <Flex justify="space-between" align="center">
-            <Text mb='0' fontSize="sm" color={secondaryTextColor} flex="1" mr="2">
-                Use PLT Balance ({ethers.utils.formatUnits(pltBalance, 18)} PLT available)
-            </Text>
-            <ChakraSwitch.Root
-                id='use-plt-switch'
-                colorScheme="green"
-                checked={usePLT}
-                onCheckedChange={(e) => setUsePLT(e.checked)}
-                disabled={!isPLTBalanceSufficient}
+        <HStack w="100%">
+            <Button
+                flex="1"
+                size="sm"
+                variant={!usePLT ? 'solid' : 'outline'}
+                colorPalette={!usePLT ? 'blue' : 'gray'}
+                bg={!usePLT ? 'blue.500' : 'transparent'}
+                color={!usePLT ? 'white' : 'blue.500'}
+                borderColor="blue.500"
+                onClick={(e) => { e.stopPropagation(); setUsePLT(false); }}
             >
-                <ChakraSwitch.Thumb />
-            </ChakraSwitch.Root>
-        </Flex>
+                Pay with USDC
+            </Button>
+            <Button
+                flex="1"
+                size="sm"
+                variant={usePLT ? 'solid' : 'outline'}
+                colorPalette={usePLT ? 'green' : 'gray'}
+                bg={usePLT ? 'green.500' : 'transparent'}
+                color={usePLT ? 'white' : 'green.500'}
+                borderColor="green.500"
+                onClick={(e) => { e.stopPropagation(); setUsePLT(true); }}
+            >
+                Pay with PLT
+            </Button>
+        </HStack>
 
         <Text fontWeight="bold" fontSize="lg" color={textColor}>Total Cost: {formattedTotalCost}</Text>
         <Text fontSize="xs" color={gasTextColor}>{getGasPaymentDisplay()}</Text>
 
         <Button
-          colorPalette={!isAllowanceSufficient && isBalanceSufficient && !usePLT ? "orange" : "green"}
+          colorPalette={buttonColor === "orange" ? "orange" : "green"}
           onClick={(e) => { e.stopPropagation(); handlePurchaseOrApprove(); }}
           loading={transaction.loading && (transaction.step === "approving" || transaction.step === "purchasing" || transaction.step === "fetchingReceipt")}
-          disabled={isButtonDisabled} size="lg" borderRadius="xl"
-          bg={(!isAllowanceSufficient && isBalanceSufficient && !usePLT) ? "orange.500" : "green.600"}
+          disabled={isButtonDisabled}
+          size="lg" borderRadius="xl"
+          bg={buttonColor === "orange" ? "orange.500" : "green.600"}
           color="white"
-          _hover={{ bg: (!isAllowanceSufficient && isBalanceSufficient && !usePLT) ? "orange.600" : "green.700", transform: 'scale(1.02)'}}
-          _active={{ bg: (!isAllowanceSufficient && isBalanceSufficient && !usePLT) ? "orange.700" : "green.800", transform: 'scale(0.98)'}}
+          _hover={{ bg: buttonColor === "orange" ? "orange.600" : "green.700", transform: 'scale(1.02)'}}
+          _active={{ bg: buttonColor === "orange" ? "orange.700" : "green.800", transform: 'scale(0.98)'}}
         >
           {transaction.loading || isDataLoading ? <Spinner size="sm" color="white" /> : <Text fontSize="sm" fontWeight="medium" whiteSpace="wrap" overflow="hidden" textOverflow="ellipsis" maxW="100%">{buttonText}</Text>}
         </Button>
 
         {paymasterError && <Text fontSize="xs" color={statusErrorColor} mt={1} textAlign="center">{paymasterError}</Text>}
         {!isLotteryActive && !isLotteryDrawn && <Text color={isLotteryNotStarted ? statusWarningColor : statusInfoColor} fontSize="xs" textAlign="center">{isLotteryNotStarted ? "Lottery has not started yet." : "Lottery ended, awaiting draw."}</Text>}
-        {!usePLT && !isBalanceSufficient && isLotteryActive && <Text color={statusErrorColor} fontSize="xs" textAlign="center">Please ensure you have enough USDC.</Text>}
-        {usePLT && !isPLTBalanceSufficient && isLotteryActive && <Text color={statusErrorColor} fontSize="xs" textAlign="center">Insufficient PLT balance for this quantity.</Text>}
-        {!usePLT && isBalanceSufficient && !isAllowanceSufficient && isLotteryActive && <Text color={statusInfoColor} fontSize="xs" textAlign="center">USDC spending needs to be approved.</Text>}
+        {!usePLT && !isBalanceSufficient && isLotteryActive && <Text color={statusErrorColor} fontSize="xs" textAlign="center">Insufficient USDC balance.</Text>}
+        {usePLT && !isPLTBalanceSufficient && isLotteryActive && <Text color={statusErrorColor} fontSize="xs" textAlign="center">Insufficient PLT balance.</Text>}
+        {!usePLT && isBalanceSufficient && !isAllowanceSufficient && isLotteryActive && <Text color={statusInfoColor} fontSize="xs" textAlign="center">A one-time approval is required to spend USDC.</Text>}
       </VStack>
     </Box>
   );

@@ -59,6 +59,19 @@ export const ConnectWallet: React.FC = () => {
     }
   }, [isAAWalletInitialized]);
 
+  // --- 核心改動：增加這個 useEffect 來處理錢包自動重連 ---
+  useEffect(() => {
+    // 如果 Wagmi 已經連接，並且我們的 AA 錢包尚未初始化，且不在加載中
+    if (isConnected && wagmiEoaAddress && ethersSigner && !isAAWalletInitialized && !aaLoading) {
+      // 檢查是否是從錢包登錄（而不是社交登錄）
+      if (!isSocialLoggedIn) {
+        // 自動觸發 AA 錢包的初始化
+        initializeAAWallet(wagmiEoaAddress, ethersSigner);
+      }
+    }
+  }, [isConnected, wagmiEoaAddress, ethersSigner, isAAWalletInitialized, aaLoading, isSocialLoggedIn, initializeAAWallet]);
+
+
   const handleConnect = (connectorId?: string) => {
     let targetConnector: Connector | undefined;
     if (connectorId) {

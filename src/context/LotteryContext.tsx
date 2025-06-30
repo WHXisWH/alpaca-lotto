@@ -1,5 +1,3 @@
-// src/context/LotteryContext.tsx
-
 import React, {
   createContext,
   useContext,
@@ -15,7 +13,9 @@ import { toaster } from "@/components/ui/toaster";
 import {
   LOTTERY_CONTRACT_ADDRESS,
   USDC_TOKEN_ADDRESS,
+  PACALUCK_TOKEN_ADDRESS,
   RPC_URL,
+  USDC_DECIMALS,
 } from "../config";
 import { UserOperationBuilder, ISendUserOperationResponse as UserOpSdkResponse } from "userop";
 import { UserOperationEventEvent } from "@account-abstraction/contracts/dist/types/EntryPoint";
@@ -286,7 +286,12 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
     [getLotteryContractReader, aaWalletContext.aaWalletAddress, lotteries]
   );
 
-  const checkAndApproveUSDC = async (lotteryId: number, quantity: number) => {
+  const checkAndApproveToken = async (
+    tokenAddress: string,
+    tokenDecimals: number,
+    requiredAmount: BigNumber,
+    tokenSymbol: string,
+  ): Promise<{ approved: boolean; approvalTxHash?: string | null; error?: string }> => {
     if (
       !aaWalletContext.aaWalletAddress ||
       !aaWalletContext.simpleAccount ||
@@ -296,42 +301,36 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
       return { approved: false, error: "AA Wallet or Paymaster context not initialized correctly for approval." };
     }
 
-    const selectedLottery = lotteries.find((l) => l.id === lotteryId);
-    if (!selectedLottery) {
-      return { approved: false, error: "Lottery details not found for approval." };
-    }
+    const tokenReader = new ethers.Contract(tokenAddress, ERC20_ABI_MINIMAL, getReadProvider());
+    if (!tokenReader) return { approved: false, error: `${tokenSymbol} contract reader not available.` };
 
-    const usdcReader = new ethers.Contract(USDC_TOKEN_ADDRESS, ERC20_ABI_MINIMAL, getReadProvider());
-    if (!usdcReader) return { approved: false, error: "USDC contract reader not available." };
-
-    const totalCostUSDC = selectedLottery.ticketPrice.mul(quantity);
-    const currentAllowance = await usdcReader.allowance(
+    const currentAllowance = await tokenReader.allowance(
       aaWalletContext.aaWalletAddress,
       LOTTERY_CONTRACT_ADDRESS
     );
 
-    if (currentAllowance.gte(totalCostUSDC)) {
+    if (currentAllowance.gte(requiredAmount)) {
       return { approved: true };
     }
 
     setTransaction({
       loading: true,
       error: null,
-      successMessage: "Approving USDC spending...",
+      successMessage: `Approving ${tokenSymbol} spending...`,
       hash: null,
       step: "approving",
     });
 
     try {
-      const usdcContractInterface = new ethers.utils.Interface(ERC20_ABI_MINIMAL);
+      const tokenContractInterface = new ethers.utils.Interface(ERC20_ABI_MINIMAL);
       const approveAmount = ethers.constants.MaxUint256;
-      const approveCallData = usdcContractInterface.encodeFunctionData(
+      const approveCallData = tokenContractInterface.encodeFunctionData(
         "approve",
         [LOTTERY_CONTRACT_ADDRESS, approveAmount]
       );
 
       let approveOpBuilder: UserOperationBuilder = aaWalletContext.simpleAccount.execute(
-        USDC_TOKEN_ADDRESS,
+        tokenAddress,
         BigNumber.from(0),
         approveCallData
       );
@@ -354,16 +353,16 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
         setTransaction((prev) => ({
           ...prev,
           loading: false,
-          successMessage: `USDC Approved successfully. UserOp: ${approveUserOpHash}`,
+          successMessage: `${tokenSymbol} Approved successfully. UserOp: ${approveUserOpHash}`,
           step: "idle",
         }));
         return { approved: true, approvalTxHash: approveUserOpHash };
       } else {
-        throw new Error(`Approval transaction failed. UserOpHash: ${approveUserOpHash}. Receipt: ${JSON.stringify(opReceipt)}`);
+        throw new Error(`Approval transaction failed for ${tokenSymbol}. UserOpHash: ${approveUserOpHash}. Receipt: ${JSON.stringify(opReceipt)}`);
       }
 
     } catch (err: any) {
-      const readableError = err.error?.message || err.message || "An unknown error occurred during approval.";
+      const readableError = err.error?.message || err.message || `An unknown error occurred during ${tokenSymbol} approval.`;
       setTransaction({
         loading: false,
         error: readableError,
@@ -373,6 +372,15 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
       });
       return { approved: false, error: readableError };
     }
+  };
+  
+  const checkAndApproveUSDC = async (lotteryId: number, quantity: number) => {
+    const selectedLottery = lotteries.find((l) => l.id === lotteryId);
+    if (!selectedLottery) {
+      return { approved: false, error: "Lottery details not found for approval." };
+    }
+    const totalCostUSDC = selectedLottery.ticketPrice.mul(quantity);
+    return checkAndApproveToken(USDC_TOKEN_ADDRESS, USDC_DECIMALS, totalCostUSDC, "USDC");
   };
 
   const _purchaseTicketsInternal = async (
@@ -496,6 +504,22 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
     lotteryId: number,
     quantity: number
   ): Promise<string | null> => {
+    const PLT_DECIMALS = 18;
+    const pltContract = new ethers.Contract(PACALUCK_TOKEN_ADDRESS, LOTTO_ABI, getReadProvider());
+    const pltTicketCost = await pltContract.PLT_TICKET_COST();
+    const totalCostPLT = pltTicketCost.mul(quantity);
+
+    const approveResult = await checkAndApproveToken(
+      PACALUCK_TOKEN_ADDRESS,
+      PLT_DECIMALS,
+      totalCostPLT,
+      "PLT"
+    );
+
+    if (!approveResult.approved) {
+      return null;
+    }
+
     return _purchaseTicketsInternal(lotteryId, quantity, 'PLT');
   };
 
@@ -611,7 +635,6 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
        const lotteryContractInterface = new ethers.utils.Interface(LOTTO_ABI);
        const callData = lotteryContractInterface.encodeFunctionData("dailyCheckIn");
 
-       // 修正：明確 opBuilder 的類型為 UserOperationBuilder
        let opBuilder: UserOperationBuilder = aaWalletContext.simpleAccount.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
        opBuilder = await applyPaymasterToBuilder(opBuilder);
 
@@ -621,7 +644,6 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
 
        const receipt = await response.wait();
        
-       // 修正：使用 receipt.args.success
        if (receipt && receipt.args.success) {
            setTransaction({ loading: false, error: null, successMessage: "Daily check-in successful! 10 PLT have been added to your account.", hash: response.userOpHash, step: "idle" });
            return response.userOpHash;

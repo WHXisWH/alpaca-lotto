@@ -1,4 +1,3 @@
-// src/App.tsx
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Box,
@@ -72,7 +71,6 @@ function App() {
   const [tokenBalances, setTokenBalances] = useState<Record<string, { balance: string; isLoading: boolean }>>({});
   const [isGasPanelOpen, setIsGasPanelOpen] = useState<boolean>(true);
   const [currentTab, setCurrentTab] = useState<string>("buyTickets");
-  const [isBalancesVisible, setIsBalancesVisible] = useState(false);
 
   const { open: isReferralDialogOpen, onOpen: onReferralDialogOpen, onClose: onReferralDialogClose } = useDisclosure();
   const { open: isHowToPlayDialogOpen, onOpen: onHowToPlayDialogOpen, onClose: onHowToPlayDialogClose } = useDisclosure();
@@ -300,10 +298,9 @@ function App() {
                   </HStack>
                 </Box>
                 <HStack>
-                    <Text fontSize="xs" color={secondaryTextColor} cursor="pointer" onClick={() => setIsBalancesVisible(!isBalancesVisible)}>
+                    <Text fontSize="xs" color={secondaryTextColor}>
                         Token Balances
                     </Text>
-                    <Icon as={isBalancesVisible ? MdExpandLess : MdExpandMore} color={secondaryTextColor} cursor="pointer" onClick={() => setIsBalancesVisible(!isBalancesVisible)} />
                     <UIButton
                         size="sm"
                         variant="ghost"
@@ -335,18 +332,16 @@ function App() {
                 </UIButton>
               </Flex>
 
-              {isBalancesVisible && (
-                <HStack wrap="wrap" gap={4} mt={2} p={2} bg="whiteAlpha.500" borderRadius="md">
-                    {Object.entries(tokenBalances).map(([symbol, { balance, isLoading }]) => (
-                        <Box key={symbol}>
-                            <Text fontSize="xs" color={secondaryTextColor}>{symbol}:</Text>
-                            <Text fontSize="sm" fontWeight="bold" color={primaryTextColor}>
-                                {isLoading ? <Spinner size="xs" /> : balance}
-                            </Text>
-                        </Box>
-                    ))}
-                </HStack>
-              )}
+              <HStack wrap="wrap" gap={4} mt={3} p={2} bg="whiteAlpha.500" borderRadius="md">
+                  {Object.entries(tokenBalances).map(([symbol, { balance, isLoading }]) => (
+                      <Box key={symbol}>
+                          <Text fontSize="xs" color={secondaryTextColor}>{symbol}:</Text>
+                          <Text fontSize="sm" fontWeight="bold" color={primaryTextColor}>
+                              {isLoading ? <Spinner size="xs" /> : balance}
+                          </Text>
+                      </Box>
+                  ))}
+              </HStack>
 
               <Box mt={4} borderWidth="1px" borderColor={borderColor} borderRadius="xl" overflow="hidden" bg="white">
                 <Flex

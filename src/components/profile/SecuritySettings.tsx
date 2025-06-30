@@ -1,21 +1,19 @@
 import React, { useState, useCallback } from 'react';
-import { Box, VStack, HStack, Heading, Text, Switch as ChakraSwitch, chakra, Code, Icon } from '@chakra-ui/react';
+import { Box, VStack, HStack, Heading, Text, chakra, Code, Icon } from '@chakra-ui/react';
 import { Button } from '@/components/ui/button';
 import { toaster } from '@/components/ui/toaster';
 import { useAAWallet } from '@/context/AAWalletContext';
 import { useLottery } from '@/context/LotteryContext';
-import { ethers, BigNumber } from 'ethers';
+import { ethers } from 'ethers';
 import { LOTTERY_CONTRACT_ADDRESS, SESSION_KEY_MANAGER_ADDRESS } from '@/config';
-import SessionKeyManagerABI_JSON from '@/abis/SessionKeyManager.json';
 import { Alert } from '@/components/ui/alert';
 import { FaKey, FaCopy, FaExclamationTriangle } from 'react-icons/fa';
 
-const SessionKeyManagerABI = SessionKeyManagerABI_JSON as any;
 const ChakraSelect = chakra("select");
 
 export const SecuritySettings = () => {
     const { simpleAccount, aaWalletAddress, sendUserOp, isAAWalletInitialized } = useAAWallet();
-    const { transaction, clearTransactionState } = useLottery();
+    const { clearTransactionState } = useLottery();
     const [isGamingMode, setIsGamingMode] = useState(false);
     const [sessionWallet, setSessionWallet] = useState<ethers.Wallet | null>(null);
     const [validity, setValidity] = useState(3600);
@@ -29,16 +27,16 @@ export const SecuritySettings = () => {
     const warningBg = "orange.50";
     const warningBorderColor = "orange.200";
     const warningIconColor = "orange.500";
-
-    const handleToggleGamingMode = (e: { checked: boolean }) => {
-        const isEnabled = e.checked;
-        setIsGamingMode(isEnabled);
-        if (isEnabled) {
-            const newSessionWallet = ethers.Wallet.createRandom();
-            setSessionWallet(newSessionWallet);
-        } else {
-            setSessionWallet(null);
-        }
+    
+    const handleEnableMode = () => {
+        const newSessionWallet = ethers.Wallet.createRandom();
+        setSessionWallet(newSessionWallet);
+        setIsGamingMode(true);
+    };
+    
+    const handleDisableMode = () => {
+        setSessionWallet(null);
+        setIsGamingMode(false);
     };
 
     const copyToClipboard = (text: string) => {
@@ -57,19 +55,27 @@ export const SecuritySettings = () => {
         clearTransactionState();
 
         try {
-            const sessionKeyManagerInterface = new ethers.utils.Interface(SessionKeyManagerABI);
+            // --- 核心改動在這裡 ---
+            // 直接使用函数签名数组创建Interface，避免任何ABI解析问题
+            const sessionKeyManagerInterface = new ethers.utils.Interface([
+                "function registerSessionKey(address _sessionKey, uint256 _validUntil, address[] calldata _allowedTargets, bytes4[] calldata _allowedFunctions)"
+            ]);
             
             const now = Math.floor(Date.now() / 1000);
             const validUntil = now + validity;
 
+            // sighash for purchaseTicketsWithPLT(uint256,uint256)
             const purchaseWithPLTSighash = '0x01823815';
 
-            const callData = sessionKeyManagerInterface.encodeFunctionData('registerSessionKey', [
-                sessionWallet.address,
-                validUntil,
-                [LOTTERY_CONTRACT_ADDRESS],
-                [purchaseWithPLTSighash] 
-            ]);
+            const callData = sessionKeyManagerInterface.encodeFunctionData(
+                "registerSessionKey", 
+                [
+                    sessionWallet.address,
+                    validUntil,
+                    [LOTTERY_CONTRACT_ADDRESS],
+                    [purchaseWithPLTSighash] 
+                ]
+            );
             
             const builder = simpleAccount.execute(SESSION_KEY_MANAGER_ADDRESS, 0, callData);
             
@@ -96,19 +102,17 @@ export const SecuritySettings = () => {
                 </HStack>
                 
                 <VStack p={4} bg="gray.50" borderRadius="lg" borderWidth="1px" borderColor="gray.200" align="stretch" gap={3}>
-                    <HStack justifyContent="space-between">
-                        <Box>
-                            <Text fontWeight="bold" color={primaryTextColor}>Gaming Mode</Text>
+                    {!isGamingMode ? (
+                        <>
+                            <Text fontWeight="bold" color={primaryTextColor}>Gaming Mode is Disabled</Text>
                             <Text fontSize="sm" color={secondaryTextColor}>Enable automated ticket purchases using a temporary session key.</Text>
-                        </Box>
-                        <ChakraSwitch.Root id="gaming-mode-switch" colorScheme="green" checked={isGamingMode} onCheckedChange={handleToggleGamingMode}>
-                            <ChakraSwitch.Thumb />
-                        </ChakraSwitch.Root>
-                    </HStack>
-                    {isGamingMode && (
-                         <VStack align="stretch" gap={3} p={4} bg="white" borderRadius="md" borderWidth="1px" borderColor="gray.200">
+                            <Button colorPalette="green" onClick={handleEnableMode}>Enable Gaming Mode</Button>
+                        </>
+                    ) : (
+                         <VStack align="stretch" gap={3}>
+                             <Text fontWeight="bold" color={primaryTextColor}>Gaming Mode is Active</Text>
                              <Text fontSize="sm" fontWeight="medium">Set Validity:</Text>
-                             <ChakraSelect value={validity} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setValidity(Number(e.target.value))}>
+                             <ChakraSelect bg="white" value={validity} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setValidity(Number(e.target.value))}>
                                  <option value={3600}>1 Hour</option>
                                  <option value={86400}>1 Day</option>
                                  <option value={604800}>7 Days</option>
@@ -137,8 +141,11 @@ export const SecuritySettings = () => {
                                 onClick={handleRegisterSessionKey}
                                 loading={isLoading}
                                 disabled={!sessionWallet || isLoading}
-                            >
-                                 Enable Gaming Mode
+                             >
+                                 Confirm and Register Key
+                             </Button>
+                             <Button variant="ghost" colorScheme="red" onClick={handleDisableMode} size="sm">
+                                Disable Gaming Mode
                              </Button>
                          </VStack>
                     )}
