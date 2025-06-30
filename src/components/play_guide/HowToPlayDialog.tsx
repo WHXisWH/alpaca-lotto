@@ -26,7 +26,8 @@ import {
   FaTicketAlt,
   FaTrophy,
   FaQuestionCircle,
-  FaInfoCircle, // Added for new user tip
+  FaMedal,
+  FaCog,
 } from "react-icons/fa";
 
 const Ul = chakra("ul");
@@ -49,9 +50,6 @@ export const HowToPlayDialog: React.FC<HowToPlayDialogProps> = ({
   const buttonHoverBg = "yellow.100";
   const codeBg = "orange.100";
   const codeColor = "orange.800";
-  const tipBg = "blue.50"; // Background for the new user tip
-  const tipBorderColor = "blue.200";
-  const tipTextColor = "blue.700";
 
 
   if (!isOpen) return null;
@@ -82,11 +80,11 @@ export const HowToPlayDialog: React.FC<HowToPlayDialogProps> = ({
     iconColor?: string;
     num?: number;
   }> = ({ children, icon, iconColor, num }) => (
-    <Li display="flex" alignItems="flex-start" gap={2} py={1} listStyleType={num ? "none" : "disc"} pl={num ? 0 : 4}>
+    <Li display="flex" alignItems="flex-start" gap={2} py={1} listStyleType={"none"}>
       {num ? (
-        <Text fontWeight="bold" color={accentColor}>{num}.</Text>
+        <Text fontWeight="bold" color={accentColor} w="18px">{num}.</Text>
       ) : icon ? (
-        <Icon as={icon} color={iconColor || accentColor} mt="0.2em" boxSize={4} />
+        <Icon as={icon} color={iconColor || accentColor} mt="0.2em" boxSize={4} w="18px" />
       ) : null}
       <Box flex="1">{children}</Box>
     </Li>
@@ -140,9 +138,6 @@ export const HowToPlayDialog: React.FC<HowToPlayDialogProps> = ({
                   <Paragraph>
                     Alpaca Lotto is a fun, fair, and easy-to-use blockchain lottery platform on the NERO Chain. We use Account Abstraction (AA) technology for a smooth experience, just like your favorite Web2 apps!
                   </Paragraph>
-                  <Paragraph mt={1} fontSize="sm">
-                    Key Features: Social Login, Smart Wallets, Simplified Gas Fees (USDC for tickets).
-                  </Paragraph>
                 </Box>
 
                 <Box>
@@ -161,62 +156,27 @@ export const HowToPlayDialog: React.FC<HowToPlayDialogProps> = ({
                       </Box>
                     </CustomLi>
                   </Ul>
-                  <Paragraph mt={2}>
-                    After login, your{" "}
-                    <Code bg={codeBg} color={codeColor} px={1} borderRadius="md" fontSize="xs">
-                      Smart Account
-                    </Code>{" "}
-                    address and USDC balance appear at the top.
-                  </Paragraph>
                 </Box>
 
                 <Box>
                   <SectionHeading>2. Buying Tickets</SectionHeading>
                   <Ul m={0}>
                     <CustomLi num={1}>
-                      <Text><Text as="span" fontWeight="bold">Select Lottery: </Text>Browse lotteries in the "Buy Tickets" tab.</Text>
+                      <Text><Text as="span" fontWeight="bold">Choose Payment Method:</Text> On the ticket card, use the selector buttons to pay with either <Code bg={codeBg} color={codeColor} px={1} borderRadius="md" fontSize="xs">USDC</Code> or our special <Code bg={codeBg} color={codeColor} px={1} borderRadius="md" fontSize="xs">PLT</Code> token.</Text>
                     </CustomLi>
                     <CustomLi num={2}>
-                      <Text><Text as="span" fontWeight="bold">Choose Quantity: </Text>Select ticket amount.</Text>
+                      <Text><Text as="span" fontWeight="bold">Select Quantity:</Text> Choose how many tickets you want to buy.</Text>
                     </CustomLi>
                     <CustomLi num={3}>
-                      <Text><Text as="span" fontWeight="bold">Referral (Optional): </Text>Use the "Referral" button.</Text>
+                       <Box>
+                         <Text fontWeight="bold">One-Time Approval:</Text>
+                         <Paragraph fontSize="sm" mt={1}>
+                           For security, your first purchase with any token requires a one-time "Approve" transaction. This is a standard Web3 step that gives the lottery contract permission to accept your tokens.
+                         </Paragraph>
+                       </Box>
                     </CustomLi>
                     <CustomLi num={4}>
-                      <Text><Text as="span" fontWeight="bold">Check Costs: </Text>Review USDC cost and Gas.</Text>
-                    </CustomLi>
-                    <CustomLi num={5}>
-                      <Box>
-                        <Text fontWeight="bold">First-Time Purchase Prep:</Text>
-                        <Ul mt={1} pl={5} gap={1}>
-                          <Li listStyleType="disc">
-                            <Code bg={codeBg} color={codeColor} px={1} borderRadius="md" fontSize="xs">
-                              Approve USDC
-                            </Code>{" "}
-                             one-time allowance for spending.
-                          </Li>
-                          <Li listStyleType="disc">Ensure sufficient USDC balance for tickets and Gas.</Li>
-                        </Ul>
-                        <Box
-                          mt={2}
-                          p={3}
-                          bg={tipBg}
-                          borderWidth="1px"
-                          borderColor={tipBorderColor}
-                          borderRadius="md"
-                          display="flex"
-                          alignItems="flex-start"
-                          gap={2}
-                        >
-                          <Icon as={FaInfoCircle} color={tipTextColor} mt="0.15em" boxSize={4} flexShrink={0}/>
-                          <Text fontSize="xs" color={tipTextColor} lineHeight="short">
-                            <Text as="span" fontWeight="bold">First-time AA Wallet Users:</Text> You'll need some USDC in your Smart Account for ticket purchases. If your balance is zero, please add funds (e.g., via the 'Fund Your Account' option if you used social login, or by transferring USDC to your Smart Account address). After funding, refresh the page. For the initial USDC approval, ensure the 'Gas Payment Option' is set to 'Sponsored Gas (Free)'. Once approved, you can select your preferred gas payment method for actual ticket purchases.
-                          </Text>
-                        </Box>
-                      </Box>
-                    </CustomLi>
-                    <CustomLi num={6}>
-                      <Text><Text as="span" fontWeight="bold">Purchase: </Text>Click "Purchase Tickets" and confirm.</Text>
+                      <Text><Text as="span" fontWeight="bold">Purchase:</Text> Click the final purchase button and confirm the transaction in your wallet.</Text>
                     </CustomLi>
                   </Ul>
                 </Box>
@@ -224,33 +184,42 @@ export const HowToPlayDialog: React.FC<HowToPlayDialogProps> = ({
                 <Box>
                   <SectionHeading>3. Checking Tickets & Claiming Prizes</SectionHeading>
                   <Ul m={0}>
-                    <CustomLi num={1} icon={FaTicketAlt}>
-                      <Text><Text as="span" fontWeight="bold">View Tickets: </Text>See "Awaiting Draw" and "Past Lotteries".</Text>
+                    <CustomLi icon={FaTicketAlt}>
+                      <Text><Text as="span" fontWeight="bold">View Your Tickets:</Text> Go to the "My Tickets" tab to see your tickets for upcoming and past lotteries.</Text>
                     </CustomLi>
-                    <CustomLi num={2}>
-                      <Text><Text as="span" fontWeight="bold">Await Draw: </Text>Wait for draw time.</Text>
+                    <CustomLi icon={FaTrophy} iconColor="orange.400">
+                      <Text><Text as="span" fontWeight="bold">Claim Your Prize:</Text> If you win, a "Claim Prize" button will appear on the winning ticket group. Click it to receive your winnings!</Text>
                     </CustomLi>
-                    <CustomLi num={3} icon={FaTrophy}>
-                      <Text><Text as="span" fontWeight="bold">Claim Prize: </Text>Click "Claim Prize" if you win.</Text>
+                  </Ul>
+                </Box>
+                
+                <Box>
+                  <SectionHeading>4. PacaLuck Token (PLT)</SectionHeading>
+                  <Ul m={0}>
+                    <CustomLi>
+                        <Text><Text as="span" fontWeight="bold">How to Earn:</Text> Earn PLT from the <Text as="span" fontWeight="bold">Daily Check-in</Text> in the "Hall of Fame" tab, by referring friends, and reaching purchase milestones.</Text>
+                    </CustomLi>
+                     <CustomLi>
+                        <Text><Text as="span" fontWeight="bold">How to Use:</Text> Use your PLT tokens directly to <Text as="span" fontWeight="bold">purchase lottery tickets</Text> or hold them for future perks!</Text>
                     </CustomLi>
                   </Ul>
                 </Box>
 
                 <Box>
-                  <SectionHeading mb={2}>4. PacaLuck Token (PLT)</SectionHeading>
-                  <Paragraph>Earn PLT via referrals and milestones; future use for Gas and events.</Paragraph>
+                  <SectionHeading>5. Hall of Fame & Settings</SectionHeading>
+                   <Ul m={0}>
+                    <CustomLi icon={FaMedal} iconColor="gold">
+                        <Text><Text as="span" fontWeight="bold">My Badge Wall:</Text> View all the cool achievement badges you've unlocked on your journey.</Text>
+                    </CustomLi>
+                    <CustomLi icon={FaTrophy} iconColor="silver">
+                        <Text><Text as="span" fontWeight="bold">Leaderboards:</Text> Check out the top players, including the "Referral Masters" leaderboard.</Text>
+                    </CustomLi>
+                     <CustomLi icon={FaCog} iconColor="gray.500">
+                        <Text><Text as="span" fontWeight="bold">Account Settings:</Text> Configure advanced Account Abstraction features like "Gaming Mode" for automated purchasing.</Text>
+                    </CustomLi>
+                  </Ul>
                 </Box>
 
-                <Box>
-                  <SectionHeading mb={2}>Questions?</SectionHeading>
-                  <Paragraph>
-                    Join our community on{" "}
-                    <Link href="https://x.com/AlpacaLotto" color="blue.500" target="_blank" rel="noopener noreferrer">
-                      Twitter
-                    </Link>
-                    .
-                  </Paragraph>
-                </Box>
               </VStack>
             </DialogBody>
             <DialogFooter borderTopWidth="1px" borderColor={borderColor}>

@@ -255,7 +255,7 @@ export const ConnectWallet: React.FC = () => {
     >
       {!loginMethod ? (
         <VStack gap={6}>
-          <Image src="/images/alpaca-welcoming.png" alt="A row of alpacas" width="100%" maxW="1000px" height="120px" objectFit="contain" mx="auto" mb={2} />
+          <Image src="/images/alpaca-welcoming.png" alt="Alpaca Logo" w="280px" h="auto" objectFit="contain" mx="auto" mb={4} />
           <Heading as="h2" size={{base:"lg", md:"xl"}} textAlign="center" color={headingColor}>
             Join Alpaca Lotto
           </Heading>

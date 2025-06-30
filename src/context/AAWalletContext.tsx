@@ -59,6 +59,7 @@ interface AAWalletContextType {
   ) => Promise<ISendUserOperationResponse>;
   clearError: () => void;
   disconnectSocialLogin: () => Promise<void>;
+  clearAAState: () => void;
 }
 
 const AAWalletContext = createContext<AAWalletContextType | undefined>(
@@ -72,7 +73,7 @@ export function AAWalletProvider({ children }: { children: ReactNode }) {
   const [simpleAccount, setSimpleAccount] = useState<SimpleAccount | undefined>(undefined);
   const [client, setClient] = useState<Client | undefined>(undefined);
   const [provider, setProvider] = useState<ethers.providers.Provider>(new ethers.providers.JsonRpcProvider(RPC_URL));
-  const [loading, setLoading] = useState<boolean>(true); // Start with loading true
+  const [loading, setLoading] = useState<boolean>(true);
   const [isAAWalletInitialized, setIsAAWalletInitialized] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isSocialLoggedIn, setIsSocialLoggedIn] = useState<boolean>(false);
@@ -259,6 +260,7 @@ export function AAWalletProvider({ children }: { children: ReactNode }) {
         loading, isAAWalletInitialized, error, isSocialLoggedIn, web3authProvider,
         web3authInstance: web3Auth, initializeAAWallet, initializeAAWalletFromSocial,
         buildUserOp, sendUserOp, clearError, disconnectSocialLogin,
+        clearAAState: resetState,
       }}
     >
       {children}

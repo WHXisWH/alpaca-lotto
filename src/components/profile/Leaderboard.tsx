@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Heading, VStack, HStack, Text, Icon, Image, Spinner } from '@chakra-ui/react';
+import { Box, Heading, VStack, HStack, Text, Icon, Spinner } from '@chakra-ui/react'; // 1. 從 import 中移除 Image
 import { FaTrophy, FaUserFriends, FaMedal } from 'react-icons/fa';
 
 interface ReferralData {
@@ -8,10 +8,11 @@ interface ReferralData {
   referral_count: string;
 }
 
+
 const MOCK_WINNINGS_DATA = [
-  { rank: 1, address: '0xabc...123', amount: '1,500 USDC', avatar: '/images/alpaca-avatar-4.png' },
-  { rank: 2, address: '0xdef...456', amount: '980 USDC', avatar: '/images/alpaca-avatar-5.png' },
-  { rank: 3, address: '0xghi...789', amount: '750 USDC', avatar: '/images/alpaca-avatar-6.png' },
+  { rank: 1, address: '0xabc...123', amount: '1,500 USDC' },
+  { rank: 2, address: '0xdef...456', amount: '980 USDC' },
+  { rank: 3, address: '0xghi...789', amount: '750 USDC' },
 ];
 
 const getRankColor = (rank: number) => {
@@ -84,7 +85,6 @@ export const Leaderboard = () => {
                       <HStack key={user.rank} justifyContent="space-between" p={2} borderRadius="md" _hover={{bg: "yellow.50"}}>
                           <HStack>
                               <Icon as={FaMedal} color={getRankColor(user.rank)} />
-                              <Image src={`/images/alpaca-avatar-${user.rank}.png`} boxSize="24px" borderRadius="full" alt="User Avatar" />
                               <Text color={secondaryTextColor}>{`${user.referrer_address.substring(0, 6)}...${user.referrer_address.substring(user.referrer_address.length - 4)}`}</Text>
                           </HStack>
                           <Text fontWeight="bold" color={textColor}>{user.referral_count} referrals</Text>
@@ -103,7 +103,6 @@ export const Leaderboard = () => {
                      <HStack key={user.rank} justifyContent="space-between" p={2} borderRadius="md" _hover={{bg: "yellow.50"}}>
                         <HStack>
                             <Icon as={FaMedal} color={getRankColor(user.rank)} />
-                            <Image src={user.avatar} boxSize="24px" borderRadius="full" alt="User Avatar" />
                             <Text color={secondaryTextColor}>{user.address}</Text>
                         </HStack>
                         <Text fontWeight="bold" color={textColor}>{user.amount}</Text>

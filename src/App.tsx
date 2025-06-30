@@ -58,6 +58,7 @@ function App() {
     clearError: clearAAError,
     isSocialLoggedIn,
     disconnectSocialLogin,
+    clearAAState,
   } = useAAWallet();
 
   const {
@@ -160,8 +161,13 @@ function App() {
     if (isSocialLoggedIn) {
       await disconnectSocialLogin();
     }
+
     if (isConnected) {
       wagmiDisconnect();
+    }
+
+    if (!isSocialLoggedIn) {
+      clearAAState();
     }
   };
 
