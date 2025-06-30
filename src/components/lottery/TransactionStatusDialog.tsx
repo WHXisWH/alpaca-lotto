@@ -22,12 +22,13 @@ import { Button } from '@/components/ui/button';
 import { CloseButton as UICloseButton } from '@/components/ui/close-button';
 import { FaCheckCircle, FaTimesCircle, FaHourglassHalf } from 'react-icons/fa';
 
+// This interface now includes 'dailyCheckIn' to match the updated state in LotteryContext
 interface TransactionState {
   loading: boolean;
   error: string | null;
   successMessage: string | null;
   hash: string | null;
-  step: "idle" | "approving" | "purchasing" | "claiming" | "fetchingReceipt";
+  step: "idle" | "approving" | "purchasing" | "claiming" | "fetchingReceipt" | "dailyCheckIn";
 }
 
 interface TransactionStatusDialogProps {
@@ -77,6 +78,7 @@ export const TransactionStatusDialog: React.FC<TransactionStatusDialogProps> = (
       if (step === 'approving') statusText = 'Requesting token approval...';
       if (step === 'purchasing') statusText = 'Purchasing your tickets...';
       if (step === 'claiming') statusText = 'Claiming your prize...';
+      if (step === 'dailyCheckIn') statusText = 'Processing daily check-in...';
       if (step === 'fetchingReceipt') statusText = 'Confirming transaction on-chain...';
 
       return (

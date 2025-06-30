@@ -1,28 +1,36 @@
+// contract/AlpacaLotto.sol
+
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+
+interface IPacaLuckToken is IERC20 {
+    function mint(address to, uint256 amount) external;
+}
 
 contract AlpacaLotto is Ownable, ReentrancyGuard {
+    using ECDSA for bytes32;
 
     uint256 public lotteryCounter;
     address public priceOracle;
-    IERC20 public pacaLuckToken; // PLT合約地址
+    IPacaLuckToken public pacaLuckToken;
 
-    // PLT 購票價格 (例如: 100 PLT 一張票)
-    uint256 public constant PLT_TICKET_COST = 100 * (10**18);
+    uint256 public constant PLT_TICKET_COST = 100 * 10**18;
+    uint256 public constant PLT_DAILY_REWARD = 10 * 10**18;
 
     constructor(address _initialOwner, address _priceOracle, address _pacaLuckTokenAddress) Ownable(_initialOwner) {
         priceOracle = _priceOracle;
-        pacaLuckToken = IERC20(_pacaLuckTokenAddress);
+        pacaLuckToken = IPacaLuckToken(_pacaLuckTokenAddress);
     }
 
     struct Lottery {
         uint256 id;
         string name;
-        uint256 ticketPrice; // USDC price
+        uint256 ticketPrice;
         uint256 startTime;
         uint256 endTime;
         uint256 drawTime;
@@ -53,8 +61,11 @@ contract AlpacaLotto is Ownable, ReentrancyGuard {
     mapping(uint256 => mapping(uint256 => UserTicket)) public tickets;
     mapping(address => SessionKey) public sessionKeys;
     mapping(address => mapping(uint256 => uint256[])) public userTickets;
+
     mapping(address => bool) public hasMadeFirstPurchase;
     mapping(address => uint256) public cumulativeTicketsPurchased;
+    mapping(address => uint256) public lastCheckIn;
+
 
     event LotteryCreated(uint256 indexed lotteryId, string name, uint256 ticketPrice);
     event TicketPurchased(uint256 indexed lotteryId, address indexed user, uint256 ticketNumber, address paymentToken);
@@ -63,6 +74,8 @@ contract AlpacaLotto is Ownable, ReentrancyGuard {
     event SessionKeyRevoked(address indexed user, address indexed key);
     event ReferralRecorded(address indexed referrer, address indexed referee);
     event MilestoneAchieved(address indexed user, uint256 ticketsPurchased);
+    event DailyCheckIn(address indexed user, uint256 amount);
+
 
     modifier onlyActiveLottery(uint256 _lotteryId) {
         require(lotteries[_lotteryId].id != 0, "Lottery does not exist");
@@ -98,7 +111,6 @@ contract AlpacaLotto is Ownable, ReentrancyGuard {
         require(_ticketPrice >= 10**14, "Ticket price too low. Min 0.0001 tokens with 18 decimals.");
 
         lotteryCounter++;
-
         Lottery storage lottery = lotteries[lotteryCounter];
         lottery.id = lotteryCounter;
         lottery.name = _name;
@@ -115,6 +127,7 @@ contract AlpacaLotto is Ownable, ReentrancyGuard {
         require(lotteries[lotteryId].id != 0, "Lottery does not exist");
         require(token != address(0), "Invalid token address");
         Lottery storage lottery = lotteries[lotteryId];
+        
         for (uint256 i = 0; i < lottery.supportedTokens.length; i++) {
             if (lottery.supportedTokens[i] == token) {
                 revert("Token already supported");
@@ -123,106 +136,66 @@ contract AlpacaLotto is Ownable, ReentrancyGuard {
         lottery.supportedTokens.push(token);
     }
 
-    function purchaseTickets(
-        uint256 _lotteryId,
-        address _tokenAddress,
-        uint256 _quantity
-    ) external onlyActiveLottery(_lotteryId) nonReentrant {
+    function purchaseTickets(uint256 _lotteryId, address _tokenAddress, uint256 _quantity) external onlyActiveLottery(_lotteryId) nonReentrant {
         _purchaseTicketsFor(msg.sender, _lotteryId, _tokenAddress, _quantity, address(0));
     }
-
-    function purchaseTicketsWithReferral(
-        uint256 _lotteryId,
-        address _tokenAddress,
-        uint256 _quantity,
-        address _referrer
-    ) external onlyActiveLottery(_lotteryId) nonReentrant {
+    
+    function purchaseTicketsWithReferral(uint256 _lotteryId, address _tokenAddress, uint256 _quantity, address _referrer) external onlyActiveLottery(_lotteryId) nonReentrant {
         _purchaseTicketsFor(msg.sender, _lotteryId, _tokenAddress, _quantity, _referrer);
     }
     
-    function purchaseTicketsWithPLT(
-        uint256 _lotteryId,
-        uint256 _quantity
-    ) external onlyActiveLottery(_lotteryId) nonReentrant {
+    function purchaseTicketsWithPLT(uint256 _lotteryId, uint256 _quantity) external onlyActiveLottery(_lotteryId) nonReentrant {
         require(_quantity > 0, "Must purchase at least one ticket");
-
-        uint256 totalPltCost = PLT_TICKET_COST * _quantity;
+        uint256 totalPLTCost = PLT_TICKET_COST * _quantity;
         
-        pacaLuckToken.transferFrom(msg.sender, address(this), totalPltCost);
+        pacaLuckToken.transferFrom(msg.sender, address(this), totalPLTCost);
 
-        _mintTickets(_lotteryId, msg.sender, _quantity, address(pacaLuckToken), PLT_TICKET_COST);
+        _mintTickets(msg.sender, _lotteryId, address(pacaLuckToken), _quantity, PLT_TICKET_COST);
     }
 
-    function purchaseTicketsFor(
-        address _user,
-        uint256 _lotteryId,
-        address _tokenAddress,
-        uint256 _quantity
-    ) external onlyActiveLottery(_lotteryId) onlyValidSessionKey(_user) nonReentrant {
-        _purchaseTicketsFor(_user, _lotteryId, _tokenAddress, _quantity, address(0));
-    }
+    function dailyCheckIn() external nonReentrant {
+        require(block.timestamp >= lastCheckIn[msg.sender] + 24 hours, "Daily check-in: Wait 24 hours");
+        lastCheckIn[msg.sender] = block.timestamp;
 
-    function purchaseTicketsForWithReferral(
-        address _user,
-        uint256 _lotteryId,
-        address _tokenAddress,
-        uint256 _quantity,
-        address _referrer
-    ) external onlyActiveLottery(_lotteryId) onlyValidSessionKey(_user) nonReentrant {
-        _purchaseTicketsFor(_user, _lotteryId, _tokenAddress, _quantity, _referrer);
-    }
+        pacaLuckToken.mint(msg.sender, PLT_DAILY_REWARD);
 
-    function batchPurchaseTickets(
-        uint256[] calldata _lotteryIds,
-        address[] calldata _tokenAddresses,
-        uint256[] calldata _quantities
-    ) external nonReentrant {
-        require(
-            _lotteryIds.length == _tokenAddresses.length &&
-            _lotteryIds.length == _quantities.length,
-            "Array lengths must match"
-        );
-
-        for (uint256 i = 0; i < _lotteryIds.length; i++) {
-            require(
-                lotteries[_lotteryIds[i]].id != 0,
-                "Lottery does not exist"
-            );
-            require(
-                lotteries[_lotteryIds[i]].startTime <= block.timestamp &&
-                lotteries[_lotteryIds[i]].endTime > block.timestamp,
-                "Lottery is not active"
-            );
-            _purchaseTicketsFor(msg.sender, _lotteryIds[i], _tokenAddresses[i], _quantities[i], address(0));
-        }
-    }
-
-    function createSessionKey(
-        address _sessionKey,
-        uint256 _validUntil,
-        bytes32 _operationsHash
-    ) external {
-        require(_sessionKey != address(0), "Invalid session key address");
-        require(_validUntil > block.timestamp, "Expiration must be in the future");
-
-        sessionKeys[_sessionKey] = SessionKey({
-            user: msg.sender,
-            key: _sessionKey,
-            validUntil: _validUntil,
-            operationsHash: _operationsHash
-        });
-
-        emit SessionKeyCreated(msg.sender, _sessionKey, _validUntil);
-    }
-
-    function revokeSessionKey(address _sessionKey) external {
-        require(sessionKeys[_sessionKey].user == msg.sender, "Not your session key");
-        delete sessionKeys[_sessionKey];
-        emit SessionKeyRevoked(msg.sender, _sessionKey);
+        emit DailyCheckIn(msg.sender, PLT_DAILY_REWARD);
     }
 
     function drawLottery(uint256 _lotteryId, uint256 _randomSeed) external onlyOwner nonReentrant {
-        _drawLottery(_lotteryId, _randomSeed);
+        Lottery storage lottery = lotteries[_lotteryId];
+        require(lottery.id != 0, "Lottery does not exist");
+        require(block.timestamp >= lottery.drawTime, "Too early to draw");
+        require(!lottery.drawn, "Lottery already drawn");
+        require(lottery.totalTickets > 0, "No tickets sold");
+
+        uint256 numberOfWinners = lottery.prizePool > 0 ?
+            (lottery.prizePool / (lottery.ticketPrice * 2)) : 1; 
+        numberOfWinners = numberOfWinners > 0 ? numberOfWinners : 1;
+        numberOfWinners = numberOfWinners > lottery.totalTickets ? lottery.totalTickets : numberOfWinners;
+
+        address[] memory winners = new address[](numberOfWinners);
+        uint256[] memory winningTickets = new uint256[](numberOfWinners);
+        uint256 ticketRange = lottery.totalTickets;
+        
+        bool[] memory alreadyWinningTicketFlags = new bool[](ticketRange + 1);
+
+        for (uint256 i = 0; i < numberOfWinners; ) {
+            uint256 randomTicketNumber = uint256(keccak256(abi.encode(_randomSeed, i, block.timestamp))) % ticketRange + 1;
+            if (!alreadyWinningTicketFlags[randomTicketNumber] && tickets[_lotteryId][randomTicketNumber].user != address(0)) {
+                UserTicket storage ticket = tickets[_lotteryId][randomTicketNumber];
+                winners[i] = ticket.user;
+                winningTickets[i] = randomTicketNumber;
+                alreadyWinningTicketFlags[randomTicketNumber] = true;
+                i++;
+            }
+        }
+
+        lottery.winners = winners;
+        lottery.winningTickets = winningTickets;
+        lottery.drawn = true;
+
+        emit LotteryDrawn(_lotteryId, winners);
     }
 
     function claimPrize(uint256 _lotteryId) external nonReentrant {
@@ -231,13 +204,13 @@ contract AlpacaLotto is Ownable, ReentrancyGuard {
         require(lottery.drawn, "Lottery not drawn yet");
 
         bool _isWinner = false;
-        uint256 winningTicketIndex = 0;
+        uint256 winningTicketIndex = 0; 
         address prizeTokenAddress = address(0);
 
         for (uint256 i = 0; i < lottery.winners.length; i++) {
             if (lottery.winners[i] == msg.sender) {
                 _isWinner = true;
-                winningTicketIndex = i;
+                winningTicketIndex = i; 
                 prizeTokenAddress = tickets[_lotteryId][lottery.winningTickets[i]].paymentToken;
                 break;
             }
@@ -250,29 +223,6 @@ contract AlpacaLotto is Ownable, ReentrancyGuard {
 
         IERC20 token = IERC20(prizeTokenAddress);
         require(token.transfer(msg.sender, prizeAmountPerWinner), "Prize transfer failed");
-    }
-
-    function checkUpkeep(bytes calldata /* checkData */) external view returns (bool upkeepNeeded, bytes memory performData) {
-        for (uint256 i = 1; i <= lotteryCounter; i++) {
-            Lottery storage lottery = lotteries[i];
-            if (!lottery.drawn && block.timestamp >= lottery.drawTime) {
-                upkeepNeeded = true;
-                performData = abi.encode(lottery.id);
-                return (upkeepNeeded, performData);
-            }
-        }
-        return (false, "");
-    }
-
-    function performUpkeep(bytes calldata performData) external nonReentrant {
-        uint256 lotteryId = abi.decode(performData, (uint256));
-        Lottery storage lottery = lotteries[lotteryId];
-        require(!lottery.drawn, "Lottery already drawn");
-        require(block.timestamp >= lottery.drawTime, "Too early to draw");
-        
-        uint256 randomSeed = uint256(keccak256(abi.encodePacked(block.prevrandao, block.timestamp, msg.sender)));
-
-        _drawLottery(lotteryId, randomSeed);
     }
 
     function _purchaseTicketsFor(
@@ -300,29 +250,19 @@ contract AlpacaLotto is Ownable, ReentrancyGuard {
 
         lottery.prizePool += tokenAmount;
         
+        _mintTickets(_user, _lotteryId, _tokenAddress, _quantity, lottery.ticketPrice);
+
         if (!hasMadeFirstPurchase[_user] && _referrer != address(0) && _referrer != _user) {
             emit ReferralRecorded(_referrer, _user);
         }
-        
-        _mintTickets(_lotteryId, _user, _quantity, _tokenAddress, lottery.ticketPrice);
+        hasMadeFirstPurchase[_user] = true;
     }
 
-    function _mintTickets(
-        uint256 _lotteryId, 
-        address _user, 
-        uint256 _quantity, 
-        address _paymentToken, 
-        uint256 _amountPaidPerTicket
-    ) internal {
+    function _mintTickets(address _user, uint256 _lotteryId, address _paymentToken, uint256 _quantity, uint256 _pricePerTicket) internal {
         Lottery storage lottery = lotteries[_lotteryId];
-        
-        if (!hasMadeFirstPurchase[_user]) {
-           hasMadeFirstPurchase[_user] = true;
-        }
-
         uint256 previousTicketsCount = cumulativeTicketsPurchased[_user];
         cumulativeTicketsPurchased[_user] += _quantity;
-        
+
         if ((previousTicketsCount < 10 && cumulativeTicketsPurchased[_user] >= 10) ||
             (previousTicketsCount < 50 && cumulativeTicketsPurchased[_user] >= 50) ||
             (previousTicketsCount < 100 && cumulativeTicketsPurchased[_user] >= 100)) {
@@ -338,47 +278,12 @@ contract AlpacaLotto is Ownable, ReentrancyGuard {
                 ticketNumber: ticketNumber,
                 user: _user,
                 paymentToken: _paymentToken,
-                amountPaid: _amountPaidPerTicket
+                amountPaid: _pricePerTicket
             });
             userTickets[_user][_lotteryId].push(ticketNumber);
             emit TicketPurchased(_lotteryId, _user, ticketNumber, _paymentToken);
         }
     }
-
-    function _drawLottery(uint256 _lotteryId, uint256 _randomSeed) internal {
-        Lottery storage lottery = lotteries[_lotteryId];
-        require(lottery.id != 0, "Lottery does not exist");
-        require(!lottery.drawn, "Lottery already drawn");
-        require(lottery.totalTickets > 0, "No tickets sold");
-
-        uint256 numberOfWinners = lottery.prizePool > 0 ?
-            (lottery.prizePool / (lottery.ticketPrice * 2)) : 1;
-        numberOfWinners = numberOfWinners > 0 ? numberOfWinners : 1;
-        numberOfWinners = numberOfWinners > lottery.totalTickets ? lottery.totalTickets : numberOfWinners;
-
-        address[] memory winners = new address[](numberOfWinners);
-        uint256[] memory winningTickets = new uint256[](numberOfWinners);
-        uint256 ticketRange = lottery.totalTickets;
-        bool[] memory alreadyWinningTicketFlags = new bool[](ticketRange + 1);
-
-        for (uint256 i = 0; i < numberOfWinners; ) {
-            uint256 randomTicketNumber = uint256(keccak256(abi.encode(_randomSeed, i, block.timestamp))) % ticketRange + 1;
-            if (!alreadyWinningTicketFlags[randomTicketNumber] && tickets[_lotteryId][randomTicketNumber].user != address(0)) {
-                UserTicket storage ticket = tickets[_lotteryId][randomTicketNumber];
-                winners[i] = ticket.user;
-                winningTickets[i] = randomTicketNumber;
-                alreadyWinningTicketFlags[randomTicketNumber] = true;
-                i++;
-            }
-        }
-
-        lottery.winners = winners;
-        lottery.winningTickets = winningTickets;
-        lottery.drawn = true;
-
-        emit LotteryDrawn(_lotteryId, winners);
-    }
-
 
     function getLottery(uint256 _lotteryId) external view returns (Lottery memory) {
         require(lotteries[_lotteryId].id != 0, "Lottery does not exist");
@@ -394,12 +299,33 @@ contract AlpacaLotto is Ownable, ReentrancyGuard {
         Lottery storage lottery = lotteries[_lotteryId];
         require(lottery.id != 0, "Lottery does not exist");
         if (!lottery.drawn) return false;
-        
         for (uint256 i = 0; i < lottery.winners.length; i++) {
             if (lottery.winners[i] == _user) {
                 return true;
             }
         }
         return false;
+    }
+
+    function checkUpkeep(bytes calldata /* checkData */) external view returns (bool upkeepNeeded, bytes memory performData) {
+        uint256 count = lotteryCounter;
+        for (uint256 i = 1; i <= count; i++) {
+            Lottery storage lottery = lotteries[i];
+            if (!lottery.drawn && block.timestamp >= lottery.drawTime && lottery.totalTickets > 0) {
+                upkeepNeeded = true;
+                performData = abi.encode(i);
+                return (upkeepNeeded, performData);
+            }
+        }
+        return (false, "");
+    }
+
+    function performUpkeep(bytes calldata performData) external nonReentrant {
+        (bool upkeepNeeded, ) = this.checkUpkeep("");
+        require(upkeepNeeded, "Upkeep not needed");
+
+        uint256 lotteryId = abi.decode(performData, (uint256));
+        uint256 randomSeed = uint256(keccak256(abi.encodePacked(block.timestamp, block.prevrandao)));
+        this.drawLottery(lotteryId, randomSeed);
     }
 }

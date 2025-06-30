@@ -1,3 +1,4 @@
+// src/App.tsx
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Box,
@@ -31,10 +32,11 @@ import { Web2UserDashboardMockup } from "./components/web2_user/Web2UserDashboar
 import { ReferralDialog } from "./components/referral/ReferralDialog";
 import { HowToPlayDialog } from "./components/play_guide/HowToPlayDialog";
 import { TransactionStatusDialog } from "./components/lottery/TransactionStatusDialog";
+import { ProfilePage } from './components/profile';
 import { useAAWallet } from "./context/AAWalletContext";
 import { usePaymaster, SupportedToken } from "./context/PaymasterContext";
 import { useLottery } from "./context/LotteryContext";
-import { MdWarning, MdCopyAll, MdRefresh, MdExpandMore, MdExpandLess } from "react-icons/md";
+import { MdWarning, MdCopyAll, MdRefresh, MdExpandMore, MdExpandLess, MdLeaderboard } from "react-icons/md";
 import { ethers, BigNumber } from "ethers";
 import { RPC_URL, TOKEN_LIST } from "./config";
 import { toaster } from "@/components/ui/toaster";
@@ -121,14 +123,13 @@ function App() {
     tokensToFetch.forEach(fetchTokenBalance);
   }, [fetchTokenBalance, supportedTokens]);
 
-
   useEffect(() => {
     if (isAAWalletInitialized) {
       fetchAllBalances();
     } else {
       setTokenBalances({});
     }
-  }, [isAAWalletInitialized, fetchAllBalances]);
+  }, [isAAWalletInitialized, fetchAllBalances, transaction.successMessage]);
 
   useEffect(() => {
     if (lotteries.length > 0 && contextSetSelectedLottery) {
@@ -407,7 +408,6 @@ function App() {
                         fontWeight="semibold"
                         color={currentTab === "myTickets" ? accentColor : secondaryTextColor}
                         bg={currentTab === "myTickets" ? selectedTabBg : defaultTabBg}
-                        borderTopRightRadius="xl"
                         borderBottomWidth={"2px"}
                         borderBottomColor={currentTab === "myTickets" ? accentColor : "transparent"}
                         _hover={{bg: "yellow.100", color: primaryTextColor}}
@@ -415,13 +415,31 @@ function App() {
                     >
                         My Tickets
                     </Tabs.Trigger>
+                    <Tabs.Trigger
+                        value="hallOfFame"
+                        flex={1}
+                        py={3}
+                        fontSize="md"
+                        fontWeight="semibold"
+                        color={currentTab === "hallOfFame" ? accentColor : secondaryTextColor}
+                        bg={currentTab === "hallOfFame" ? selectedTabBg : defaultTabBg}
+                        borderTopRightRadius="xl"
+                        borderBottomWidth={"2px"}
+                        borderBottomColor={currentTab === "hallOfFame" ? accentColor : "transparent"}
+                        _hover={{bg: "yellow.100", color: primaryTextColor}}
+                        transition="all 0.2s ease-in-out"
+                        gap={2}
+                    >
+                        <Icon as={MdLeaderboard}/>
+                        Hall of Fame
+                    </Tabs.Trigger>
                 </Tabs.List>
 
                 <Box
                     borderWidth="0px 1px 1px 1px"
                     borderColor={borderColor}
                     borderBottomRadius="xl"
-                    bg={currentTab === "buyTickets" ? selectedTabBg : defaultTabBg}
+                    bg={currentTab !== "buyTickets" ? defaultTabBg : selectedTabBg}
                     shadow="sm"
                 >
                     <Tabs.Content value="buyTickets" p={{base:4, md:6}}>
@@ -433,6 +451,9 @@ function App() {
                     </Tabs.Content>
                     <Tabs.Content value="myTickets" p={{base:4, md:6}}>
                         <OwnedTickets />
+                    </Tabs.Content>
+                    <Tabs.Content value="hallOfFame" p={{base:4, md:6}}>
+                        <ProfilePage />
                     </Tabs.Content>
                 </Box>
             </Tabs.Root>

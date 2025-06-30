@@ -1,3 +1,5 @@
+// src/components/lottery/OwnedTickets.tsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
@@ -17,7 +19,7 @@ import { useLottery, OwnedTicketInfo, Lottery } from "@/context/LotteryContext";
 import { useAAWallet } from "@/context/AAWalletContext";
 import { ethers, BigNumber } from "ethers";
 import { USDC_DECIMALS } from "@/config";
-
+import Confetti from 'react-confetti';
 
 export const OwnedTickets: React.FC = () => {
   const { ownedTicketsInfo, fetchOwnedLotteryTickets, lotteries, transaction, claimPrizeForLottery, getLotteryById, clearTransactionState } =
@@ -31,6 +33,8 @@ export const OwnedTickets: React.FC = () => {
   const borderColor = "gray.200";
 
   const [claimingLotteryId, setClaimingLotteryId] = useState<number | null>(null);
+  const [showConfetti, setShowConfetti] = useState<boolean>(false);
+  const [celebratedWins, setCelebratedWins] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (isAAWalletInitialized && aaWalletAddress && lotteries.length > 0) {
@@ -46,6 +50,19 @@ export const OwnedTickets: React.FC = () => {
     lotteries,
     fetchOwnedLotteryTickets,
   ]);
+  
+  useEffect(() => {
+      const drawnLotteries = lotteries.filter(l => l.drawn);
+      const userWonLotteries = drawnLotteries.filter(l => l.winners?.map(w => w.toLowerCase()).includes(aaWalletAddress?.toLowerCase() || ''));
+      
+      const newWin = userWonLotteries.find(l => !celebratedWins.has(l.id));
+
+      if (newWin) {
+          setShowConfetti(true);
+          setCelebratedWins(prev => new Set(prev).add(newWin.id));
+          setTimeout(() => setShowConfetti(false), 8000); 
+      }
+  }, [lotteries, aaWalletAddress, celebratedWins]);
 
   const { drawnTickets, undrawnTickets } = useMemo(() => {
     const allOwnedTickets = ownedTicketsInfo.filter(
@@ -64,7 +81,7 @@ export const OwnedTickets: React.FC = () => {
       }
     });
 
-    return { drawnTickets: drawn, undrawnTickets: undrawn };
+    return { drawnTickets: drawn.sort((a,b) => b.lotteryId - a.lotteryId), undrawnTickets: undrawn.sort((a,b) => a.lotteryId - b.lotteryId) };
   }, [ownedTicketsInfo, lotteries]);
 
   const handleClaimPrize = async (lotteryId: number) => {
@@ -114,7 +131,7 @@ export const OwnedTickets: React.FC = () => {
           <VStack gap={4} align="stretch">
             {ticketsGroup.map((lotteryTickets: OwnedTicketInfo) => {
               const lotteryDetails = getLotteryById(lotteryTickets.lotteryId);
-              const isUserWinner = lotteryDetails?.winners?.includes(aaWalletAddress || "") && lotteryDetails?.winners?.find(winnerAddr => winnerAddr === aaWalletAddress && winnerAddr !== ethers.constants.AddressZero) !== undefined;
+              const isUserWinner = lotteryDetails?.winners?.map(w => w.toLowerCase()).includes(aaWalletAddress?.toLowerCase() || "") && lotteryDetails?.winners?.find(winnerAddr => winnerAddr.toLowerCase() === aaWalletAddress?.toLowerCase() && winnerAddr !== ethers.constants.AddressZero) !== undefined;
 
               return (
                 <Box
@@ -122,10 +139,12 @@ export const OwnedTickets: React.FC = () => {
                   p={5}
                   borderWidth="1px"
                   borderRadius="xl"
-                  bg={isDrawnGroup ? "gray.50" : cardBg}
-                  borderColor={borderColor}
-                  shadow="sm"
+                  bg={cardBg}
+                  borderColor={isDrawnGroup && isUserWinner ? "green.400" : borderColor}
+                  shadow={isDrawnGroup && isUserWinner ? "lg" : "sm"}
                   opacity={isDrawnGroup && !isUserWinner ? 0.7 : 1}
+                  transform={isDrawnGroup && isUserWinner ? 'scale(1.02)' : 'none'}
+                  transition="all 0.2s ease-in-out"
                 >
                   <Flex justifyContent="space-between" alignItems="center" mb={3}>
                     <Text fontSize="xl" fontWeight="bold" color={isDrawnGroup && !isUserWinner ? secondaryTextColor : primaryTextColor}>
@@ -153,7 +172,7 @@ export const OwnedTickets: React.FC = () => {
                         key={ticketNumber}
                         size="lg"
                         variant="solid"
-                        colorScheme={isDrawnGroup && !isUserWinner ? "gray" : "green"}
+                        colorScheme={isDrawnGroup && !isUserWinner ? "gray" : (isUserWinner ? "green" : "yellow")}
                         p={2}
                         borderRadius="lg"
                         justifyContent="center"
@@ -183,9 +202,17 @@ export const OwnedTickets: React.FC = () => {
     );
   };
 
-
   return (
-    <Box mt={4}>
+    <Box mt={4} position="relative">
+      {showConfetti && (
+          <Confetti
+              width={window.innerWidth}
+              height={window.innerHeight}
+              recycle={false}
+              numberOfPieces={500}
+              style={{ position: 'fixed', top: 0, left: 0, zIndex: 9999 }}
+          />
+      )}
       <VStack gap={8} align="stretch">
         {renderLotteryTicketGroup("Awaiting Draw", undrawnTickets, false)}
         {(undrawnTickets.length > 0 && drawnTickets.length > 0) && <Separator orientation="horizontal" />}

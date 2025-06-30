@@ -1,4 +1,6 @@
-import React from "react";
+// src/components/lottery/LotteryInfo.tsx
+
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Text,
@@ -15,13 +17,55 @@ import { useLottery, Lottery } from "@/context/LotteryContext";
 import { ethers } from "ethers";
 import { USDC_DECIMALS } from "@/config";
 
+const calculateTimeLeft = (targetTime: number) => {
+    const now = Math.floor(new Date().getTime() / 1000);
+    const difference = targetTime - now;
+
+    if (difference <= 0) {
+        return { days: 0, hours: 0, minutes: 0, seconds: 0 };
+    }
+
+    const days = Math.floor(difference / (60 * 60 * 24));
+    const hours = Math.floor((difference % (60 * 60 * 24)) / (60 * 60));
+    const minutes = Math.floor((difference % (60 * 60)) / 60);
+    const seconds = Math.floor(difference % 60);
+
+    return { days, hours, minutes, seconds };
+};
+
+
 export const LotteryInfo: React.FC = () => {
-  const { selectedLotteryForInfo, transaction } = useLottery();
+  const { selectedLotteryForInfo, transaction, fetchLotteryDetails } = useLottery();
+  const [timeLeft, setTimeLeft] = useState(calculateTimeLeft(0));
+
   const primaryTextColor = "yellow.900";
   const secondaryTextColor = "gray.700";
   const accentColor = "green.600";
   const cardBg = "yellow.50";
   const cardBorderColor = "gray.200";
+
+  useEffect(() => {
+    if (!selectedLotteryForInfo || selectedLotteryForInfo.drawn) {
+      setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft(calculateTimeLeft(selectedLotteryForInfo.drawTime));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [selectedLotteryForInfo]);
+  
+  useEffect(() => {
+    if (!selectedLotteryForInfo || selectedLotteryForInfo.drawn) return;
+    
+    const interval = setInterval(() => {
+        fetchLotteryDetails(selectedLotteryForInfo.id);
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [selectedLotteryForInfo, fetchLotteryDetails]);
 
   if (transaction.loading && !selectedLotteryForInfo) {
     return (
@@ -64,6 +108,9 @@ export const LotteryInfo: React.FC = () => {
     statusTag = <Tag colorScheme="orange" variant="solid" borderRadius="lg">Awaiting Draw</Tag>;
     statusHelpText = "Ticket sales ended. Waiting for draw.";
   }
+  
+  const countdownText = `${timeLeft.days}d ${timeLeft.hours}h ${timeLeft.minutes}m ${timeLeft.seconds}s`;
+
 
   return (
     <Box
@@ -120,12 +167,12 @@ export const LotteryInfo: React.FC = () => {
             </StatValueText>
           </StatRoot>
           <StatRoot>
-            <StatLabel color={secondaryTextColor}>Draw Date</StatLabel>
+            <StatLabel color={secondaryTextColor}>Draw Countdown</StatLabel>
             <StatValueText color={primaryTextColor} fontSize="lg">
-              {new Date(currentLottery.drawTime * 1000).toLocaleDateString()}
+              {isLotteryDrawn ? "Already Drawn" : countdownText}
             </StatValueText>
             <StatHelpText color={secondaryTextColor}>
-                {new Date(currentLottery.drawTime * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                Draws at: {new Date(currentLottery.drawTime * 1000).toLocaleDateString()} {new Date(currentLottery.drawTime * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </StatHelpText>
           </StatRoot>
           <StatRoot>

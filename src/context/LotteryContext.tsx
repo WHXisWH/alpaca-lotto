@@ -1,3 +1,5 @@
+// src/context/LotteryContext.tsx
+
 import React, {
   createContext,
   useContext,
@@ -9,14 +11,15 @@ import { BigNumber, ethers } from "ethers";
 import { useAAWallet } from "./AAWalletContext";
 import { usePaymaster } from "./PaymasterContext";
 import LOTTO_ABI_JSON from "../abis/AlpacaLotto.json";
+import { toaster } from "@/components/ui/toaster";
 import {
   LOTTERY_CONTRACT_ADDRESS,
   USDC_TOKEN_ADDRESS,
   RPC_URL,
-  USDC_DECIMALS,
 } from "../config";
 import { UserOperationBuilder, ISendUserOperationResponse as UserOpSdkResponse } from "userop";
 import { UserOperationEventEvent } from "@account-abstraction/contracts/dist/types/EntryPoint";
+import { achievementService, AchievementKey } from '@/services/achievementService';
 
 const ERC20_ABI_MINIMAL = [
   "function allowance(address owner, address spender) view returns (uint256)",
@@ -53,13 +56,14 @@ interface TransactionState {
   error: string | null;
   successMessage: string | null;
   hash: string | null;
-  step: "idle" | "approving" | "purchasing" | "claiming" | "fetchingReceipt";
+  step: "idle" | "approving" | "purchasing" | "claiming" | "fetchingReceipt" | "dailyCheckIn";
 }
 
 interface LotteryContextType {
   lotteries: Lottery[];
   ownedTicketsInfo: OwnedTicketInfo[];
   fetchLotteries: () => Promise<void>;
+  fetchLotteryDetails: (lotteryId: number) => Promise<Lottery | null>;
   fetchOwnedLotteryTickets: (lotteryId: number) => Promise<void>;
   purchaseTicketsForLottery: (
     lotteryId: number,
@@ -77,6 +81,7 @@ interface LotteryContextType {
   claimPrizeForLottery: (
     lotteryId: number
   ) => Promise<string | null>;
+  dailyCheckIn: () => Promise<string | null>;
   checkAndApproveUSDC: (
     lotteryId: number,
     quantity: number
@@ -99,9 +104,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
   const { applyPaymasterToBuilder } = usePaymaster();
 
   const [lotteries, setLotteries] = useState<Lottery[]>([]);
-  const [ownedTicketsInfo, setOwnedTicketsInfo] = useState<OwnedTicketInfo[]>(
-    []
-  );
+  const [ownedTicketsInfo, setOwnedTicketsInfo] = useState<OwnedTicketInfo[]>([]);
   const [isLotteryOwner, setIsLotteryOwner] = useState<boolean>(false);
   const [transaction, setTransaction] = useState<TransactionState>({
     loading: false,
@@ -120,6 +123,15 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
       readerProvider
     );
   }, []);
+  
+   const getLotteryContractWithSigner = useCallback(() => {
+    if (!aaWalletContext.simpleAccount?.provider) return null;
+    return new ethers.Contract(
+      LOTTERY_CONTRACT_ADDRESS,
+      LOTTO_ABI,
+      aaWalletContext.simpleAccount.provider
+    );
+  }, [aaWalletContext.simpleAccount]);
 
   const setSelectedLotteryForInfo = useCallback((lottery: Lottery | null) => {
     setSelectedLotteryForInfoState(lottery);
@@ -194,10 +206,46 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [getLotteryContractReader, setSelectedLotteryForInfo]);
 
+  const fetchLotteryDetails = useCallback(async (lotteryId: number): Promise<Lottery | null> => {
+    const contract = getLotteryContractReader();
+    try {
+        const lotteryData = await contract.getLottery(lotteryId);
+        const formattedLottery = {
+            id: lotteryData.id.toNumber(),
+            name: lotteryData.name,
+            ticketPrice: lotteryData.ticketPrice,
+            startTime: lotteryData.startTime.toNumber(),
+            endTime: lotteryData.endTime.toNumber(),
+            drawTime: lotteryData.drawTime.toNumber(),
+            supportedTokens: lotteryData.supportedTokens,
+            totalTickets: lotteryData.totalTickets.toNumber(),
+            prizePool: lotteryData.prizePool,
+            drawn: lotteryData.drawn,
+            winners: lotteryData.winners,
+            winningTickets: lotteryData.winningTickets,
+        };
+        
+        setLotteries(prev => {
+            const index = prev.findIndex(l => l.id === lotteryId);
+            if (index > -1) {
+                const updated = [...prev];
+                updated[index] = formattedLottery;
+                return updated;
+            }
+            return [...prev, formattedLottery].sort((a,b) => a.id - b.id);
+        });
+
+        setSelectedLotteryForInfoState(current => current?.id === lotteryId ? formattedLottery : current);
+
+        return formattedLottery;
+    } catch (error) {
+        return null;
+    }
+  }, [getLotteryContractReader]);
+
   const getLotteryById = useCallback((lotteryId: number) => {
     return lotteries.find(l => l.id === lotteryId);
   }, [lotteries]);
-
 
   const fetchOwnedLotteryTickets = useCallback(
     async (lotteryId: number) => {
@@ -292,7 +340,6 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
 
       const approveResponse: UserOpSdkResponse = await aaWalletContext.sendUserOp(approveOpBuilder);
       const approveUserOpHash = approveResponse.userOpHash;
-
 
       setTransaction((prev) => ({
         ...prev,
@@ -546,7 +593,47 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
       return null;
     }
   };
+  
+  const dailyCheckIn = async (): Promise<string | null> => {
+    if (
+     !aaWalletContext.aaWalletAddress ||
+     !aaWalletContext.simpleAccount ||
+     !aaWalletContext.sendUserOp ||
+     !applyPaymasterToBuilder
+   ) {
+     setTransaction({ loading: false, error: "AA Wallet not initialized.", successMessage: null, hash: null, step: "idle" });
+     return null;
+   }
 
+   setTransaction({ loading: true, error: null, successMessage: "Preparing for daily check-in...", hash: null, step: "dailyCheckIn" });
+
+   try {
+       const lotteryContractInterface = new ethers.utils.Interface(LOTTO_ABI);
+       const callData = lotteryContractInterface.encodeFunctionData("dailyCheckIn");
+
+       // 修正：明確 opBuilder 的類型為 UserOperationBuilder
+       let opBuilder: UserOperationBuilder = aaWalletContext.simpleAccount.execute(LOTTERY_CONTRACT_ADDRESS, 0, callData);
+       opBuilder = await applyPaymasterToBuilder(opBuilder);
+
+       setTransaction(prev => ({ ...prev, successMessage: "Sending daily check-in transaction..." }));
+       const response = await aaWalletContext.sendUserOp(opBuilder);
+       setTransaction(prev => ({ ...prev, successMessage: `Transaction sent: ${response.userOpHash}. Waiting for confirmation...`, hash: response.userOpHash, step: 'fetchingReceipt' }));
+
+       const receipt = await response.wait();
+       
+       // 修正：使用 receipt.args.success
+       if (receipt && receipt.args.success) {
+           setTransaction({ loading: false, error: null, successMessage: "Daily check-in successful! 10 PLT have been added to your account.", hash: response.userOpHash, step: "idle" });
+           return response.userOpHash;
+       } else {
+           throw new Error("Daily check-in transaction failed.");
+       }
+   } catch (err: any) {
+       const readableError = err?.error?.message || err.message || "An unknown error occurred during daily check-in.";
+       setTransaction({ loading: false, error: readableError, successMessage: null, hash: transaction.hash, step: "idle" });
+       return null;
+   }
+ };
 
   const fetchLotteryOwner = useCallback(async () => {
     const contract = getLotteryContractReader();
@@ -559,6 +646,47 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (error) {
     }
   }, [getLotteryContractReader, aaWalletContext.eoaAddress]);
+  
+  const setupEventListeners = useCallback(() => {
+    const contract = getLotteryContractWithSigner();
+    const userAddress = aaWalletContext.aaWalletAddress;
+    
+    if (!contract || !userAddress) return;
+
+    const onTicketPurchase = (lotteryId: BigNumber, user: string, ticketNumber: BigNumber, paymentToken: string) => {
+        if (user.toLowerCase() === userAddress.toLowerCase()) {
+            contract.cumulativeTicketsPurchased(userAddress).then((totalTickets: BigNumber) => {
+                const unlocked = achievementService.checkAndUnlockTicketMilestones(userAddress, totalTickets.toNumber());
+                unlocked.forEach(key => {
+                    toaster.create({ title: "Achievement Unlocked!", description: `You earned the ${achievementService.getAchievements(userAddress).find(a=>a.key===key)?.title} badge!`, type: "success" });
+                });
+            });
+        }
+    };
+    
+    const onLotteryDrawn = (lotteryId: BigNumber, winners: string[]) => {
+        if (winners.map(w => w.toLowerCase()).includes(userAddress.toLowerCase())) {
+            if (achievementService.unlockAchievement(userAddress, AchievementKey.LUCKY_STAR)) {
+                toaster.create({ title: "Achievement Unlocked!", description: `Congratulations! You earned the ${achievementService.getAchievements(userAddress).find(a=>a.key===AchievementKey.LUCKY_STAR)?.title} badge!`, type: "success" });
+            }
+        }
+    };
+
+    contract.on('TicketPurchased', onTicketPurchase);
+    contract.on('LotteryDrawn', onLotteryDrawn);
+
+    return () => {
+        contract.off('TicketPurchased', onTicketPurchase);
+        contract.off('LotteryDrawn', onLotteryDrawn);
+    };
+  }, [getLotteryContractWithSigner, aaWalletContext.aaWalletAddress]);
+  
+  useEffect(() => {
+      if (aaWalletContext.isAAWalletInitialized) {
+          const cleanup = setupEventListeners();
+          return cleanup;
+      }
+  }, [aaWalletContext.isAAWalletInitialized, setupEventListeners]);
 
   useEffect(() => {
     if (aaWalletContext.isAAWalletInitialized) {
@@ -588,11 +716,13 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
         lotteries,
         ownedTicketsInfo,
         fetchLotteries,
+        fetchLotteryDetails,
         fetchOwnedLotteryTickets,
         purchaseTicketsForLottery,
         purchaseTicketsWithPLT,
         purchaseTicketsWithReferral,
         claimPrizeForLottery,
+        dailyCheckIn,
         checkAndApproveUSDC,
         transaction,
         clearTransactionState,
