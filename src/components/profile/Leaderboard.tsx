@@ -1,13 +1,12 @@
-// src/components/profile/Leaderboard.tsx
-import React from 'react';
-import { Box, Heading, VStack, HStack, Text, Icon, Image } from '@chakra-ui/react';
+import React, { useState, useEffect } from 'react';
+import { Box, Heading, VStack, HStack, Text, Icon, Image, Spinner } from '@chakra-ui/react';
 import { FaTrophy, FaUserFriends, FaMedal } from 'react-icons/fa';
 
-const MOCK_REFERRAL_DATA = [
-  { rank: 1, address: '0x123...abc', referrals: 52, avatar: '/images/alpaca-avatar-1.png' },
-  { rank: 2, address: '0x456...def', referrals: 45, avatar: '/images/alpaca-avatar-2.png' },
-  { rank: 3, address: '0x789...ghi', referrals: 38, avatar: '/images/alpaca-avatar-3.png' },
-];
+interface ReferralData {
+  rank: number;
+  referrer_address: string;
+  referral_count: string;
+}
 
 const MOCK_WINNINGS_DATA = [
   { rank: 1, address: '0xabc...123', amount: '1,500 USDC', avatar: '/images/alpaca-avatar-4.png' },
@@ -18,7 +17,7 @@ const MOCK_WINNINGS_DATA = [
 const getRankColor = (rank: number) => {
   if (rank === 1) return 'gold';
   if (rank === 2) return 'silver';
-  if (rank === 3) return '#cd7f32'; // Bronze
+  if (rank === 3) return '#cd7f32';
   return 'gray.500';
 };
 
@@ -28,6 +27,41 @@ export const Leaderboard = () => {
     const headingColor = "green.600";
     const textColor = "yellow.900";
     const secondaryTextColor = "gray.600";
+    
+    const [referralData, setReferralData] = useState<ReferralData[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+      const fetchReferralData = async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+          const backendApiUrl = import.meta.env.VITE_BACKEND_API_URL;
+          if (!backendApiUrl) {
+            throw new Error("Backend API URL is not configured.");
+          }
+          const response = await fetch(`${backendApiUrl}/api/leaderboard/referrals`);
+          const result = await response.json();
+
+          if (response.ok && result.success) {
+            const rankedData = result.data.map((item: any, index: number) => ({
+              ...item,
+              rank: index + 1,
+            }));
+            setReferralData(rankedData);
+          } else {
+            throw new Error(result.message || 'Failed to fetch referral data.');
+          }
+        } catch (err: any) {
+          setError(err.message);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchReferralData();
+    }, []);
     
   return (
     <Box>
@@ -39,16 +73,24 @@ export const Leaderboard = () => {
                 <Heading size="md" color={textColor}>Referral Masters</Heading>
             </HStack>
             <VStack gap={3} align="stretch">
-                {MOCK_REFERRAL_DATA.map(user => (
-                    <HStack key={user.rank} justifyContent="space-between" p={2} borderRadius="md" _hover={{bg: "yellow.50"}}>
-                        <HStack>
-                            <Icon as={FaMedal} color={getRankColor(user.rank)} />
-                            <Image src={user.avatar} boxSize="24px" borderRadius="full" alt="User Avatar" />
-                            <Text color={secondaryTextColor}>{user.address}</Text>
-                        </HStack>
-                        <Text fontWeight="bold" color={textColor}>{user.referrals} referrals</Text>
-                    </HStack>
-                ))}
+                {isLoading ? (
+                  <Spinner color={headingColor} />
+                ) : error ? (
+                  <Text color="red.500">{error}</Text>
+                ) : referralData.length === 0 ? (
+                  <Text color={secondaryTextColor}>No referral data yet. Be the first!</Text>
+                ) : (
+                  referralData.map(user => (
+                      <HStack key={user.rank} justifyContent="space-between" p={2} borderRadius="md" _hover={{bg: "yellow.50"}}>
+                          <HStack>
+                              <Icon as={FaMedal} color={getRankColor(user.rank)} />
+                              <Image src={`/images/alpaca-avatar-${user.rank}.png`} boxSize="24px" borderRadius="full" alt="User Avatar" />
+                              <Text color={secondaryTextColor}>{`${user.referrer_address.substring(0, 6)}...${user.referrer_address.substring(user.referrer_address.length - 4)}`}</Text>
+                          </HStack>
+                          <Text fontWeight="bold" color={textColor}>{user.referral_count} referrals</Text>
+                      </HStack>
+                  ))
+                )}
             </VStack>
         </Box>
         <Box bg={cardBg} p={5} borderRadius="xl" borderWidth="1px" borderColor={borderColor} shadow="sm">

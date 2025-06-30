@@ -7,6 +7,7 @@ import { useLottery } from '@/context/LotteryContext';
 import { achievementService, Achievement } from '@/services/achievementService';
 import { Achievements } from './Achievements';
 import { Leaderboard } from './Leaderboard';
+import { SecuritySettings } from './SecuritySettings';
 
 export const ProfilePage = () => {
     const { aaWalletAddress, isAAWalletInitialized } = useAAWallet();
@@ -39,8 +40,8 @@ export const ProfilePage = () => {
     return (
         <VStack gap={8} align="stretch">
             <Box textAlign="center">
-                <Heading size="xl" color="yellow.900">Hall of Fame</Heading>
-                <Text color="gray.600">Check your achievements and leaderboard rankings!</Text>
+                <Heading size="xl" color="yellow.900">Hall of Fame & Settings</Heading>
+                <Text color="gray.600">Check your achievements, rankings, and manage account settings!</Text>
                  <Button 
                     mt={4}
                     colorPalette="green"
@@ -50,6 +51,10 @@ export const ProfilePage = () => {
                     Daily Check-in for 10 PLT
                 </Button>
             </Box>
+
+            <Separator />
+
+            <SecuritySettings />
 
             <Separator />
             

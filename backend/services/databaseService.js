@@ -37,7 +37,6 @@ async function findReferralByCurrentUserAA(currentUserAA) {
   const query = 'SELECT 1 FROM referrals WHERE referee_address = $1 LIMIT 1';
   try {
     const res = await pool.query(query, [currentUserAA.toLowerCase()]);
-    // If we find a row, it means the user has been referred.
     return res.rowCount > 0;
   } catch (err) {
     console.error('Database query error in findReferralByCurrentUserAA:', err);
@@ -94,9 +93,34 @@ async function recordFailedReferralAttempt(currentUserAA, referrerAA, failureRea
     }
 }
 
+async function getTopReferrers() {
+  const query = `
+    SELECT
+        referrer_address,
+        COUNT(*) as referral_count
+    FROM
+        referrals
+    WHERE
+        status = 'processed'
+    GROUP BY
+        referrer_address
+    ORDER BY
+        referral_count DESC
+    LIMIT 10;
+  `;
+  try {
+    const res = await pool.query(query);
+    return res.rows;
+  } catch (err) {
+    console.error('Database query error in getTopReferrers:', err);
+    throw err;
+  }
+}
+
 module.exports = {
   initializeDatabase,
   findReferralByCurrentUserAA,
   recordSuccessfulReferral,
-  recordFailedReferralAttempt
+  recordFailedReferralAttempt,
+  getTopReferrers
 };

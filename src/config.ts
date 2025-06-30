@@ -28,6 +28,10 @@ export const PACALUCK_TOKEN_ADDRESS =
   import.meta.env.VITE_PacaLuckToken_ADDRESS ||
   "0x05329925b47c86cb8a12849d2e33c556a863205e";
 
+export const SESSION_KEY_MANAGER_ADDRESS =
+  import.meta.env.VITE_SESSION_KEY_MANAGER_ADDRESS ||
+  "0x44c89B0bAD9f3AA5B0786D5e28D0323f2E68787f";
+
 export const CHAIN_ID = 689;
 export const CHAIN_NAME = "Nero Testnet";
 export const NATIVE_CURRENCY_NAME = "NERO";
