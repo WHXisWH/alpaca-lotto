@@ -22,7 +22,7 @@ export const ACCOUNT_FACTORY_ADDRESS =
 
 export const LOTTERY_CONTRACT_ADDRESS =
   import.meta.env.VITE_LOTTERY_CONTRACT_ADDRESS ||
-  "0x0946fddbf7e6b58200958bc9a58f265c621e8559";
+  "0xb5eb6d7aced1d112aa3434f8cc4d1053f7736e52";
 
 export const PACALUCK_TOKEN_ADDRESS =
   import.meta.env.VITE_PacaLuckToken_ADDRESS ||

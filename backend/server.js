@@ -9,7 +9,26 @@ const { initializeDatabase } = require('./services/databaseService');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// --- CORS Configuration Start ---
+// Explicitly define the allowed origin
+const allowedOrigins = ['https://alpaca-lotto.vercel.app'];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  }
+};
+
+// Use the configured cors options
+app.use(cors(corsOptions));
+// --- CORS Configuration End ---
+
 app.use(bodyParser.json());
 
 app.use('/api', referralRoutes);
@@ -28,8 +47,11 @@ const startServer = async () => {
     try {
         await initializeDatabase();
 
-        app.listen(PORT, () => {
-            console.log(`Alpaca Lotto Backend listening on port ${PORT}`);
+        // Render sets the PORT environment variable.
+        const port = process.env.PORT || 3001;
+        
+        app.listen(port, () => {
+            console.log(`Alpaca Lotto Backend listening on port ${port}`);
             if (!process.env.MINTER_PRIVATE_KEY) {
               console.warn('WARNING: MINTER_PRIVATE_KEY is not set in .env file. Minting functionality will fail.');
             }
