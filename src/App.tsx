@@ -5,7 +5,6 @@ import {
   HStack,
   Heading,
   Text,
-  Spinner,
   Code,
   Icon,
   Flex,
@@ -20,7 +19,7 @@ import { CloseButton as UICloseButton } from "@/components/ui/close-button";
 import { Alert as UIAlert } from "@/components/ui/alert";
 import { useAccount, useDisconnect } from "wagmi";
 import { Layout } from "./components/layout";
-import { ConnectWallet } from "./components/common";
+import { ConnectWallet, LoadingAlpaca } from "./components/common";
 import {
   PaymasterSettings,
   TicketGrid,
@@ -165,7 +164,7 @@ function App() {
     if (isConnected) {
       wagmiDisconnect();
     }
-
+    
     if (!isSocialLoggedIn) {
       clearAAState();
     }
@@ -258,7 +257,7 @@ function App() {
 
           {aaLoading && !isAAWalletInitialized && (
               <VStack bg="white" p={6} borderRadius="xl" gap={4} alignItems="center" shadow="md" borderColor={borderColor} borderWidth="1px" mt={2}>
-                  <Spinner size="xl" color={accentColor} borderWidth="4px" />
+                  <LoadingAlpaca />
                   <Text color={primaryTextColor} fontWeight="medium" fontSize="lg">Initializing Your Smart Account...</Text>
               </VStack>
           )}
@@ -343,7 +342,7 @@ function App() {
                       <Box key={symbol}>
                           <Text fontSize="xs" color={secondaryTextColor}>{symbol}:</Text>
                           <Text fontSize="sm" fontWeight="bold" color={primaryTextColor}>
-                              {isLoading ? <Spinner size="xs" /> : balance}
+                              {isLoading ? <LoadingAlpaca size="20px" /> : balance}
                           </Text>
                       </Box>
                   ))}

@@ -4,7 +4,6 @@ import {
   Text,
   VStack,
   HStack,
-  Spinner,
   Flex,
 } from "@chakra-ui/react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +22,7 @@ import {
 } from "@/config";
 import LOTTO_ABI_JSON from "@/abis/AlpacaLotto.json";
 import PACALUCK_ABI_JSON from "@/abis/PacaLuckToken.json";
+import { LoadingAlpaca } from "../common";
 
 const LOTTO_ABI = LOTTO_ABI_JSON as any;
 const PACALUCK_ABI = PACALUCK_ABI_JSON as any;
@@ -194,7 +194,6 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
     if (usePLT) {
         await purchaseTicketsWithPLT(lottery.id, quantity);
     } else {
-        if (!isBalanceSufficient) return;
         await purchaseTicketsForLottery(lottery.id, quantity);
     }
   };
@@ -323,7 +322,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
                 borderColor="blue.500"
                 onClick={(e) => { e.stopPropagation(); setUsePLT(false); }}
             >
-                Use USDC
+                Pay with USDC
             </Button>
             <Button
                 flex="1"
@@ -335,7 +334,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
                 borderColor="green.500"
                 onClick={(e) => { e.stopPropagation(); setUsePLT(true); }}
             >
-                Use PLT
+                Pay with PLT
             </Button>
         </HStack>
 
@@ -353,7 +352,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
           _hover={{ bg: buttonColor === "orange" ? "orange.600" : "green.700", transform: 'scale(1.02)'}}
           _active={{ bg: buttonColor === "orange" ? "orange.700" : "green.800", transform: 'scale(0.98)'}}
         >
-          {transaction.loading || isDataLoading ? <Spinner size="sm" color="white" /> : <Text fontSize="sm" fontWeight="medium" whiteSpace="wrap" overflow="hidden" textOverflow="ellipsis" maxW="100%">{buttonText}</Text>}
+          {transaction.loading || isDataLoading ? <LoadingAlpaca size="30px"/> : <Text fontSize="sm" fontWeight="medium" whiteSpace="wrap" overflow="hidden" textOverflow="ellipsis" maxW="100%">{buttonText}</Text>}
         </Button>
 
         {paymasterError && <Text fontSize="xs" color={statusErrorColor} mt={1} textAlign="center">{paymasterError}</Text>}

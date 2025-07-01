@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, VStack, Heading, Text, Separator, Spinner, Center, Tabs, Icon } from '@chakra-ui/react';
+import { Box, VStack, Heading, Text, Separator, Center, Tabs, Icon } from '@chakra-ui/react';
 import { Button } from '@/components/ui/button';
 import { toaster } from '@/components/ui/toaster';
 import { useAAWallet } from '@/context/AAWalletContext';
@@ -8,6 +8,7 @@ import { achievementService, Achievement } from '@/services/achievementService';
 import { Achievements } from './Achievements';
 import { Leaderboard } from './Leaderboard';
 import { SecuritySettings } from './SecuritySettings';
+import { LoadingAlpaca } from '../common';
 import { FaMedal, FaTrophy, FaShieldAlt } from 'react-icons/fa';
 
 export const ProfilePage = () => {
@@ -145,7 +146,7 @@ export const ProfilePage = () => {
                     <Tabs.Content value="achievements">
                         {isLoadingAchievements ? (
                             <Center h="200px">
-                                <Spinner color="green.500" />
+                                <LoadingAlpaca size="80px" />
                             </Center>
                         ) : (
                             <Achievements achievements={achievements} />

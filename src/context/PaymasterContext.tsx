@@ -54,6 +54,7 @@ export interface PaymasterContextType {
   setSelectedToken: (token: SupportedToken | null) => void;
   applyPaymasterToBuilder: (
     userOpBuilder: UserOperationBuilder,
+    forceFreeGas?: boolean
   ) => Promise<UserOperationBuilder>;
   approveTokenForPaymaster: (
     tokenAddress: string,
@@ -87,7 +88,7 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
   } = useAAWallet();
 
   const [selectedPaymasterType, setSelectedPaymasterTypeInternal] =
-    useState<PaymasterType>(PaymasterType.FREE_GAS); // 默認設置為 FREE_GAS
+    useState<PaymasterType>(PaymasterType.FREE_GAS);
   const [supportedTokens, setSupportedTokens] = useState<SupportedToken[]>([]);
   const [selectedToken, setSelectedTokenInternal] =
     useState<SupportedToken | null>(null);
@@ -106,20 +107,23 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
   const applyPaymasterToBuilder = useCallback(
     async (
       userOpBuilder: UserOperationBuilder,
+      forceFreeGas: boolean = false
     ): Promise<UserOperationBuilder> => {
-      if (typeof (userOpBuilder as any).setPaymasterOptions !== 'function') {
+      const builder = userOpBuilder as any;
+      if (typeof builder.setPaymasterOptions !== 'function') {
         return userOpBuilder;
       }
-
-      if (selectedPaymasterType === PaymasterType.NATIVE) {
-        (userOpBuilder as any).setPaymasterOptions({ type: "none" });
-        return userOpBuilder;
+      
+      const paymasterType = forceFreeGas ? PaymasterType.FREE_GAS : selectedPaymasterType;
+      
+      if (paymasterType === PaymasterType.NATIVE) {
+        builder.setPaymasterOptions({ type: "none" });
+        return builder;
       }
 
       if (!PAYMASTER_RPC_URL || !PAYMASTER_API_KEY) {
-        // This part implicitly handles fallback if FREE_GAS is selected but URL/Key are missing
-        (userOpBuilder as any).setPaymasterOptions({ type: "none" });
-        return userOpBuilder;
+        builder.setPaymasterOptions({ type: "none" });
+        return builder;
       }
 
       let paymasterOpts: any = {
@@ -127,26 +131,29 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
         apikey: PAYMASTER_API_KEY,
       };
 
-      if (selectedPaymasterType === PaymasterType.FREE_GAS) {
+      if (paymasterType === PaymasterType.FREE_GAS) {
+        if (!isFreeGasAvailableState && !forceFreeGas) {
+            builder.setPaymasterOptions({ type: "none" });
+            return builder;
+        }
         paymasterOpts.type = "0";
-      } else if (selectedPaymasterType === PaymasterType.TOKEN && selectedToken) {
+      } else if (paymasterType === PaymasterType.TOKEN && selectedToken) {
         if (selectedToken.type === 1 || selectedToken.type === 2) {
             paymasterOpts.type = selectedToken.type.toString();
             paymasterOpts.token = selectedToken.address;
         } else {
-            (userOpBuilder as any).setPaymasterOptions({ type: "none" });
-            return userOpBuilder;
+            builder.setPaymasterOptions({ type: "none" });
+            return builder;
         }
       } else {
-        // This case should ideally not be hit if selectedPaymasterType is FREE_GAS and URL/Key are present
-        // but if selectedPaymasterType is somehow invalid or TOKEN without a selectedToken.
-        (userOpBuilder as any).setPaymasterOptions({ type: "none" });
-        return userOpBuilder;
+        builder.setPaymasterOptions({ type: "none" });
+        return builder;
       }
-      (userOpBuilder as any).setPaymasterOptions(paymasterOpts);
-      return userOpBuilder;
+
+      builder.setPaymasterOptions(paymasterOpts);
+      return builder;
     },
-    [selectedPaymasterType, selectedToken]
+    [selectedPaymasterType, selectedToken, isFreeGasAvailableState]
   );
 
   const fetchSupportedTokens = useCallback(async () => {
@@ -174,12 +181,7 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
         "0x"
       );
 
-      // Use a temporary builder for paymaster options to avoid altering selectedPaymasterType prematurely
-      // For pm_supported_tokens, usually you'd want to know all options,
-      // so using a neutral or common paymaster type for the call itself might be better,
-      // or simply using the currently selected one if the paymaster service is robust.
-      // The current applyPaymasterToBuilder depends on selectedPaymasterType.
-      const builderWithPaymasterOptions = await applyPaymasterToBuilder(baseBuilder);
+      const builderWithPaymasterOptions = await applyPaymasterToBuilder(baseBuilder, true);
       const opForTokenFetch = builderWithPaymasterOptions.getOp();
 
       opForTokenFetch.nonce = await simpleAccount.getSenderNonce();
@@ -189,7 +191,6 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
       if (BigNumber.from(opForTokenFetch.verificationGasLimit).isZero()) opForTokenFetch.verificationGasLimit = BigNumber.from(100000);
       if (BigNumber.from(opForTokenFetch.preVerificationGas).isZero()) opForTokenFetch.preVerificationGas = BigNumber.from(50000);
 
-
       const rpcFriendlyUserOp = OpToJSON(opForTokenFetch);
 
       const pmProvider = new ethers.providers.JsonRpcProvider(PAYMASTER_RPC_URL);
@@ -198,7 +199,7 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
           PAYMASTER_API_KEY,
           ENTRYPOINT_ADDRESS
       ]);
-
+      
       const paymasterResponseData = (typeof rawRpcResponse === 'object' && rawRpcResponse !== null && 'result' in rawRpcResponse)
         ? rawRpcResponse.result
         : rawRpcResponse;
@@ -219,7 +220,6 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
       currentIsFreeGasAvailable = paymasterResponseData?.freeGas ?? !!(PAYMASTER_RPC_URL && PAYMASTER_API_KEY);
       setIsFreeGasAvailableState(currentIsFreeGasAvailable);
 
-
       const parsedTokens: SupportedToken[] = receivedRawTokens.map((token: any) => ({
           address: token.token || token.address,
           decimals: parseInt(token.decimals, 10) || 18,
@@ -238,9 +238,6 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
               if (firstTokenPayable) setSelectedTokenInternal(firstTokenPayable);
           }
       } else if (selectedPaymasterType === PaymasterType.NATIVE || selectedPaymasterType === PaymasterType.FREE_GAS) {
-            // If current default is FREE_GAS, we don't want to clear selectedToken unless it's explicitly NATIVE.
-            // This part of logic might need review if FREE_GAS is the strict default.
-            // For now, if FREE_GAS is selected, selectedToken should be null.
             if(selectedPaymasterType === PaymasterType.FREE_GAS || selectedPaymasterType === PaymasterType.NATIVE) {
                 setSelectedTokenInternal(null);
             }
@@ -295,12 +292,8 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
     } finally {
       setIsLoadingTokensState(false);
       setFetchedTokensOnce(true);
-      // if (!currentIsFreeGasAvailable && selectedPaymasterType === PaymasterType.FREE_GAS) {
-      //   setSelectedPaymasterTypeInternal(PaymasterType.NATIVE);
-      // }
     }
-  }, [simpleAccount, selectedPaymasterType, applyPaymasterToBuilder, isLoadingTokensState ]); // selectedPaymasterType is a dependency for applyPaymasterToBuilder
-
+  }, [simpleAccount, selectedPaymasterType, applyPaymasterToBuilder, isLoadingTokensState ]);
 
   useEffect(() => {
     if (isAAWalletInitialized && simpleAccount && !fetchedTokensOnce) {
@@ -319,8 +312,7 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
     if (type === PaymasterType.NATIVE || type === PaymasterType.FREE_GAS) {
       setSelectedTokenInternal(null);
     } else if (type === PaymasterType.TOKEN) {
-        // When TOKEN is selected, automatically try to select USDC or the first available token.
-        if (supportedTokens.length > 0) { // Check if supportedTokens is populated
+        if (supportedTokens.length > 0) {
             const usdc = supportedTokens.find((t: SupportedToken) => t.address.toLowerCase() === USDC_TOKEN_ADDRESS.toLowerCase() && (t.type === 1 || t.type === 2));
             if (usdc) {
                 setSelectedTokenInternal(usdc);
@@ -329,11 +321,11 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
                  if (firstTokenPayable) {
                     setSelectedTokenInternal(firstTokenPayable);
                  } else {
-                    setSelectedTokenInternal(null); // No suitable token found
+                    setSelectedTokenInternal(null);
                  }
             }
         } else {
-            setSelectedTokenInternal(null); // No tokens available yet
+            setSelectedTokenInternal(null);
         }
     }
   };
@@ -346,7 +338,7 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
             setSelectedTokenInternal(null);
         }
     } else {
-        setSelectedTokenInternal(null); // Should not happen if type is not TOKEN
+        setSelectedTokenInternal(null);
     }
     setError(null);
     setGasCost({});
@@ -455,7 +447,6 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
         const builderWithOptions = await applyPaymasterToBuilder(builderForGasEst);
         let opForEstimation = builderWithOptions.getOp();
 
-
         const sender = opForEstimation.sender;
         if (sender && sender !== ethers.constants.AddressZero) {
             const currentChainNonce = await simpleAccount.getSenderNonce();
@@ -479,7 +470,6 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
         await estimateGasLimitsMiddleware(middlewareCtx);
 
         const { callGasLimit, verificationGasLimit, preVerificationGas } = middlewareCtx.op;
-
 
         builderForGasEst.setCallGasLimit(callGasLimit || ethers.constants.Zero);
         builderForGasEst.setVerificationGasLimit(verificationGasLimit || ethers.constants.Zero);
@@ -505,7 +495,6 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
                 nativeDecimalsToUse = nativeTokenPaymasterInfo.decimals;
             }
         }
-
 
         const newGasCost: GasCost = {
           native: {
@@ -539,7 +528,6 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
                     }
                 } catch (parseError) {}
             }
-
 
             for (const msg of messagesToCheck) {
                 if (msg.includes('AA') || msg.includes('execution reverted') || msg.includes('user operation') || msg.includes('EntryPoint') || msg.includes('paymaster') || msg.includes('gas estimation')) {
@@ -599,7 +587,6 @@ export const PaymasterProvider: React.FC<{ children: React.ReactNode }> = ({
     },
     [simpleAccount, applyPaymasterToBuilder, nativeTokenPaymasterInfo]
   );
-
 
   return (
     <PaymasterContext.Provider

@@ -9,6 +9,7 @@ import { BigNumber, ethers } from "ethers";
 import { useAAWallet } from "./AAWalletContext";
 import { usePaymaster } from "./PaymasterContext";
 import LOTTO_ABI_JSON from "../abis/AlpacaLotto.json";
+import PACALUCK_ABI_JSON from "../abis/PacaLuckToken.json";
 import { toaster } from "@/components/ui/toaster";
 import {
   LOTTERY_CONTRACT_ADDRESS,
@@ -27,6 +28,7 @@ const ERC20_ABI_MINIMAL = [
   "function decimals() view returns (uint8)",
 ];
 const LOTTO_ABI = LOTTO_ABI_JSON as any;
+const PACALUCK_ABI = PACALUCK_ABI_JSON as any;
 
 const getReadProvider = () => new ethers.providers.JsonRpcProvider(RPC_URL);
 
@@ -288,7 +290,6 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const checkAndApproveToken = async (
     tokenAddress: string,
-    tokenDecimals: number,
     requiredAmount: BigNumber,
     tokenSymbol: string,
   ): Promise<{ approved: boolean; approvalTxHash?: string | null; error?: string }> => {
@@ -335,7 +336,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
         approveCallData
       );
 
-      approveOpBuilder = await applyPaymasterToBuilder(approveOpBuilder);
+      approveOpBuilder = await applyPaymasterToBuilder(approveOpBuilder, true);
 
       const approveResponse: UserOpSdkResponse = await aaWalletContext.sendUserOp(approveOpBuilder);
       const approveUserOpHash = approveResponse.userOpHash;
@@ -380,7 +381,7 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
       return { approved: false, error: "Lottery details not found for approval." };
     }
     const totalCostUSDC = selectedLottery.ticketPrice.mul(quantity);
-    return checkAndApproveToken(USDC_TOKEN_ADDRESS, USDC_DECIMALS, totalCostUSDC, "USDC");
+    return checkAndApproveToken(USDC_TOKEN_ADDRESS, totalCostUSDC, "USDC");
   };
 
   const _purchaseTicketsInternal = async (
@@ -497,6 +498,15 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
     lotteryId: number,
     quantity: number
   ): Promise<string | null> => {
+    const selectedLottery = lotteries.find((l) => l.id === lotteryId);
+    if(!selectedLottery) return null;
+    const totalCost = selectedLottery.ticketPrice.mul(quantity);
+    const approveResult = await checkAndApproveToken(USDC_TOKEN_ADDRESS, totalCost, "USDC");
+
+    if (!approveResult.approved) {
+      return null;
+    }
+
     return _purchaseTicketsInternal(lotteryId, quantity, 'USDC');
   };
 
@@ -504,14 +514,12 @@ export const LotteryProvider: React.FC<{ children: React.ReactNode }> = ({
     lotteryId: number,
     quantity: number
   ): Promise<string | null> => {
-    const PLT_DECIMALS = 18;
-    const pltContract = new ethers.Contract(PACALUCK_TOKEN_ADDRESS, LOTTO_ABI, getReadProvider());
-    const pltTicketCost = await pltContract.PLT_TICKET_COST();
+    const lotteryContract = getLotteryContractReader();
+    const pltTicketCost = await lotteryContract.PLT_TICKET_COST();
     const totalCostPLT = pltTicketCost.mul(quantity);
 
     const approveResult = await checkAndApproveToken(
       PACALUCK_TOKEN_ADDRESS,
-      PLT_DECIMALS,
       totalCostPLT,
       "PLT"
     );

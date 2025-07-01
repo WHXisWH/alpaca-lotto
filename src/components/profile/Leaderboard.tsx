@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Heading, VStack, HStack, Text, Icon, Spinner } from '@chakra-ui/react'; // 1. 從 import 中移除 Image
+import { Box, Heading, VStack, HStack, Text, Icon, Center } from '@chakra-ui/react';
 import { FaTrophy, FaUserFriends, FaMedal } from 'react-icons/fa';
+import { LoadingAlpaca } from '../common';
 
 interface ReferralData {
   rank: number;
   referrer_address: string;
   referral_count: string;
 }
-
 
 const MOCK_WINNINGS_DATA = [
   { rank: 1, address: '0xabc...123', amount: '1,500 USDC' },
@@ -43,9 +43,14 @@ export const Leaderboard = () => {
             throw new Error("Backend API URL is not configured.");
           }
           const response = await fetch(`${backendApiUrl}/api/leaderboard/referrals`);
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
+          }
+
           const result = await response.json();
 
-          if (response.ok && result.success) {
+          if (result.success && Array.isArray(result.data)) {
             const rankedData = result.data.map((item: any, index: number) => ({
               ...item,
               rank: index + 1,
@@ -55,7 +60,7 @@ export const Leaderboard = () => {
             throw new Error(result.message || 'Failed to fetch referral data.');
           }
         } catch (err: any) {
-          setError(err.message);
+          setError(err.message || "An unknown error occurred.");
         } finally {
           setIsLoading(false);
         }
@@ -66,7 +71,6 @@ export const Leaderboard = () => {
     
   return (
     <Box>
-      <Heading size="lg" color={headingColor} mb={4}>Hall of Fame</Heading>
       <VStack gap={8} align="stretch">
         <Box bg={cardBg} p={5} borderRadius="xl" borderWidth="1px" borderColor={borderColor} shadow="sm">
             <HStack mb={4}>
@@ -75,11 +79,17 @@ export const Leaderboard = () => {
             </HStack>
             <VStack gap={3} align="stretch">
                 {isLoading ? (
-                  <Spinner color={headingColor} />
+                  <Center h="100px">
+                    <LoadingAlpaca size="60px" />
+                  </Center>
                 ) : error ? (
-                  <Text color="red.500">{error}</Text>
+                  <Center h="100px">
+                    <Text color="red.500">{error}</Text>
+                  </Center>
                 ) : referralData.length === 0 ? (
-                  <Text color={secondaryTextColor}>No referral data yet. Be the first!</Text>
+                  <Center h="100px">
+                    <Text color={secondaryTextColor}>No referral data yet. Be the first!</Text>
+                  </Center>
                 ) : (
                   referralData.map(user => (
                       <HStack key={user.rank} justifyContent="space-between" p={2} borderRadius="md" _hover={{bg: "yellow.50"}}>
