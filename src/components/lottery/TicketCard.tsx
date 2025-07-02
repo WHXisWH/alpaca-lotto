@@ -322,7 +322,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
                 borderColor="blue.500"
                 onClick={(e) => { e.stopPropagation(); setUsePLT(false); }}
             >
-                Pay with USDC
+                Use USDC
             </Button>
             <Button
                 flex="1"
@@ -334,7 +334,7 @@ const TicketCardComponent: React.FC<LotteryCardProps> = ({ lottery }) => {
                 borderColor="green.500"
                 onClick={(e) => { e.stopPropagation(); setUsePLT(true); }}
             >
-                Pay with PLT
+                Use PLT
             </Button>
         </HStack>
 

@@ -10,7 +10,6 @@ import {
   DialogCloseTrigger,
   VStack,
   Text,
-  Spinner,
   Icon,
   Link,
   Code,
@@ -20,9 +19,9 @@ import {
 } from '@chakra-ui/react';
 import { Button } from '@/components/ui/button';
 import { CloseButton as UICloseButton } from '@/components/ui/close-button';
+import { LoadingAlpaca } from '../common';
 import { FaCheckCircle, FaTimesCircle, FaHourglassHalf } from 'react-icons/fa';
 
-// This interface now includes 'dailyCheckIn' to match the updated state in LotteryContext
 interface TransactionState {
   loading: boolean;
   error: string | null;
@@ -83,7 +82,7 @@ export const TransactionStatusDialog: React.FC<TransactionStatusDialogProps> = (
 
       return (
         <VStack gap={4} textAlign="center">
-          <Spinner size="xl" color={accentColor} borderWidth="4px" />
+          <LoadingAlpaca size="80px" />
           <Heading size="md" color={primaryTextColor}>
             In Progress
           </Heading>

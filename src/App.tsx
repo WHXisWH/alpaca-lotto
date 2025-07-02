@@ -339,12 +339,10 @@ function App() {
 
               <HStack wrap="wrap" gap={4} mt={3} p={2} bg="whiteAlpha.500" borderRadius="md">
                   {Object.entries(tokenBalances).map(([symbol, { balance, isLoading }]) => (
-                      <Box key={symbol}>
+                      <HStack key={symbol}>
                           <Text fontSize="xs" color={secondaryTextColor}>{symbol}:</Text>
-                          <Text fontSize="sm" fontWeight="bold" color={primaryTextColor}>
-                              {isLoading ? <LoadingAlpaca size="20px" /> : balance}
-                          </Text>
-                      </Box>
+                          {isLoading ? <LoadingAlpaca size="20px" /> : <Text fontSize="sm" fontWeight="bold" color={primaryTextColor}>{balance}</Text>}
+                      </HStack>
                   ))}
               </HStack>
 
